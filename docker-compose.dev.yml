@@ -1,0 +1,62 @@
+# ============================================================
+#  BIVALABO 開発用 Docker Compose
+#  起動: docker compose -f docker-compose.dev.yml up -d
+#  停止: docker compose -f docker-compose.dev.yml down
+# ============================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bivalabo-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: bivalabo
+      POSTGRES_PASSWORD: bivalabo_dev_2026
+      POSTGRES_DB: aicata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bivalabo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bivalabo-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Prisma Studio（DB管理UI）- http://localhost:5555
+  # 必要な時だけ起動: docker compose -f docker-compose.dev.yml up prisma-studio
+  prisma-studio:
+    image: node:20-alpine
+    container_name: bivalabo-prisma-studio
+    working_dir: /app
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./:/app
+    command: npx prisma studio --port 5555 --browser none
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    name: bivalabo-postgres-data
+  redis_data:
+    name: bivalabo-redis-data

@@ -1,0 +1,9 @@
+node_modules/
+build/
+.cache/
+.env
+*.log
+.DS_Store
+dist/
+prisma/*.db
+prisma/*.db-journal

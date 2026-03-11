@@ -1,0 +1,62 @@
+{
+  "app": {
+    "name": "Aicata",
+    "tagline": "AI専属パートナー for Shopify"
+  },
+  "nav": {
+    "home": "ホーム",
+    "chat": "AI相方",
+    "templates": "テンプレート",
+    "settings": "設定"
+  },
+  "dashboard": {
+    "title": "ダッシュボード",
+    "welcome": "Aicataへようこそ！",
+    "welcomeMessage": "AIパートナーと一緒にShopifyストアを構築・改善しましょう。",
+    "quickStart": "クイックスタート",
+    "startChat": "AI相方と会話を始める",
+    "startChatHint": "「新商品のランディングページを作りたい」など、やりたいことを日本語で伝えるだけでOKです。",
+    "stats": {
+      "conversations": "会話数",
+      "templates": "テンプレート",
+      "deployedPages": "公開ページ"
+    }
+  },
+  "chat": {
+    "title": "AI相方",
+    "whatToDo": "何をしたいですか？",
+    "selectTemplate": "やりたいことを選んでください。AIパートナーが最適な形でサポートします。",
+    "recentConversations": "最近の会話",
+    "noConversations": "まだ会話がありません。上のテンプレートから始めてみましょう。",
+    "inputPlaceholder": "メッセージを入力...",
+    "send": "送信",
+    "thinking": "Aicataが考え中...",
+    "you": "あなた",
+    "aicata": "Aicata",
+    "welcomeTitle": "Aicata へようこそ",
+    "welcomeMessage": "やりたいことを日本語で伝えてください。AIパートナーが最適な形でサポートします。"
+  },
+  "categories": {
+    "PAGE_CREATION": "ページを作る",
+    "PAGE_IMPROVEMENT": "ページを改善する",
+    "SEO": "SEO対策",
+    "CAMPAIGN": "キャンペーン・セール",
+    "ANALYSIS": "分析・診断",
+    "GENERAL": "その他"
+  },
+  "settings": {
+    "title": "設定",
+    "aiModel": "AIモデル",
+    "aiModelDescription": "使用するAIモデルを選択",
+    "language": "言語",
+    "tokenUsage": "トークン使用量",
+    "plan": "プラン"
+  },
+  "errors": {
+    "notFound": "ページが見つかりません",
+    "conversationNotFound": "会話が見つかりません",
+    "emptyMessage": "メッセージを入力してください",
+    "apiError": "AIからの応答に問題がありました。もう一度お試しください。",
+    "tokenLimit": "今月のトークン上限に達しました。プランのアップグレードをご検討ください。"
+  }
+}

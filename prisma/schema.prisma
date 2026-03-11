@@ -1,0 +1,256 @@
+// Aicata - Database Schema
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== Shopify Session (required by shopify-app-remix) =====
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String?
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+
+  @@index([shop])
+}
+
+// ===== Shop =====
+model Shop {
+  id              String    @id @default(cuid())
+  shopDomain      String    @unique  // example.myshopify.com
+  shopName        String?
+  email           String?
+  plan            String    @default("free")  // free, pro, enterprise
+  locale          String    @default("ja")
+  timezone        String    @default("Asia/Tokyo")
+  currency        String    @default("JPY")
+
+  // AI設定
+  preferredModel  String    @default("claude-sonnet-4-20250514")
+  monthlyTokens   Int       @default(0)
+  tokenLimit      Int       @default(100000)
+
+  // ストア解析データ
+  storeAnalysis   StoreAnalysis?
+
+  // リレーション
+  conversations   Conversation[]
+  templates       Template[]
+  promptTemplates PromptTemplate[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([shopDomain])
+}
+
+// ===== Conversation =====
+model Conversation {
+  id          String    @id @default(cuid())
+  shopId      String
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  title       String    @default("新しい会話")
+  type        ConversationType @default(PAGE_DESIGN)
+  status      ConversationStatus @default(ACTIVE)
+
+  // メタデータ
+  metadata    Json?     // 会話に関連する追加情報（テンプレートID等）
+
+  messages    Message[]
+  templates   Template[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([shopId])
+  @@index([status])
+}
+
+enum ConversationType {
+  PAGE_DESIGN       // ページデザイン制作
+  PAGE_EDIT         // 既存ページ編集
+  SEO_OPTIMIZATION  // SEO改善
+  STORE_ANALYSIS    // ストア分析
+  MARKETING         // マーケティング相談
+  GENERAL           // 一般的な相談
+}
+
+enum ConversationStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+// ===== Message =====
+model Message {
+  id              String    @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role            MessageRole
+  content         String    @db.Text
+
+  // AIメタデータ
+  model           String?   // 使用したAIモデル
+  inputTokens     Int?      // 入力トークン数
+  outputTokens    Int?      // 出力トークン数
+
+  // 生成物への参照
+  generatedCode   String?   @db.Text  // 生成されたLiquid/CSS/JSコード
+
+  createdAt       DateTime  @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// ===== Template =====
+model Template {
+  id              String    @id @default(cuid())
+  shopId          String
+  shop            Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id])
+
+  name            String
+  description     String?
+  type            TemplateType
+  status          TemplateStatus @default(DRAFT)
+
+  // テンプレートコンテンツ
+  liquidCode      String    @db.Text    // Liquidテンプレートコード
+  cssCode         String?   @db.Text    // カスタムCSS
+  jsCode          String?   @db.Text    // カスタムJavaScript
+
+  // セクションスキーマ
+  sections        Section[]
+
+  // バージョン管理
+  version         Int       @default(1)
+  parentId        String?   // 前バージョンへの参照
+
+  // デプロイ情報
+  deployedAt      DateTime?
+  themeId         String?   // デプロイ先テーマID
+  assetKey        String?   // テーマ内のアセットキー
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([shopId])
+  @@index([type])
+  @@index([status])
+}
+
+enum TemplateType {
+  LANDING_PAGE    // ランディングページ
+  PRODUCT_PAGE    // 商品ページ
+  COLLECTION_PAGE // コレクションページ
+  ABOUT_PAGE      // 会社概要ページ
+  CONTACT_PAGE    // お問い合わせページ
+  BLOG_POST       // ブログ記事
+  CAMPAIGN_PAGE   // キャンペーンページ
+  CUSTOM          // カスタム
+}
+
+enum TemplateStatus {
+  DRAFT           // 下書き
+  PREVIEW         // プレビュー中
+  DEPLOYED        // デプロイ済み
+  ARCHIVED        // アーカイブ
+}
+
+// ===== Section =====
+model Section {
+  id          String    @id @default(cuid())
+  templateId  String
+  template    Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  name        String    // セクション名
+  type        String    // セクションタイプ（hero, features, testimonials等）
+  schema      Json      // Online Store 2.0 セクションスキーマJSON
+  order       Int       @default(0)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([templateId])
+}
+
+// ===== Store Analysis =====
+model StoreAnalysis {
+  id          String    @id @default(cuid())
+  shopId      String    @unique
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // デザインDNA
+  colorPalette    Json?   // 抽出されたカラーパレット
+  typography      Json?   // フォント情報
+  layoutPatterns  Json?   // レイアウトパターン
+  brandTone       String? // ブランドトーン分析
+
+  // テーマ情報
+  themeName       String?
+  themeId         String?
+
+  // ページ構造
+  pageStructure   Json?   // 各ページの構造分析
+
+  analyzedAt      DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ===== Prompt Template (会話スターター) =====
+model PromptTemplate {
+  id          String    @id @default(cuid())
+  shopId      String?   // nullの場合はシステムデフォルト
+  shop        Shop?     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  category    PromptCategory
+  title       String    // 「新商品のLPを作りたい」
+  description String?   // 説明文
+  prompt      String    @db.Text  // 実際のプロンプトテンプレート
+  variables   Json?     // テンプレート変数（{{product_name}}等）
+
+  isSystem    Boolean   @default(false)  // システム標準テンプレート
+  sortOrder   Int       @default(0)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+  @@index([isSystem])
+}
+
+enum PromptCategory {
+  PAGE_CREATION     // ページ新規作成
+  PAGE_IMPROVEMENT  // 既存ページ改善
+  SEO               // SEO対策
+  CAMPAIGN          // キャンペーン/セール
+  ANALYSIS          // 分析・診断
+  GENERAL           // その他
+}
