@@ -57,7 +57,7 @@ export default function ChatListPage() {
   const navigate = useNavigate();
 
   return (
-    <Page title="AI相方">
+    <Page title="Aicata">
       <Layout>
         {/* テンプレート選択エリア */}
         <Layout.Section>

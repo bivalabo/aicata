@@ -41,7 +41,7 @@ export default function DashboardPage() {
         >
           <p>
             AIパートナーと一緒にShopifyストアを構築・改善しましょう。
-            まずは「AI相方」メニューから会話を始めてみてください。
+            まずは「Aicata」メニューから会話を始めてみてください。
           </p>
         </Banner>
 
@@ -85,7 +85,7 @@ export default function DashboardPage() {
                     size="large"
                     onClick={() => navigate("/app/chat")}
                   >
-                    AI相方と会話を始める
+                    Aicataと会話を始める
                   </Button>
                   <Text as="p" variant="bodyMd" tone="subdued">
                     「新商品のランディングページを作りたい」など、

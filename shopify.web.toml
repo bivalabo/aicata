@@ -1,0 +1,6 @@
+[commands]
+dev = "npx remix vite:dev"
+
+[roles]
+backend = true
+frontend = true

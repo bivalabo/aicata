@@ -21,7 +21,7 @@ export default function App() {
     <AppProvider isEmbeddedApp apiKey={apiKey}>
       <NavMenu>
         <Link to="/app" rel="home">ホーム</Link>
-        <Link to="/app/chat">AI相方</Link>
+        <Link to="/app/chat">Aicata</Link>
         <Link to="/app/templates">テンプレート</Link>
         <Link to="/app/settings">設定</Link>
       </NavMenu>

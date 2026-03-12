@@ -1,8 +1,14 @@
 import type { EntryContext } from "@remix-run/node";
 import { RemixServer } from "@remix-run/react";
-import { renderToReadableStream } from "react-dom/server";
 import { addDocumentResponseHeaders } from "./shopify.server";
 import { isbot } from "isbot";
+import { PassThrough } from "node:stream";
+import { createReadableStreamFromReadable } from "@remix-run/node";
+import ReactDOMServer from "react-dom/server";
+
+const { renderToPipeableStream } = ReactDOMServer;
+
+const ABORT_DELAY = 5_000;
 
 export default async function handleRequest(
   request: Request,
@@ -12,25 +18,43 @@ export default async function handleRequest(
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
 
-  const body = await renderToReadableStream(
-    <RemixServer context={remixContext} url={request.url} />,
-    {
-      signal: request.signal,
-      onError(error: unknown) {
-        console.error(error);
-        responseStatusCode = 500;
+  const userAgent = request.headers.get("user-agent") || "";
+  const callbackName = isbot(userAgent) ? "onAllReady" : "onShellReady";
+
+  return new Promise((resolve, reject) => {
+    let shellRendered = false;
+
+    const { pipe, abort } = renderToPipeableStream(
+      <RemixServer context={remixContext} url={request.url} />,
+      {
+        [callbackName]() {
+          shellRendered = true;
+          const body = new PassThrough();
+          const stream = createReadableStreamFromReadable(body);
+
+          responseHeaders.set("Content-Type", "text/html");
+
+          resolve(
+            new Response(stream, {
+              headers: responseHeaders,
+              status: responseStatusCode,
+            }),
+          );
+
+          pipe(body);
+        },
+        onShellError(error: unknown) {
+          reject(error);
+        },
+        onError(error: unknown) {
+          responseStatusCode = 500;
+          if (shellRendered) {
+            console.error(error);
+          }
+        },
       },
-    },
-  );
+    );
 
-  if (isbot(request.headers.get("user-agent") || "")) {
-    await body.allReady;
-  }
-
-  responseHeaders.set("Content-Type", "text/html");
-
-  return new Response(body, {
-    headers: responseHeaders,
-    status: responseStatusCode,
+    setTimeout(abort, ABORT_DELAY);
   });
 }

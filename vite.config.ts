@@ -24,6 +24,7 @@ if (process.env.SHOPIFY_APP_URL) {
 export default defineConfig({
   server: {
     port: Number(process.env.PORT || 3000),
+    allowedHosts: [".trycloudflare.com"],
     hmr: hmrConfig
       ? {
           protocol: hmrConfig.protocol as "ws" | "wss",

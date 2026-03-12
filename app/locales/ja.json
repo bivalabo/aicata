@@ -5,7 +5,7 @@
   },
   "nav": {
     "home": "ホーム",
-    "chat": "AI相方",
+    "chat": "Aicata",
     "templates": "テンプレート",
     "settings": "設定"
   },
@@ -14,7 +14,7 @@
     "welcome": "Aicataへようこそ！",
     "welcomeMessage": "AIパートナーと一緒にShopifyストアを構築・改善しましょう。",
     "quickStart": "クイックスタート",
-    "startChat": "AI相方と会話を始める",
+    "startChat": "Aicataと会話を始める",
     "startChatHint": "「新商品のランディングページを作りたい」など、やりたいことを日本語で伝えるだけでOKです。",
     "stats": {
       "conversations": "会話数",
@@ -23,7 +23,7 @@
     }
   },
   "chat": {
-    "title": "AI相方",
+    "title": "Aicata",
     "whatToDo": "何をしたいですか？",
     "selectTemplate": "やりたいことを選んでください。AIパートナーが最適な形でサポートします。",
     "recentConversations": "最近の会話",
