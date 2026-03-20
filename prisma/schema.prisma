@@ -254,3 +254,153 @@ enum PromptCategory {
   ANALYSIS          // 分析・診断
   GENERAL           // その他
 }
+
+// ===== ACE: Design Atoms =====
+model DesignAtom {
+  id          String    @id @default(cuid())
+  atomId      String    @unique  // "heading-serif-display"
+  category    String    // "typography" | "media" | "interactive" | "layout" | "decorative"
+  tag         String    // "h1", "img", "button", etc.
+  name        String
+  description String?
+  html        String    @db.Text
+  css         String    @db.Text
+  variants    String?   @db.Text  // JSON: AtomVariant[]
+  tokens      String?   // JSON: string[] — CSS variable names used
+  a11y        String?   // JSON: AccessibilitySpec
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+}
+
+// ===== ACE: Block Patterns =====
+model BlockPattern {
+  id          String    @id @default(cuid())
+  blockId     String    @unique  // "hero-text-group"
+  category    String    // "text-group" | "card" | "media-text" | etc.
+  name        String
+  description String?
+  layout      String?   @db.Text  // JSON: LayoutSpec
+  slots       String    @db.Text  // JSON: BlockSlot[]
+  css         String    @db.Text
+  responsive  String?   @db.Text  // JSON: ResponsiveOverride[]
+  animations  String?   @db.Text  // JSON: AnimationDef[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+}
+
+// ===== ADIS: Design Patterns (Knowledge Graph) =====
+model DesignPattern {
+  id              String    @id @default(cuid())
+  name            String
+  category        String    // "layout" | "color" | "typography" | "animation" | "interaction"
+  description     String    @db.Text
+  cssSnippet      String?   @db.Text
+
+  // Trend data
+  prevalence      Float     @default(0.5)   // 0-1
+  momentum        Float     @default(0)     // -1 to +1
+  firstSeen       DateTime  @default(now())
+  lastSeen        DateTime  @default(now())
+
+  // Curator evaluation
+  curatorScore    Float?
+  curatorNotes    String?   @db.Text
+
+  // ACE mapping
+  atomIds         String?   // JSON array of atom IDs
+  blockIds        String?   // JSON array of block IDs
+
+  // Industries and tones
+  industries      String?   // JSON array of IndustryType
+  tones           String?   // JSON array of DesignTone
+
+  // Examples
+  exampleUrls     String?   @db.Text  // JSON array of URLs
+  exampleCount    Int       @default(0)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([category])
+  @@index([prevalence])
+  @@index([momentum])
+}
+
+// ===== ADIS: Site Evaluations (Curator ratings) =====
+model SiteEvaluation {
+  id              String    @id @default(cuid())
+  url             String
+  screenshotPath  String?
+
+  // Ratings (1-5)
+  overallRating   Int
+  typographyScore Int?
+  colorScore      Int?
+  layoutScore     Int?
+  animationScore  Int?
+  spacingScore    Int?
+
+  tags            String    // JSON array
+  notes           String?   @db.Text
+
+  // AI analysis results
+  analyzedColors  String?   @db.Text  // JSON
+  analyzedFonts   String?   @db.Text  // JSON
+  analyzedLayout  String?   @db.Text  // JSON
+  detectedPatterns String?  @db.Text  // JSON: pattern IDs
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([overallRating])
+  @@index([createdAt])
+}
+
+// ===== ADIS: Design DNA Snapshots =====
+model DesignDNASnapshot {
+  id              String    @id @default(cuid())
+
+  // 10-dimensional preference vector (all -1.0 to +1.0)
+  minimalism      Float     @default(0)
+  whitespace      Float     @default(0)
+  contrast        Float     @default(0)
+  animationIntensity Float  @default(0)
+  serifAffinity   Float     @default(0)
+  colorSaturation Float     @default(0)
+  layoutComplexity Float    @default(0)
+  imageWeight     Float     @default(0)
+  asymmetry       Float     @default(0)
+  novelty         Float     @default(0)
+
+  // Metadata
+  confidence      Float     @default(0)
+  totalRatings    Int       @default(0)
+
+  // Pattern preferences
+  favoritePatterns String?  @db.Text  // JSON array
+  avoidPatterns    String?  @db.Text  // JSON array
+
+  createdAt       DateTime  @default(now())
+}
+
+// ===== ADIS: Trend Reports =====
+model TrendReport {
+  id                String    @id @default(cuid())
+  period            String    // "2026-W12", "2026-03"
+
+  emergingPatterns  String    @db.Text  // JSON
+  decliningPatterns String    @db.Text  // JSON
+  colorTrends       String?   @db.Text  // JSON
+  typographyTrends  String?   @db.Text  // JSON
+  layoutTrends      String?   @db.Text  // JSON
+
+  createdAt         DateTime  @default(now())
+
+  @@index([period])
+}
