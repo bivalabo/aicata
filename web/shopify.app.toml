@@ -1,0 +1,18 @@
+# Aicata — Shopify App Configuration
+# https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "Aicata"
+client_id = "53179e11fd3ee1fe63da60fff98692c5"
+application_url = "http://localhost:3000"
+embedded = false
+
+[auth]
+redirect_urls = [
+  "http://localhost:3000/api/shopify/callback"
+]
+
+[access_scopes]
+scopes = "read_content,write_content,read_themes,write_themes,read_products,read_orders"
+
+[webhooks]
+api_version = "2024-10"

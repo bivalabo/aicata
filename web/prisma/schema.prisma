@@ -1,0 +1,285 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Store {
+  id           String   @id @default(cuid())
+  shop         String   @unique // example.myshopify.com
+  accessToken  String
+  scope        String   @default("")
+  name         String   @default("")
+  email        String   @default("")
+  domain       String   @default("") // カスタムドメイン
+  plan         String   @default("")
+  isActive     Boolean  @default(true) // 現在アクティブなストアかどうか
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  brandMemory  BrandMemory?
+
+  @@index([isActive])
+}
+
+/// ============================================================
+/// Brand Memory — 相方があなたのブランドを記憶する
+/// ストアのデザインアイデンティティを永続化し、
+/// すべてのページ生成に自動適用する
+/// ============================================================
+model BrandMemory {
+  id               String   @id @default(cuid())
+  storeId          String   @unique
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  // ── ブランド基本情報 ──
+  brandName        String   @default("")
+  brandStory       String   @default("") // ブランドの世界観・ストーリー（AIが参照）
+  industry         String   @default("general") // beauty, food, fashion, etc.
+  targetAudience   String   @default("") // ターゲット顧客の説明
+
+  // ── デザインアイデンティティ ──
+  primaryColor     String   @default("") // メインブランドカラー
+  secondaryColor   String   @default("") // サブカラー
+  accentColor      String   @default("") // アクセントカラー
+  colorPalette     String   @default("[]") // JSON: 追加カラー string[]
+  primaryFont      String   @default("") // 見出し用フォント
+  bodyFont         String   @default("") // 本文用フォント
+  tones            String   @default("[]") // JSON: DesignTone[] — デザイントーン
+
+  // ── コミュニケーションスタイル ──
+  voiceTone        String   @default("") // ブランドの語り口（親しみやすい、フォーマル等）
+  copyKeywords     String   @default("[]") // JSON: ブランドが好む表現 string[]
+  avoidKeywords    String   @default("[]") // JSON: 避けたい表現 string[]
+
+  // ── 学習データ ──
+  favoriteTemplates String  @default("[]") // JSON: 過去に選ばれたテンプレートID string[]
+  pageCount        Int      @default(0) // 生成ページ数（学習量の指標）
+  lastLearnedAt    DateTime? // 最後にプロファイルが更新された日時
+  source           String   @default("manual") // manual, onboarding, crawl, learned
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  title     String    @default("新しいチャット")
+  type      String    @default("chat") // chat, site-build, seo, design
+  pinned    Boolean   @default(false)
+  archived  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+  pages     Page[]
+
+  @@index([updatedAt])
+  @@index([archived])
+}
+
+model Page {
+  id              String        @id @default(cuid())
+  title           String        @default("無題のページ")
+  slug            String        @default("")
+  html            String        @default("")
+  css             String        @default("")
+  status          String        @default("draft") // draft, published, synced
+  version         Int           @default(1)
+  shopifyPageId   String?       // Shopify側のページID（数値文字列）
+  shopifyPublished Boolean      @default(false)
+  source          String        @default("aicata") // aicata, shopify
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  versions        PageVersion[]
+  deployments     ThemeDeployment[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // ── Gen-3: テンプレート情報 ──
+  pageType        String        @default("general") // landing, product, collection, cart, etc.
+  templateId      String?       // design-engine PageTemplate ID (e.g., "luxury-beauty-product")
+  liquidGenerated Boolean       @default(false)
+
+  @@index([conversationId])
+  @@index([status])
+  @@index([shopifyPageId])
+  @@index([pageType])
+}
+
+/// Shopifyテーマへのデプロイ記録
+model ThemeDeployment {
+  id              String   @id @default(cuid())
+  pageId          String
+  page            Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  storeId         String
+  themeId         String   // Shopify theme ID
+  templateType    String   // "index", "product", "collection", "cart", etc.
+  templateSuffix  String   @default("") // e.g., "aicata-luxury" → product.aicata-luxury.json
+  assetsDeployed  String   @default("[]") // JSON array of deployed file paths
+  status          String   @default("pending") // pending, deploying, deployed, failed
+  errorMessage    String?
+  deployedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([pageId])
+  @@index([storeId, themeId])
+  @@unique([storeId, themeId, templateType, templateSuffix])
+}
+
+model PageVersion {
+  id        String   @id @default(cuid())
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  version   Int
+  html      String
+  css       String
+  prompt    String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([pageId, version])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // user, assistant
+  content        String
+  inputTokens    Int?
+  outputTokens   Int?
+  model          String?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// ============================================================
+// ACE/ADIS Models
+// ============================================================
+
+/// ACE Layer 1: デザインアトム（最小UI部品）
+model DesignAtom {
+  id          String   @id @default(cuid())
+  atomId      String   @unique // e.g., "heading-serif-display"
+  category    String   // typography, media, interactive, layout, decorative
+  tag         String   // HTML tag: h1, img, button, etc.
+  name        String
+  description String?
+  html        String   // HTML テンプレート
+  css         String   // CSS 定義
+  variants    String?  // JSON: AtomVariant[]
+  tokens      String?  // JSON: Record<string, string>
+  a11y        String?  // JSON: AccessibilitySpec
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+}
+
+/// ACE Layer 2: ブロックパターン（アトムの組み合わせ）
+model BlockPattern {
+  id          String   @id @default(cuid())
+  blockId     String   @unique // e.g., "hero-text-group"
+  category    String   // text-group, card, media-text, nav-item, etc.
+  name        String
+  description String?
+  layout      String?  // JSON: LayoutSpec
+  slots       String   // JSON: BlockSlot[]
+  css         String
+  responsive  String?  // JSON: ResponsiveOverride[]
+  animations  String?  // JSON: AnimationDef[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+}
+
+/// ADIS: デザインパターン（トレンド追跡対象）
+model DesignPattern {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  category      String   // layout, navigation, hero, product-display, etc.
+  description   String
+  cssSnippet    String?
+  prevalence    Float    @default(0) // 0-1: 出現率
+  momentum      Float    @default(0) // -1 to +1: トレンド勢い
+  firstSeen     DateTime @default(now())
+  lastSeen      DateTime @default(now())
+  curatorScore  Float?   // キュレーター評価スコア
+  curatorNotes  String?
+  atomIds       String?  // JSON: string[] — 関連アトムID
+  blockIds      String?  // JSON: string[] — 関連ブロックID
+  industries    String?  // JSON: string[] — 適用業種
+  tones         String?  // JSON: string[] — デザイントーン
+  exampleUrls   String?  // JSON: string[] — 参考URL
+  exampleCount  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([category])
+  @@index([momentum])
+}
+
+/// ADIS: サイト評価（Curator Visionの分析結果）
+model SiteEvaluation {
+  id               String   @id @default(cuid())
+  url              String
+  screenshotPath   String?
+  overallRating    Float
+  typographyScore  Float?
+  colorScore       Float?
+  layoutScore      Float?
+  animationScore   Float?
+  spacingScore     Float?
+  tags             String   @default("[]") // JSON: string[]
+  notes            String?
+  analyzedColors   String?  // JSON: ExtractedColor[]
+  analyzedFonts    String?  // JSON: ExtractedFont[]
+  analyzedLayout   String?  // JSON: { pattern, tones }
+  detectedPatterns String?  // JSON: string[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([url])
+  @@index([createdAt])
+}
+
+/// ADIS: Design DNA スナップショット（嗜好学習の履歴）
+model DesignDNASnapshot {
+  id                  String   @id @default(cuid())
+  minimalism          Float    @default(0)
+  whitespace          Float    @default(0)
+  contrast            Float    @default(0)
+  animationIntensity  Float    @default(0)
+  serifAffinity       Float    @default(0)
+  colorSaturation     Float    @default(0)
+  layoutComplexity    Float    @default(0)
+  imageWeight         Float    @default(0)
+  asymmetry           Float    @default(0)
+  novelty             Float    @default(0)
+  confidence          Float    @default(0) // 0-1
+  totalRatings        Int      @default(0)
+  favoritePatterns    String?  // JSON: string[]
+  avoidPatterns       String?  // JSON: string[]
+  createdAt           DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// ADIS: トレンドレポート（定期分析結果）
+model TrendReport {
+  id                String   @id @default(cuid())
+  period            String   // e.g., "2026-W12"
+  emergingPatterns  String   @default("[]") // JSON: PatternTrend[]
+  decliningPatterns String   @default("[]") // JSON: PatternTrend[]
+  colorTrends       String?  // JSON: ColorTrend[]
+  typographyTrends  String?  // JSON: TypographyTrend[]
+  layoutTrends      String?  // JSON: LayoutTrend[]
+  createdAt         DateTime @default(now())
+
+  @@index([period])
+  @@index([createdAt])
+}
