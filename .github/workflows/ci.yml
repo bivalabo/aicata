@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Shopify Remix App (app/) ───
+  app-check:
+    name: "App: Lint & Type Check"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: TypeScript type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  # ─── Next.js Web App (web/) ───
+  web-check:
+    name: "Web: Lint & Type Check & Build"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          # ビルド時にはダミー値を使用
+          DATABASE_URL: "file:./prisma/data/dummy.db"
+          ANTHROPIC_API_KEY: "sk-ant-dummy"
+          SHOPIFY_API_KEY: "dummy"
+          SHOPIFY_API_SECRET: "dummy"
+          APP_URL: "http://localhost:3000"

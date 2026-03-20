@@ -1,0 +1,60 @@
+name: バグ報告
+description: バグや不具合を報告
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: バグの内容
+      description: 何が起きていますか？
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動作
+      description: 本来どう動くべきですか？
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: スクリーンショット
+      description: あれば貼り付けてください
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 対象領域
+      options:
+        - "app/ (Shopify Remix)"
+        - "web/ (Next.js)"
+        - "両方"
+        - "不明"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 深刻度
+      options:
+        - "致命的 - サービス停止"
+        - "重大 - 主要機能に影響"
+        - "軽微 - 回避策あり"
+        - "軽微 - 見た目のみ"
+    validations:
+      required: true
