@@ -199,14 +199,14 @@ function UrlImportForm({
       exit={{ opacity: 0, y: -16 }}
       className="w-full max-w-md"
     >
-      <div className="text-center mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/15">
-          <Globe className="w-6 h-6 text-white" />
+      <div className="text-center mb-8">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-indigo-500/15">
+          <Globe className="w-7 h-7 text-white" />
         </div>
-        <h2 className="text-lg font-bold text-foreground mb-1.5">
+        <h2 className="text-xl font-bold text-foreground mb-2">
           既存サイトを分析してリビルド
         </h2>
-        <p className="text-[13px] text-muted leading-relaxed">
+        <p className="text-[15px] text-muted leading-relaxed">
           URLを入力すると、デザインや構造を解析して
           <br />
           Shopifyテーマとして再構築します
@@ -255,16 +255,16 @@ function UrlImportForm({
 
         <button
           onClick={onCancel}
-          className="flex items-center gap-1.5 mx-auto text-[12px] text-muted hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 mx-auto text-[13px] text-muted hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="w-4 h-4" />
           戻る
         </button>
       </div>
 
       {/* ヒント */}
-      <div className="mt-6 p-3 rounded-xl bg-black/[0.02] border border-border/30">
-        <p className="text-[11px] text-muted-foreground leading-relaxed text-center">
+      <div className="mt-8 p-4 rounded-xl bg-black/[0.02] border border-border/30">
+        <p className="text-[12px] text-muted-foreground leading-relaxed text-center">
           対応サイト: Shopify, WordPress, Wix, その他HTML/CSSサイト
           <br />
           デザイントーン・配色・レイアウト構造を自動解析します
@@ -296,7 +296,7 @@ export default function WelcomeScreen({
   );
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 max-w-2xl mx-auto">
+    <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 max-w-2xl mx-auto">
       <AnimatePresence mode="wait">
         {mode === "url-import" ? (
           <UrlImportForm
@@ -317,27 +317,27 @@ export default function WelcomeScreen({
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="text-center mb-8"
+              className="text-center mb-10"
             >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.4, delay: 0.1 }}
-                className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] flex items-center justify-center mx-auto mb-5 shadow-lg shadow-[#7c5cfc]/15"
+                className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[#7c5cfc]/15"
               >
-                <Sparkles className="w-7 h-7 text-white" />
+                <Sparkles className="w-8 h-8 text-white" />
               </motion.div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground mb-2">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground mb-3">
                 どんなページを作りましょうか？
               </h1>
-              <p className="text-sm text-muted leading-relaxed">
+              <p className="text-[15px] text-muted leading-relaxed">
                 対話しながらShopifyページを生成。
                 <br className="hidden sm:block" />
                 リアルタイムプレビューで仕上がりを確認できます。
               </p>
               {hasBrandMemory && (
-                <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/[0.06] border border-accent/15 text-[12px] text-accent font-medium">
-                  <Sparkles className="w-3 h-3" />
+                <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/[0.06] border border-accent/15 text-[13px] text-accent font-medium">
+                  <Sparkles className="w-3.5 h-3.5" />
                   {brandName
                     ? `${brandName} の Brand Memory が有効`
                     : "Brand Memory が有効"}
@@ -350,12 +350,12 @@ export default function WelcomeScreen({
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.15 }}
-              className="w-full mb-4"
+              className="w-full mb-6"
             >
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
+              <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
                 ページを作成
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full">
                 {PAGE_CREATION_ACTIONS.map((action, i) => (
                   <motion.button
                     key={action.title}
@@ -366,7 +366,7 @@ export default function WelcomeScreen({
                       onSelectTemplate(action.prompt, action.pageType)
                     }
                     className={clsx(
-                      "group relative flex flex-col items-center gap-2 p-4 rounded-2xl text-center",
+                      "group relative flex flex-col items-center gap-3 p-5 rounded-2xl text-center",
                       "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
                       "transition-all duration-200",
                       "hover:shadow-sm",
@@ -374,17 +374,17 @@ export default function WelcomeScreen({
                   >
                     <div
                       className={clsx(
-                        "w-10 h-10 rounded-xl flex items-center justify-center",
+                        "w-12 h-12 rounded-xl flex items-center justify-center",
                         action.iconBg,
                       )}
                     >
-                      <action.icon className="w-5 h-5 text-white" />
+                      <action.icon className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <div className="text-[13px] font-semibold text-foreground">
+                      <div className="text-[14px] font-semibold text-foreground">
                         {action.title}
                       </div>
-                      <div className="text-[11px] text-muted mt-0.5">
+                      <div className="text-[12px] text-muted mt-1">
                         {action.description}
                       </div>
                     </div>
@@ -396,12 +396,12 @@ export default function WelcomeScreen({
               {!showMore ? (
                 <button
                   onClick={() => setShowMore(true)}
-                  className="mt-2 text-[12px] text-accent hover:text-accent-hover font-medium transition-colors"
+                  className="mt-3 text-[13px] text-accent hover:text-accent-hover font-medium transition-colors"
                 >
                   + もっとページタイプを見る
                 </button>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full mt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full mt-3">
                   {ADDITIONAL_PAGE_ACTIONS.map((action, i) => (
                     <motion.button
                       key={action.title}
@@ -412,7 +412,7 @@ export default function WelcomeScreen({
                         onSelectTemplate(action.prompt, action.pageType)
                       }
                       className={clsx(
-                        "group relative flex flex-col items-center gap-2 p-4 rounded-2xl text-center",
+                        "group relative flex flex-col items-center gap-3 p-5 rounded-2xl text-center",
                         "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
                         "transition-all duration-200",
                         "hover:shadow-sm",
@@ -420,17 +420,17 @@ export default function WelcomeScreen({
                     >
                       <div
                         className={clsx(
-                          "w-10 h-10 rounded-xl flex items-center justify-center",
+                          "w-12 h-12 rounded-xl flex items-center justify-center",
                           action.iconBg,
                         )}
                       >
-                        <action.icon className="w-5 h-5 text-white" />
+                        <action.icon className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <div className="text-[13px] font-semibold text-foreground">
+                        <div className="text-[14px] font-semibold text-foreground">
                           {action.title}
                         </div>
-                        <div className="text-[11px] text-muted mt-0.5">
+                        <div className="text-[12px] text-muted mt-1">
                           {action.description}
                         </div>
                       </div>
@@ -453,28 +453,28 @@ export default function WelcomeScreen({
                 whileTap={{ scale: 0.995 }}
                 onClick={() => setMode("url-import")}
                 className={clsx(
-                  "w-full flex items-center gap-3 p-3.5 rounded-2xl text-left mb-3",
+                  "w-full flex items-center gap-4 p-4 rounded-2xl text-left mb-4",
                   "border border-dashed border-accent/30 bg-accent/[0.03]",
                   "hover:bg-accent/[0.06] hover:border-accent/50",
                   "transition-all duration-200",
                 )}
               >
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shrink-0">
-                  <Globe className="w-[18px] h-[18px] text-white" />
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shrink-0">
+                  <Globe className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-foreground flex items-center gap-1">
+                  <div className="text-[14px] font-semibold text-foreground flex items-center gap-1.5">
                     既存サイトからリビルド
-                    <ArrowRight className="w-3 h-3 text-accent" />
+                    <ArrowRight className="w-3.5 h-3.5 text-accent" />
                   </div>
-                  <div className="text-[11px] text-muted mt-0.5">
+                  <div className="text-[12px] text-muted mt-0.5">
                     URLを入力 → デザイン解析 → Shopifyテーマとして再構築
                   </div>
                 </div>
               </motion.button>
 
               {/* ユーティリティ行 */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 {UTILITY_ACTIONS.map((action, i) => (
                   <motion.button
                     key={action.title}
@@ -483,7 +483,7 @@ export default function WelcomeScreen({
                     transition={{ duration: 0.3, delay: 0.4 + i * 0.04 }}
                     onClick={() => onSelectTemplate(action.prompt)}
                     className={clsx(
-                      "group flex items-center gap-2.5 p-3 rounded-xl text-left",
+                      "group flex items-center gap-3 p-4 rounded-xl text-left",
                       "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
                       "transition-all duration-200",
                       "hover:shadow-sm",
@@ -491,17 +491,17 @@ export default function WelcomeScreen({
                   >
                     <div
                       className={clsx(
-                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                        "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
                         action.iconBg,
                       )}
                     >
-                      <action.icon className="w-4 h-4 text-white" />
+                      <action.icon className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold text-foreground">
+                      <div className="text-[14px] font-semibold text-foreground">
                         {action.title}
                       </div>
-                      <div className="text-[11px] text-muted">
+                      <div className="text-[12px] text-muted mt-0.5">
                         {action.description}
                       </div>
                     </div>
@@ -515,7 +515,7 @@ export default function WelcomeScreen({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
-              className="mt-6 text-[11px] text-muted-foreground"
+              className="mt-8 text-[13px] text-muted-foreground"
             >
               テンプレートを選ぶか、入力欄に自由にメッセージを送ってください
             </motion.p>

@@ -44,9 +44,12 @@ const NAV_ITEMS = [
   { id: "chat", icon: MessagesSquare, label: "ページ制作" },
   { id: "site", icon: Store, label: "サイト構築" },
   { id: "pages", icon: FileText, label: "ページ管理" },
+  { id: "settings", icon: Settings, label: "設定" },
+];
+
+const COMING_SOON_ITEMS = [
   { id: "seo", icon: Search, label: "SEO" },
   { id: "admin", icon: Brain, label: "Intelligence" },
-  { id: "settings", icon: Settings, label: "設定" },
 ];
 
 function formatRelativeDate(dateStr: string): string {
@@ -107,7 +110,7 @@ export default function Sidebar({
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between h-14 px-4">
+      <div className="flex items-center justify-between h-16 px-4">
         <AnimatePresence mode="wait">
           {!collapsed && (
             <motion.div
@@ -121,7 +124,7 @@ export default function Sidebar({
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] flex items-center justify-center shadow-sm">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <span className="text-[15px] font-semibold tracking-tight text-foreground">
+              <span className="text-[16px] font-semibold tracking-tight text-foreground">
                 Aicata
               </span>
             </motion.div>
@@ -146,21 +149,21 @@ export default function Sidebar({
       <StoreSwitcher collapsed={collapsed} />
 
       {/* Nav */}
-      <nav className="px-3 py-3">
-        <div className="flex flex-col gap-0.5">
+      <nav className="px-3 py-4">
+        <div className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => (
             <div key={item.id} className="flex items-center gap-0.5">
               <button
                 onClick={() => onNavigate(item.id)}
                 className={clsx(
-                  "flex-1 flex items-center gap-2.5 rounded-xl text-[13px] transition-all duration-200",
-                  collapsed ? "p-2.5 justify-center" : "px-3 py-2",
+                  "flex-1 flex items-center gap-3 rounded-xl text-[14px] transition-all duration-200",
+                  collapsed ? "p-3 justify-center" : "px-3.5 py-3",
                   activeNav === item.id
                     ? "bg-white/85 text-foreground shadow-sm shadow-black/[0.03] font-semibold"
                     : "text-muted hover:text-foreground hover:bg-white/40",
                 )}
               >
-                <item.icon className="w-[18px] h-[18px] shrink-0" />
+                <item.icon className="w-5 h-5 shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
               </button>
               {/* ページ制作の横に新規作成ボタン */}
@@ -170,15 +173,35 @@ export default function Sidebar({
                     onNavigate("chat");
                     onNewChat();
                   }}
-                  className="p-1.5 rounded-lg text-muted-foreground/50 hover:text-accent hover:bg-accent/5 transition-colors"
+                  className="p-2 rounded-lg text-muted-foreground/50 hover:text-accent hover:bg-accent/5 transition-colors"
                   title="新規ページ作成"
                 >
-                  <FilePlus2 className="w-4 h-4" />
+                  <FilePlus2 className="w-4.5 h-4.5" />
                 </button>
               )}
             </div>
           ))}
         </div>
+
+        {/* Coming Soon */}
+        {!collapsed && (
+          <div className="mt-4 pt-3 border-t border-black/[0.04]">
+            <span className="px-3.5 text-[11px] text-muted-foreground/50 uppercase tracking-wider font-medium">
+              Coming Soon
+            </span>
+            <div className="flex flex-col gap-1 mt-2">
+              {COMING_SOON_ITEMS.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14px] text-muted-foreground/40 cursor-default"
+                >
+                  <item.icon className="w-5 h-5 shrink-0" />
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Divider */}
@@ -254,19 +277,19 @@ function ProjectHistory({
       case "site-build":
         return <Globe className="w-3 h-3 text-blue-500" />;
       default:
-        return <MessagesSquare className="w-3 h-3 text-muted-foreground/40" />;
+        return <MessagesSquare className="w-3 h-3 text-foreground/30" />;
     }
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col">
+    <div className="flex-1 overflow-y-auto px-3 py-4 flex flex-col">
       {/* ヘッダー */}
-      <div className="flex items-center justify-between px-2 pb-2">
-        <span className="text-[11px] text-muted-foreground uppercase tracking-widest font-medium">
+      <div className="flex items-center justify-between px-2 pb-2.5">
+        <span className="text-[12px] text-foreground/60 uppercase tracking-widest font-medium">
           プロジェクト
         </span>
         {totalCount > 0 && (
-          <span className="text-[10px] text-muted-foreground/50">
+          <span className="text-[11px] text-foreground/40">
             {totalCount}件
           </span>
         )}
@@ -282,7 +305,7 @@ function ProjectHistory({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="プロジェクトを検索..."
-              className="w-full pl-7 pr-3 py-1.5 rounded-lg bg-white/50 border border-transparent focus:border-accent/30 focus:bg-white text-[12px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-all"
+              className="w-full pl-7 pr-3 py-2 rounded-lg bg-white/50 border border-transparent focus:border-accent/30 focus:bg-white text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-all"
             />
           </div>
         </div>
@@ -291,17 +314,17 @@ function ProjectHistory({
       {/* プロジェクト一覧 */}
       <div className="flex flex-col gap-0.5 flex-1">
         {filtered.length === 0 && (
-          <div className="text-[13px] text-muted-foreground px-3 py-6 text-center">
+          <div className="text-[14px] text-foreground/50 px-3 py-8 text-center">
             {searchQuery ? (
               <>
-                <Search className="w-6 h-6 mx-auto mb-2 text-muted-foreground/20" />
-                <p className="text-[12px]">見つかりませんでした</p>
+                <Search className="w-7 h-7 mx-auto mb-2.5 text-foreground/20" />
+                <p className="text-[13px]">見つかりませんでした</p>
               </>
             ) : (
               <>
-                <MessagesSquare className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
+                <MessagesSquare className="w-9 h-9 mx-auto mb-2.5 text-foreground/20" />
                 <p>まだプロジェクトがありません</p>
-                <p className="text-[11px] mt-1">新しいページを作りましょう</p>
+                <p className="text-[12px] mt-1.5">新しいページを作りましょう</p>
               </>
             )}
           </div>
@@ -317,7 +340,7 @@ function ProjectHistory({
             <button
               onClick={() => onSelectConversation(conv.id)}
               className={clsx(
-                "w-full text-left rounded-xl px-3 py-2.5 transition-all duration-200",
+                "w-full text-left rounded-xl px-3.5 py-3 transition-all duration-200",
                 activeConversationId === conv.id
                   ? "bg-white/85 shadow-sm shadow-black/[0.03]"
                   : "hover:bg-white/40",
@@ -327,10 +350,10 @@ function ProjectHistory({
                 {typeIcon(conv.type)}
                 <span
                   className={clsx(
-                    "text-[13px] truncate leading-snug flex-1 pr-5",
+                    "text-[14px] truncate leading-snug flex-1 pr-5",
                     activeConversationId === conv.id
                       ? "text-foreground font-medium"
-                      : "text-muted-foreground",
+                      : "text-foreground/70",
                   )}
                 >
                   {conv.title}
@@ -366,7 +389,7 @@ function ProjectHistory({
         {hasMore && !searchQuery && (
           <button
             onClick={onShowMore}
-            className="w-full text-center text-[12px] text-muted-foreground hover:text-foreground py-2 mt-1 rounded-lg hover:bg-white/50 transition-colors"
+            className="w-full text-center text-[13px] text-muted-foreground hover:text-foreground py-2.5 mt-1.5 rounded-lg hover:bg-white/50 transition-colors"
           >
             さらに表示（残り{totalCount - visibleCount}件）
           </button>
@@ -376,28 +399,28 @@ function ProjectHistory({
       {/* ── 削除確認ダイアログ ── */}
       {deleteTarget && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[340px] p-5 mx-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl w-[380px] p-6 mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
               </div>
               <div>
-                <h3 className="text-[15px] font-bold text-foreground">
+                <h3 className="text-[16px] font-bold text-foreground">
                   プロジェクトを削除
                 </h3>
-                <p className="text-[12px] text-muted-foreground">
+                <p className="text-[13px] text-muted-foreground">
                   この操作は取り消せません
                 </p>
               </div>
             </div>
-            <p className="text-[13px] text-foreground mb-4 px-1">
+            <p className="text-[14px] text-foreground mb-5 px-1 leading-relaxed">
               「<span className="font-medium">{deleteTarget.title}</span>
               」を削除しますか？関連するチャット履歴もすべて失われます。
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-2.5">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="flex-1 px-4 py-2 rounded-xl text-[13px] font-medium text-foreground bg-black/[0.04] hover:bg-black/[0.07] transition-colors"
+                className="flex-1 px-4 py-2.5 rounded-xl text-[14px] font-medium text-foreground bg-black/[0.04] hover:bg-black/[0.07] transition-colors"
               >
                 キャンセル
               </button>
@@ -406,7 +429,7 @@ function ProjectHistory({
                   onDeleteConversation?.(deleteTarget.id);
                   setDeleteTarget(null);
                 }}
-                className="flex-1 px-4 py-2 rounded-xl text-[13px] font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors"
+                className="flex-1 px-4 py-2.5 rounded-xl text-[14px] font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors"
               >
                 削除する
               </button>
@@ -423,7 +446,7 @@ function RelativeTime({ dateStr }: { dateStr: string }) {
   const text = useRelativeDate(dateStr);
   return (
     <span
-      className="text-[10px] text-muted-foreground/50"
+      className="text-[11px] text-foreground/40"
       suppressHydrationWarning
     >
       {text}

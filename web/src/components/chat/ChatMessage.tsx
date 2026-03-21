@@ -269,7 +269,7 @@ export default memo(function ChatMessage({
                 <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce [animation-delay:150ms]" />
                 <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce [animation-delay:300ms]" />
               </div>
-              <span className="text-[12px] text-muted animate-pulse">
+              <span className="text-[13px] text-muted animate-pulse">
                 考えています...
               </span>
             </div>

@@ -1,11 +1,16 @@
 import path from "node:path";
+import dotenv from "dotenv";
 import { defineConfig } from "prisma/config";
 
-const DB_URL = process.env.DATABASE_URL || "file:./prisma/data/aicata.db";
+// Prisma CLI は .env.local を読まないため、明示的にロード
+dotenv.config({ path: path.join(__dirname, ".env.local") });
 
 export default defineConfig({
   schema: path.join(__dirname, "prisma", "schema.prisma"),
   datasource: {
-    url: DB_URL,
+    // Transaction pooler (port 6543) — for serverless/Vercel
+    url: process.env.DATABASE_URL!,
+    // Direct connection (port 5432) — for migrations
+    directUrl: process.env.DIRECT_URL,
   },
 });

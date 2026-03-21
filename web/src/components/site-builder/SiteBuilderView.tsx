@@ -128,13 +128,13 @@ export default function SiteBuilderView() {
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="shrink-0 px-6 pt-6 pb-4">
-        <div className="flex items-center justify-between mb-4">
+      <div className="shrink-0 px-8 pt-14 pb-6">
+        <div className="flex items-center justify-between mb-5">
           <div>
-            <h1 className="text-xl font-bold text-foreground">
+            <h1 className="text-2xl font-bold text-foreground">
               サイト構築
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="text-[15px] text-muted-foreground mt-1">
               {storeInfo?.name || storeInfo?.shop || "ストア"} のデザイン基盤を管理
             </p>
           </div>
@@ -143,28 +143,28 @@ export default function SiteBuilderView() {
               href={`https://${storeInfo.shop}/admin`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-black/[0.04] transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[14px] font-medium text-muted-foreground hover:text-foreground hover:bg-black/[0.04] transition-colors"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="w-4 h-4" />
               Shopify管理画面
             </a>
           )}
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex gap-1 overflow-x-auto pb-1 -mb-1">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mb-1">
           {SITE_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={clsx(
-                "flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] font-medium whitespace-nowrap transition-all duration-200",
+                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-[14px] font-medium whitespace-nowrap transition-all duration-200",
                 activeTab === tab.id
                   ? "bg-white shadow-sm shadow-black/[0.04] text-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-white/50",
               )}
             >
-              <tab.icon className="w-4 h-4 shrink-0" />
+              <tab.icon className="w-4.5 h-4.5 shrink-0" />
               {tab.label}
             </button>
           ))}

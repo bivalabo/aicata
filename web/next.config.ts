@@ -30,19 +30,6 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Webpack file watching on FUSE/VM mounts
-  // inotify が伝播しないマウントでもホットリロードを確実にする
-  webpack: (config, { dev }) => {
-    if (dev) {
-      config.watchOptions = {
-        poll: 1000,
-        aggregateTimeout: 300,
-        ignored: ["**/node_modules/**", "**/.next/**", "**/.git/**"],
-      };
-    }
-    return config;
-  },
-
   // Experimental performance features
   experimental: {
     // Optimize package imports to reduce bundle size

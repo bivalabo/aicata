@@ -85,19 +85,19 @@ export default function StoreSwitcher({
     return (
       <div
         className={clsx(
-          "mx-3 mb-2 flex items-center gap-2 px-2.5 py-2 rounded-xl bg-white/50",
+          "mx-3 mb-3 flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/50",
           collapsed && "justify-center px-2",
         )}
       >
-        <div className="w-6 h-6 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-          <Store className="w-3.5 h-3.5 text-emerald-600" />
+        <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+          <Store className="w-4 h-4 text-emerald-600" />
         </div>
         {!collapsed && (
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-semibold text-foreground truncate">
+            <p className="text-[13px] font-semibold text-foreground truncate">
               {activeStore.name || activeStore.shop.replace(".myshopify.com", "")}
             </p>
-            <p className="text-[9px] text-muted-foreground truncate">
+            <p className="text-[11px] text-muted-foreground truncate">
               {activeStore.shop}
             </p>
           </div>
@@ -108,21 +108,21 @@ export default function StoreSwitcher({
 
   // Multiple stores → show switcher
   return (
-    <div className="mx-3 mb-2 relative" ref={dropdownRef}>
+    <div className="mx-3 mb-3 relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "w-full flex items-center gap-2 px-2.5 py-2 rounded-xl bg-white/50 hover:bg-white/70 transition-colors",
+          "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/50 hover:bg-white/70 transition-colors",
           collapsed && "justify-center px-2",
         )}
       >
-        <div className="w-6 h-6 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-          <Store className="w-3.5 h-3.5 text-emerald-600" />
+        <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+          <Store className="w-4 h-4 text-emerald-600" />
         </div>
         {!collapsed && (
           <>
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-[11px] font-semibold text-foreground truncate">
+              <p className="text-[13px] font-semibold text-foreground truncate">
                 {activeStore?.name ||
                   activeStore?.shop.replace(".myshopify.com", "") ||
                   "ストアを選択"}
@@ -140,27 +140,27 @@ export default function StoreSwitcher({
 
       {/* Dropdown */}
       {open && !collapsed && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl border border-border shadow-lg shadow-black/[0.08] py-1 z-50">
+        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl border border-border shadow-lg shadow-black/[0.08] py-1.5 z-50">
           {stores.map((store) => (
             <button
               key={store.id}
               onClick={() => handleSwitch(store.id)}
               disabled={switching}
               className={clsx(
-                "w-full flex items-center gap-2 px-3 py-2 text-left transition-colors",
+                "w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors",
                 store.isActive
                   ? "bg-accent/[0.04]"
                   : "hover:bg-black/[0.03]",
               )}
             >
-              <div className="w-5 h-5 rounded-md bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <Store className="w-3 h-3 text-emerald-600" />
+              <div className="w-6 h-6 rounded-md bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Store className="w-3.5 h-3.5 text-emerald-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-medium text-foreground truncate">
+                <p className="text-[13px] font-medium text-foreground truncate">
                   {store.name || store.shop.replace(".myshopify.com", "")}
                 </p>
-                <p className="text-[10px] text-muted-foreground truncate">
+                <p className="text-[11px] text-muted-foreground truncate">
                   {store.shop}
                 </p>
               </div>
@@ -183,7 +183,7 @@ export default function StoreSwitcher({
                 new CustomEvent("aicata:navigate", { detail: { nav: "settings" } }),
               );
             }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-muted-foreground hover:text-foreground hover:bg-black/[0.03] transition-colors"
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] text-muted-foreground hover:text-foreground hover:bg-black/[0.03] transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             ストアを追加

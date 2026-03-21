@@ -330,13 +330,13 @@ export default function SiteMapView({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* ── Header ── */}
-      <div className="shrink-0 px-6 pt-6 pb-4">
-        <div className="flex items-center justify-between mb-2">
+      <div className="shrink-0 px-8 pt-14 pb-6">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-xl font-bold text-foreground mb-0.5">
+            <h1 className="text-2xl font-bold text-foreground mb-1">
               サイトマップ
             </h1>
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-[15px] text-muted-foreground">
               {pages.length}件のページ — カテゴリごとにサイト構成を俯瞰
             </p>
           </div>
@@ -385,10 +385,10 @@ export default function SiteMapView({
               <button
                 onClick={handleSync}
                 disabled={syncing}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-foreground bg-black/[0.04] hover:bg-black/[0.07] transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[14px] font-medium text-foreground bg-black/[0.04] hover:bg-black/[0.07] transition-colors disabled:opacity-50"
               >
                 <RefreshCw
-                  className={clsx("w-3.5 h-3.5", syncing && "animate-spin")}
+                  className={clsx("w-4 h-4", syncing && "animate-spin")}
                 />
                 Shopify同期
               </button>
@@ -399,12 +399,12 @@ export default function SiteMapView({
               <button
                 onClick={handleBatchDeploy}
                 disabled={batchDeploying}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-foreground bg-black/[0.04] hover:bg-black/[0.07] transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[14px] font-medium text-foreground bg-black/[0.04] hover:bg-black/[0.07] transition-colors disabled:opacity-50"
               >
                 {batchDeploying ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Globe className="w-3.5 h-3.5" />
+                  <Globe className="w-4 h-4" />
                 )}
                 一括デプロイ ({deployableCount})
               </button>
@@ -412,16 +412,16 @@ export default function SiteMapView({
 
             <button
               onClick={() => setShowRebuildFlow(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-medium text-foreground border border-accent/30 bg-accent/[0.04] hover:bg-accent/[0.08] transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[14px] font-medium text-foreground border border-accent/30 bg-accent/[0.04] hover:bg-accent/[0.08] transition-all"
             >
-              <Globe className="w-3.5 h-3.5 text-accent" />
+              <Globe className="w-4 h-4 text-accent" />
               サイト一括リビルド
             </button>
             <button
               onClick={onNavigateToChat}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-gradient-to-r from-[#7c5cfc] to-[#5b8def] hover:shadow-md hover:shadow-accent/20 transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[14px] font-medium text-white bg-gradient-to-r from-[#7c5cfc] to-[#5b8def] hover:shadow-md hover:shadow-accent/20 transition-all"
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-4 h-4" />
               AIでページ作成
             </button>
           </div>
@@ -429,13 +429,13 @@ export default function SiteMapView({
 
         {/* Errors & hints */}
         {error && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50/60 border border-red-200/40 mb-2">
-            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-            <p className="text-[13px] text-red-700">{error}</p>
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50/60 border border-red-200/40 mb-3">
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+            <p className="text-[14px] text-red-700">{error}</p>
           </div>
         )}
         {!storeConnected && (
-          <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50/60 border border-amber-200/40">
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50/60 border border-amber-200/40">
             <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
             <p className="text-[12px] text-amber-700">
               Shopifyストアが未接続です。設定画面から接続するとデプロイや同期が可能になります。

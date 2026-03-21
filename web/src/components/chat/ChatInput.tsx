@@ -277,7 +277,7 @@ export default function ChatInput({
         </div>
       )}
 
-      <p className="text-center text-[11px] text-muted-foreground/50 mt-2">
+      <p className="text-center text-[12px] text-muted-foreground/50 mt-2.5">
         Aicata は AI パートナーです。応答内容をご確認ください。
       </p>
     </div>

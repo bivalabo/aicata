@@ -239,17 +239,17 @@ export default function BrandMemoryView() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-3xl mx-auto space-y-10">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-[#5b8def] flex items-center justify-center">
-          <Brain className="w-5 h-5 text-white" />
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-[#5b8def] flex items-center justify-center">
+          <Brain className="w-6 h-6 text-white" />
         </div>
         <div>
-          <h2 className="text-[17px] font-bold text-foreground">
+          <h2 className="text-[22px] font-bold text-foreground">
             Brand Memory
           </h2>
-          <p className="text-[12px] text-muted-foreground">
+          <p className="text-[15px] text-muted-foreground">
             相方があなたのブランドを記憶し、すべてのページに一貫して反映します
           </p>
         </div>
@@ -257,22 +257,22 @@ export default function BrandMemoryView() {
 
       {/* Status indicator */}
       {memory && (
-        <div className="flex items-center gap-4 p-3 rounded-xl bg-accent/[0.04] border border-accent/10">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-4 p-4 rounded-xl bg-accent/[0.04] border border-accent/10">
+          <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-accent" />
-            <span className="text-[12px] font-medium text-accent">
+            <span className="text-[14px] font-medium text-accent">
               Brand Memory 有効
             </span>
           </div>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-[13px] text-muted-foreground">
             {memory.pageCount}ページ生成済み
           </span>
           {memory.lastLearnedAt && (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[13px] text-muted-foreground">
               最終学習: {new Date(memory.lastLearnedAt).toLocaleDateString("ja-JP")}
             </span>
           )}
-          <span className="text-[11px] text-muted-foreground bg-black/[0.04] px-1.5 py-0.5 rounded">
+          <span className="text-[13px] text-muted-foreground bg-black/[0.04] px-2 py-1 rounded">
             {memory.source === "crawl"
               ? "サイト解析から学習"
               : memory.source === "learned"
@@ -283,9 +283,9 @@ export default function BrandMemoryView() {
       )}
 
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200/40">
-          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-          <p className="text-[13px] text-red-700">{error}</p>
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200/40">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <p className="text-[14px] text-red-700">{error}</p>
         </div>
       )}
 
@@ -333,10 +333,10 @@ export default function BrandMemoryView() {
         </Field>
       </Section>
 
-      {/* ── Design Identity ── */}
+      {/* ── Design Identity（パレット版 v2） ── */}
       <Section title="デザインアイデンティティ" icon={Palette}>
         <Field label="デザイントーン" description="ブランドの雰囲気を選んでください（最大3つ）">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {TONE_OPTIONS.map((tone) => {
               const isSelected = (draft.tones || []).includes(tone.value);
               return (
@@ -344,7 +344,7 @@ export default function BrandMemoryView() {
                   key={tone.value}
                   onClick={() => toggleTone(tone.value)}
                   className={clsx(
-                    "px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border",
+                    "px-4 py-2 rounded-lg text-[14px] font-medium transition-all border",
                     isSelected
                       ? "bg-accent/8 text-accent border-accent/30"
                       : "text-muted-foreground border-border hover:border-border-hover hover:text-foreground",
@@ -370,21 +370,21 @@ export default function BrandMemoryView() {
 
         {/* 選択中のカラー（微調整用） */}
         {draft.primaryColor && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-foreground">選択中のカラー</span>
+              <span className="text-[15px] font-medium text-foreground">選択中のカラー</span>
               <button
                 onClick={() => {
                   updateDraft("primaryColor", "");
                   updateDraft("secondaryColor", "");
                   updateDraft("accentColor", "");
                 }}
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
               >
                 リセット
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-4">
               <ColorField
                 label="メイン"
                 value={draft.primaryColor || ""}
@@ -401,7 +401,7 @@ export default function BrandMemoryView() {
                 onChange={(v) => updateDraft("accentColor", v)}
               />
             </div>
-            <p className="text-[11px] text-muted-foreground">パレットをベースに微調整できます</p>
+            <p className="text-[14px] text-muted-foreground">パレットをベースに微調整できます</p>
           </div>
         )}
       </Section>
@@ -481,11 +481,11 @@ export default function BrandMemoryView() {
       <style jsx global>{`
         .input-field {
           width: 100%;
-          padding: 8px 12px;
-          border-radius: 10px;
+          padding: 12px 16px;
+          border-radius: 12px;
           border: 1px solid rgba(0, 0, 0, 0.08);
           background: white;
-          font-size: 13px;
+          font-size: 15px;
           color: #111827;
           transition: all 0.15s;
           outline: none;
@@ -508,16 +508,16 @@ export default function BrandMemoryView() {
             : "translate-y-full opacity-0 pointer-events-none",
         )}
       >
-        <div className="max-w-xl mx-auto px-6 pb-6">
-          <div className="flex items-center justify-between gap-3 px-5 py-3.5 rounded-2xl bg-white/95 backdrop-blur-xl border border-border shadow-lg shadow-black/[0.08]">
-            <p className="text-[13px] text-muted-foreground">
+        <div className="max-w-3xl mx-auto px-8 pb-6">
+          <div className="flex items-center justify-between gap-4 px-6 py-4 rounded-2xl bg-white/95 backdrop-blur-xl border border-border shadow-lg shadow-black/[0.08]">
+            <p className="text-[14px] text-muted-foreground">
               未保存の変更があります
             </p>
             <button
               onClick={handleSave}
               disabled={saving}
               className={clsx(
-                "flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-all",
+                "flex items-center gap-2 px-6 py-3 rounded-xl text-[14px] font-semibold transition-all",
                 "bg-gradient-to-r from-accent to-[#5b8def] text-white",
                 "hover:shadow-lg hover:shadow-accent/25 active:scale-[0.97]",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
@@ -543,9 +543,9 @@ export default function BrandMemoryView() {
             : "-translate-y-4 opacity-0 pointer-events-none",
         )}
       >
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
+        <div className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
           <Check className="w-4 h-4" />
-          <span className="text-[13px] font-medium">保存しました</span>
+          <span className="text-[14px] font-medium">保存しました</span>
         </div>
       </div>
     </div>
@@ -584,19 +584,19 @@ function PaletteSelector({
   const hasRecommendations = selectedTones.length > 0 || industry !== "general";
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-[12px] font-medium text-foreground">配色パレット</span>
+        <span className="text-[14px] font-medium text-foreground">配色パレット</span>
         {hasRecommendations && (
-          <span className="text-[10px] text-accent bg-accent/8 px-1.5 py-0.5 rounded">
+          <span className="text-[12px] text-accent bg-accent/8 px-2 py-0.5 rounded">
             おすすめ順
           </span>
         )}
       </div>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-[13px] text-muted-foreground">
         好みの配色を選んでください。サイト全体に適用されます。
       </p>
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-3">
         {sortedPalettes.map((palette) => {
           const isActive = currentPrimary === palette.primary;
           return (
@@ -604,7 +604,7 @@ function PaletteSelector({
               key={palette.id}
               onClick={() => onSelect(palette)}
               className={clsx(
-                "group relative text-left p-3 rounded-xl border transition-all",
+                "group relative text-left p-4 rounded-xl border transition-all",
                 isActive
                   ? "border-accent/40 bg-accent/[0.04] ring-1 ring-accent/20"
                   : "border-border/60 bg-white hover:border-border-hover hover:shadow-sm",
@@ -626,10 +626,10 @@ function PaletteSelector({
                 )}
               </div>
               {/* パレット名 & 説明 */}
-              <div className="text-[12px] font-medium text-foreground leading-tight">
+              <div className="text-[14px] font-medium text-foreground leading-tight">
                 {palette.name}
               </div>
-              <div className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+              <div className="text-[13px] text-muted-foreground mt-1 leading-snug">
                 {palette.description}
               </div>
               {/* 選択マーク */}
@@ -658,12 +658,12 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 pb-2 border-b border-border/50">
-        <Icon className="w-4 h-4 text-accent" />
-        <h3 className="text-[14px] font-semibold text-foreground">{title}</h3>
+    <div className="space-y-5">
+      <div className="flex items-center gap-2.5 pb-3 border-b border-border/50">
+        <Icon className="w-5 h-5 text-accent" />
+        <h3 className="text-[17px] font-semibold text-foreground">{title}</h3>
       </div>
-      <div className="space-y-4">{children}</div>
+      <div className="space-y-5">{children}</div>
     </div>
   );
 }
@@ -679,11 +679,11 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-[12px] font-medium text-foreground mb-1.5">
+      <label className="block text-[15px] font-medium text-foreground mb-2">
         {label}
       </label>
       {description && (
-        <p className="text-[11px] text-muted-foreground mb-1.5">
+        <p className="text-[14px] text-muted-foreground mb-2.5">
           {description}
         </p>
       )}
@@ -703,15 +703,15 @@ function ColorField({
 }) {
   return (
     <div>
-      <label className="block text-[12px] font-medium text-foreground mb-1.5">
+      <label className="block text-[15px] font-medium text-foreground mb-2">
         {label}
       </label>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <input
           type="color"
           value={value || "#7c5cfc"}
           onChange={(e) => onChange(e.target.value)}
-          className="w-8 h-8 rounded-lg border border-border cursor-pointer"
+          className="w-10 h-10 rounded-lg border border-border cursor-pointer"
         />
         <input
           type="text"
