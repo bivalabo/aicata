@@ -1,4 +1,4 @@
-import { generateText, type CoreMessage } from "ai";
+import { generateText, type ModelMessage } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import {
   buildSystemPrompt,
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
     const modelId = DEFAULT_MODEL || "claude-sonnet-4-20250514";
 
-    const aiMessages: CoreMessage[] = messages.map(
+    const aiMessages: ModelMessage[] = messages.map(
       (msg: { role: string; content: string }) => ({
         role: msg.role as "user" | "assistant",
         content: msg.content,
@@ -37,15 +37,15 @@ export async function POST(request: Request) {
       model: anthropic(modelId),
       system: systemPrompt,
       messages: aiMessages,
-      maxTokens: DEFAULT_MAX_TOKENS,
+      maxOutputTokens: DEFAULT_MAX_TOKENS,
     });
 
     return Response.json({
       content: text,
       model: modelId,
       usage: {
-        input: usage.promptTokens,
-        output: usage.completionTokens,
+        input: usage.inputTokens,
+        output: usage.outputTokens,
       },
     });
   } catch (error) {

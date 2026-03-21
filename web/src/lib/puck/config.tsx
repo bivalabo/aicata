@@ -270,7 +270,7 @@ export const puckConfig: Config = {
           ],
         },
       },
-      render: ({ heading, subheading, ctaText, ctaUrl, backgroundImage, overlay, alignment, height }: HeroProps) => {
+      render: ({ heading, subheading, ctaText, ctaUrl, backgroundImage, overlay, alignment, height }) => {
         const overlayStyle =
           overlay === "dark"
             ? "rgba(0,0,0,0.5)"
@@ -280,7 +280,7 @@ export const puckConfig: Config = {
         return (
           <section
             style={{
-              minHeight: HERO_HEIGHTS[height],
+              minHeight: HERO_HEIGHTS[height as keyof typeof HERO_HEIGHTS],
               backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
               backgroundSize: "cover",
               backgroundPosition: "center",
@@ -379,7 +379,7 @@ export const puckConfig: Config = {
         },
         collectionHandle: { type: "text", label: "コレクションハンドル" },
       },
-      render: ({ heading, description, columns, productCount, showPrice, showAddToCart }: ProductGridProps) => {
+      render: ({ heading, description, columns, productCount, showPrice, showAddToCart }) => {
         const placeholders = Array.from({ length: productCount }, (_, i) => i);
         return (
           <section style={{ padding: "64px 48px" }}>
@@ -443,7 +443,7 @@ export const puckConfig: Config = {
         ctaUrl: { type: "text", label: "ボタンURL" },
         backgroundColor: { type: "text", label: "背景色" },
       },
-      render: ({ heading, body, image, imagePosition, ctaText, ctaUrl, backgroundColor }: TextImageProps) => (
+      render: ({ heading, body, image, imagePosition, ctaText, ctaUrl, backgroundColor }) => (
         <section style={{ padding: "64px 48px", backgroundColor }}>
           <div
             style={{
@@ -492,7 +492,7 @@ export const puckConfig: Config = {
         backgroundColor: { type: "text", label: "背景色" },
         textColor: { type: "text", label: "テキスト色" },
       },
-      render: ({ heading, description, buttonText, buttonUrl, style, backgroundColor, textColor }: CTABannerProps) => {
+      render: ({ heading, description, buttonText, buttonUrl, style, backgroundColor, textColor }) => {
         const bg =
           style === "gradient"
             ? `linear-gradient(135deg, ${backgroundColor}, ${backgroundColor}cc)`
@@ -559,12 +559,12 @@ export const puckConfig: Config = {
           ],
         },
       },
-      render: ({ heading, description, items, style }: FAQProps) => (
+      render: ({ heading, description, items, style }) => (
         <section style={{ padding: "64px 48px", maxWidth: 800, margin: "0 auto" }}>
           {heading && <h2 style={{ fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 8 }}>{heading}</h2>}
           {description && <p style={{ fontSize: 16, color: "#666", textAlign: "center", marginBottom: 40 }}>{description}</p>}
           <div style={{ display: style === "grid" ? "grid" : "flex", gridTemplateColumns: style === "grid" ? "repeat(2, 1fr)" : undefined, gap: 16, flexDirection: "column" }}>
-            {items.map((item, i) => (
+            {items.map((item: { question: string; answer: string }, i: number) => (
               <div key={i} style={{ padding: 20, borderRadius: 12, border: "1px solid #eee", backgroundColor: "#fafafa" }}>
                 <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>{item.question}</div>
                 <div style={{ fontSize: 15, color: "#555", lineHeight: 1.7 }}>{item.answer}</div>
@@ -601,11 +601,11 @@ export const puckConfig: Config = {
           ],
         },
       },
-      render: ({ heading, testimonials, layout }: TestimonialProps) => (
+      render: ({ heading, testimonials, layout }) => (
         <section style={{ padding: "64px 48px" }}>
           {heading && <h2 style={{ fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 40 }}>{heading}</h2>}
           <div style={{ display: "grid", gridTemplateColumns: layout === "grid" ? "repeat(auto-fit, minmax(280px, 1fr))" : "1fr", gap: 24, maxWidth: 1200, margin: "0 auto" }}>
-            {testimonials.map((t, i) => (
+            {testimonials.map((t: { name: string; quote: string; rating: number; role?: string }, i: number) => (
               <div key={i} style={{ padding: 24, borderRadius: 16, backgroundColor: "#fafafa", border: "1px solid #eee" }}>
                 <div style={{ fontSize: 14, color: "#f59e0b", marginBottom: 12 }}>{"★".repeat(t.rating)}{"☆".repeat(5 - t.rating)}</div>
                 <p style={{ fontSize: 15, lineHeight: 1.7, color: "#333", marginBottom: 16, fontStyle: "italic" }}>「{t.quote}」</p>
@@ -650,12 +650,12 @@ export const puckConfig: Config = {
           ],
         },
       },
-      render: ({ heading, description, features, columns }: FeatureGridProps) => (
+      render: ({ heading, description, features, columns }) => (
         <section style={{ padding: "64px 48px" }}>
           {heading && <h2 style={{ fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 8 }}>{heading}</h2>}
           {description && <p style={{ fontSize: 16, color: "#666", textAlign: "center", marginBottom: 40 }}>{description}</p>}
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: 32, maxWidth: 1200, margin: "0 auto" }}>
-            {features.map((f, i) => (
+            {features.map((f: { icon: string; title: string; description: string }, i: number) => (
               <div key={i} style={{ textAlign: "center", padding: 24 }}>
                 <div style={{ fontSize: 40, marginBottom: 16 }}>{f.icon}</div>
                 <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>{f.title}</h3>
@@ -692,10 +692,10 @@ export const puckConfig: Config = {
           ],
         },
       },
-      render: ({ content, maxWidth, alignment }: RichTextProps) => {
+      render: ({ content, maxWidth, alignment }) => {
         const widthMap = { narrow: 640, medium: 800, wide: 1000, full: "100%" };
         return (
-          <section style={{ padding: "48px", maxWidth: widthMap[maxWidth], margin: "0 auto", textAlign: alignment }}>
+          <section style={{ padding: "48px", maxWidth: widthMap[maxWidth as keyof typeof widthMap], margin: "0 auto", textAlign: alignment }}>
             <div dangerouslySetInnerHTML={{ __html: content }} style={{ fontSize: 16, lineHeight: 1.8, color: "#333" }} />
           </section>
         );
@@ -720,7 +720,7 @@ export const puckConfig: Config = {
           ],
         },
       },
-      render: ({ heading, description, placeholder, buttonText, style }: NewsletterProps) => (
+      render: ({ heading, description, placeholder, buttonText, style }) => (
         <section
           style={{
             padding: style === "card" ? "48px" : "64px 48px",
@@ -758,8 +758,8 @@ export const puckConfig: Config = {
         },
         showDivider: { type: "radio", label: "区切り線", options: [{ label: "表示", value: true }, { label: "非表示", value: false }] },
       },
-      render: ({ height, showDivider }: SpacerProps) => (
-        <div style={{ height: SPACER_HEIGHTS[height], display: "flex", alignItems: "center", justifyContent: "center" }}>
+      render: ({ height, showDivider }) => (
+        <div style={{ height: SPACER_HEIGHTS[height as keyof typeof SPACER_HEIGHTS], display: "flex", alignItems: "center", justifyContent: "center" }}>
           {showDivider && <hr style={{ width: "80%", border: "none", borderTop: "1px solid #eee" }} />}
         </div>
       ),
@@ -775,7 +775,7 @@ export const puckConfig: Config = {
         textColor: { type: "text", label: "テキスト色" },
         dismissible: { type: "radio", label: "閉じるボタン", options: [{ label: "表示", value: true }, { label: "非表示", value: false }] },
       },
-      render: ({ text, link, backgroundColor, textColor }: AnnouncementBarProps) => (
+      render: ({ text, link, backgroundColor, textColor }) => (
         <div style={{ padding: "10px 24px", backgroundColor, color: textColor, textAlign: "center", fontSize: 14, fontWeight: 500 }}>
           {link ? <a href={link} style={{ color: textColor, textDecoration: "underline" }}>{text}</a> : text}
         </div>

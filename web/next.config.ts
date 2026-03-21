@@ -4,11 +4,6 @@ const nextConfig: NextConfig = {
   // Turbopack is default in Next.js 16+
   compress: true,
 
-  // Fix Turbopack root inference (multiple lockfiles detected)
-  turbopack: {
-    root: process.cwd(),
-  },
-
   // Image optimization
   images: {
     formats: ["image/avif", "image/webp"],

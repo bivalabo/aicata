@@ -46,7 +46,7 @@ const result = assemblePage(LUXURY_BEAUTY_TOP);
 
 console.log(`✓ Template: ${result.meta.templateId}`);
 console.log(`✓ Sections assembled: ${result.meta.sectionCount}`);
-console.log(`✓ Missing sections: ${result.meta.missingSecti‌ons.length}`);
+console.log(`✓ Missing sections: ${result.meta.missingSections.length}`);
 console.log(`✓ Estimated tokens: ${result.meta.tokenCount}`);
 console.log(`✓ HTML length: ${result.html.length} chars`);
 console.log(`✓ CSS length: ${result.css.length} chars`);

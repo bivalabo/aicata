@@ -1,4 +1,4 @@
-import { streamText, type CoreMessage } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import {
   buildSystemPrompt,
@@ -124,17 +124,17 @@ export async function POST(request: Request) {
     }
 
     // Build AI SDK messages — convert multi-modal content
-    const aiMessages: CoreMessage[] = (messages as IncomingMessage[]).map(
-      (msg) => {
+    const aiMessages = (messages as IncomingMessage[]).map(
+      (msg): ModelMessage => {
         if (typeof msg.content === "string") {
           return {
             role: msg.role as "user" | "assistant",
             content: msg.content,
-          };
+          } as ModelMessage;
         }
         // Handle multi-modal content (images + text)
         return {
-          role: msg.role as "user" | "assistant",
+          role: msg.role as "user",
           content: msg.content.map((block) => {
             if (block.type === "text") {
               return { type: "text" as const, text: block.text };
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
               mimeType: block.source.media_type,
             };
           }),
-        };
+        } as ModelMessage;
       },
     );
 
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
 
     console.log("[Stream API] Calling Claude via Vercel AI SDK...", {
       model: modelId,
-      maxTokens: DEFAULT_MAX_TOKENS,
+      maxOutputTokens: DEFAULT_MAX_TOKENS,
       messageCount: aiMessages.length,
       systemPromptLength: systemPrompt.length,
     });
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
       model: anthropic(modelId),
       system: systemPrompt,
       messages: aiMessages,
-      maxTokens: DEFAULT_MAX_TOKENS,
+      maxOutputTokens: DEFAULT_MAX_TOKENS,
       // onFinish callback for DB persistence and post-processing
       async onFinish({ text, usage }) {
         console.log("[Stream API] Stream completed:", {
@@ -177,8 +177,8 @@ export async function POST(request: Request) {
         if (conversationId && text) {
           try {
             await saveMessage(conversationId, "assistant", text, {
-              inputTokens: usage.promptTokens,
-              outputTokens: usage.completionTokens,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
               model: modelId,
             });
           } catch (e) {
@@ -219,7 +219,7 @@ export async function POST(request: Request) {
     // Return the AI SDK's streaming response
     // The toDataStreamResponse() method creates SSE-compatible output
     // that works with the useChat() hook on the frontend
-    return result.toDataStreamResponse();
+    return result.toTextStreamResponse();
   } catch (error) {
     console.error("[Stream API] Top-level error:", error);
     return new Response(
