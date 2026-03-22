@@ -17,7 +17,10 @@ import type {
   SectionSpec,
   RenderedSection,
   DDPConfig,
+  DDPInput,
 } from "./types";
+import { ecommerceEngine } from "./engines/ecommerce";
+import type { EngineContext } from "./engines/types";
 
 const SECTION_ARTISAN_PROMPT = `あなたはHTMLセクション職人です。指定されたデザイン仕様に従い、1つのセクションのHTML+CSSを出力します。
 
@@ -48,15 +51,29 @@ HTML部分を先に、<style>タグを最後に出力してください。`;
 
 /**
  * 全セクションを並列で生成
+ * input が渡された場合、エンジン知識を各セクションに注入する
  */
 export async function renderAllSections(
   client: Anthropic,
   spec: DesignSpec,
   config: DDPConfig,
   onProgress?: (sectionId: string, index: number, total: number, status: "start" | "complete" | "failed", error?: string) => void,
+  input?: DDPInput,
 ): Promise<RenderedSection[]> {
   const results: RenderedSection[] = [];
   const total = spec.sections.length;
+
+  // Build engine context if input is available
+  const engineCtx: EngineContext | undefined = input
+    ? {
+        pageType: input.pageType,
+        industry: input.industry,
+        tones: input.tones,
+        targetAudience: input.targetAudience,
+        brandName: input.brandName,
+        locale: "ja-JP",
+      }
+    : undefined;
 
   // Concurrency control with semaphore
   const semaphore = new Semaphore(config.sectionConcurrency);
@@ -66,7 +83,7 @@ export async function renderAllSections(
     try {
       onProgress?.(section.id, index, total, "start");
 
-      const rendered = await renderSection(client, spec, section, config);
+      const rendered = await renderSection(client, spec, section, config, 2, engineCtx);
       results[index] = rendered;
 
       onProgress?.(section.id, index, total, rendered.status === "success" ? "complete" : "failed", rendered.error);
@@ -88,8 +105,9 @@ async function renderSection(
   section: SectionSpec,
   config: DDPConfig,
   maxRetries = 2,
+  engineCtx?: EngineContext,
 ): Promise<RenderedSection> {
-  const userPrompt = buildSectionPrompt(spec, section);
+  const userPrompt = buildSectionPrompt(spec, section, engineCtx);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -160,8 +178,9 @@ async function renderSection(
 
 /**
  * セクション生成用のユーザープロンプトを構築
+ * エンジン知識をセクション別に注入
  */
-function buildSectionPrompt(spec: DesignSpec, section: SectionSpec): string {
+function buildSectionPrompt(spec: DesignSpec, section: SectionSpec, engineCtx?: EngineContext): string {
   const parts: string[] = [];
 
   // Design context — compact
@@ -179,6 +198,16 @@ function buildSectionPrompt(spec: DesignSpec, section: SectionSpec): string {
   parts.push(`--color-text: ${spec.colors.text};`);
   parts.push(`--font-heading: "${spec.typography.headingFont}", sans-serif;`);
   parts.push(`--font-body: "${spec.typography.bodyFont}", sans-serif;`);
+
+  // ── Engine Section Knowledge — ドメイン固有のベストプラクティスを注入 ──
+  if (engineCtx) {
+    const sectionKnowledge = ecommerceEngine.getSectionKnowledge(section.category, engineCtx);
+    parts.push(`\n## このセクションの専門知識（ECデザインエンジンより）`);
+    parts.push(`### 成功法則\n${sectionKnowledge.bestPractices}`);
+    parts.push(`### コピーライティング指針\n${sectionKnowledge.copywritingGuidance}`);
+    parts.push(`### レイアウト推奨\n${sectionKnowledge.layoutRecommendation}`);
+    parts.push(`### よくある失敗（避けること）\n${sectionKnowledge.commonMistakes}`);
+  }
 
   // Section spec
   parts.push(`\n## 生成するセクション`);

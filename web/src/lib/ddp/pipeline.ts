@@ -1,14 +1,19 @@
 // ============================================================
-// Aicata DDP — Design Decomposition Pipeline
-// メインオーケストレーター
+// Aicata DDP — Design Decomposition Pipeline v2
+// Multi-Agent Design Studio
 //
-// 3ステージを統合し、1つのページを確実に生成する。
+// 4ステージの AI エージェントチームが協力してページを創る:
+//   Stage 1: Design Director — デザイン方針をJSON設計図として出力
+//   Stage 2: Section Artisan — セクションごとにHTML/CSSを並列生成
+//   Stage 3: Harmony Assembler — 組み立て & 検証（決定的処理）
+//   Stage 4: Quality Reviewer — 完成品をレビュー & 最適化
 // ============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
 import { generateDesignSpec } from "./stage1-design-director";
 import { renderAllSections } from "./stage2-section-artisan";
 import { assembleAndValidate } from "./stage3-harmony-assembler";
+import { reviewPage } from "./stage4-reviewer";
 import type {
   DDPInput,
   DDPConfig,
@@ -21,11 +26,12 @@ export { DEFAULT_DDP_CONFIG } from "./types";
 export type { DDPInput, DDPConfig, DDPProgressEvent, AssembledPageResult };
 
 /**
- * DDP パイプライン — 3ステージでページを生成
+ * DDP パイプライン — 4ステージでページを生成
  *
  * Stage 1: Design Director — デザイン設計図（JSON）を生成
  * Stage 2: Section Artisan — セクションごとにHTML/CSSを生成
  * Stage 3: Harmony Assembler — 組み立て & 検証
+ * Stage 4: Quality Reviewer — レビュー & 最適化
  */
 export async function runDDP(
   input: DDPInput,
@@ -93,6 +99,7 @@ export async function runDDP(
         onProgress?.({ stage: "section", status: "failed", sectionId, error: error || "", index, total });
       }
     },
+    input, // Pass input for engine knowledge injection
   );
 
   const successCount = sections.filter((s) => s.status === "success").length;
@@ -116,6 +123,35 @@ export async function runDDP(
   });
 
   onProgress?.({ stage: "assembly", status: "complete", validation: result.validation });
+
+  // ── Stage 4: Quality Reviewer ──
+  try {
+    console.log("[DDP] Stage 4: Quality Review starting...");
+    const review = await reviewPage(client, result.fullDocument, finalConfig, input);
+
+    console.log("[DDP] Stage 4 complete:", {
+      overallScore: review.overallScore,
+      suggestions: review.suggestions.length,
+      hasOptimizedVersion: !!(review.optimizedHtml),
+    });
+
+    // レビュアーが修正版を提供した場合、それを採用
+    if (review.optimizedHtml && review.overallScore < 70) {
+      console.log("[DDP] Applying reviewer optimizations (score was below 70)");
+      result.html = review.optimizedHtml;
+      if (review.optimizedCss) result.css = review.optimizedCss;
+      // fullDocument を再構築
+      const fontsLink = result.fullDocument.match(/<link[^>]*fonts[^>]*>/gi)?.join("\n") || "";
+      result.fullDocument = `${fontsLink}\n\n${result.html}\n\n<style>\n${result.css}\n</style>`;
+    }
+
+    // レビュー結果をAssembledPageResultに付加
+    (result as any).review = review;
+  } catch (err) {
+    console.warn("[DDP] Stage 4 (review) failed, skipping:", err);
+    // レビュー失敗は致命的ではない — Stage 3 の結果をそのまま返す
+  }
+
   onProgress?.({ stage: "done", result });
 
   return result;

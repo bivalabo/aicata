@@ -1,200 +1,163 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Loader2, AlertCircle } from "lucide-react";
-import clsx from "clsx";
+import { Sparkles, Palette, Type, Layout, Zap } from "lucide-react";
 
 /**
- * TemplatePreviewCard
+ * DesignVisionCard (旧 TemplatePreviewCard)
  *
- * Shows a live preview of the template that will be used based on onboarding selections.
- * Displays:
- * - Template name
- * - Small inline iframe preview (200x150)
- * - "Selected" indicator
- * - Loads from /api/template-preview
- *
- * Props:
- * - industry: string
- * - tone: string
- * - pageType: string
+ * テンプレートプレビューは廃止。
+ * DDPの「ゼロからオリジナルを創る」思想を反映し、
+ * AIがこれから行うクリエイティブプロセスを可視化する。
  */
 
-interface TemplatePreviewCardProps {
+interface DesignVisionCardProps {
   industry: string;
   tone: string;
   pageType: string;
 }
 
-interface PreviewData {
-  templateId: string;
-  templateName: string;
-  html: string;
-  score: number;
-  pageType: string;
-}
+const INDUSTRY_LABELS: Record<string, string> = {
+  fashion: "アパレル・ファッション",
+  beauty: "コスメ・美容",
+  food: "食品・飲料",
+  lifestyle: "雑貨・インテリア",
+  tech: "テック・ガジェット",
+  health: "健康・フィットネス",
+  other: "その他",
+  general: "汎用",
+};
+
+const TONE_LABELS: Record<string, string> = {
+  luxury: "高級感・エレガント",
+  natural: "ナチュラル・オーガニック",
+  modern: "モダン・ミニマル",
+  playful: "ポップ・カラフル",
+  traditional: "和風・伝統的",
+  cool: "クール・スタイリッシュ",
+  bold: "大胆・インパクト",
+  elegant: "エレガント",
+  warm: "あたたかみ",
+  minimal: "ミニマル",
+};
+
+const TONE_COLORS: Record<string, { from: string; to: string; accent: string }> = {
+  luxury: { from: "#1a1a2e", to: "#16213e", accent: "#c9a96e" },
+  natural: { from: "#2d5016", to: "#4a7c2e", accent: "#a8d38d" },
+  modern: { from: "#1e293b", to: "#334155", accent: "#60a5fa" },
+  playful: { from: "#ec4899", to: "#f59e0b", accent: "#fbbf24" },
+  traditional: { from: "#44403c", to: "#78716c", accent: "#d4a574" },
+  cool: { from: "#0f172a", to: "#1e40af", accent: "#38bdf8" },
+  bold: { from: "#7c2d12", to: "#dc2626", accent: "#fbbf24" },
+  elegant: { from: "#1c1917", to: "#44403c", accent: "#d6d3d1" },
+  warm: { from: "#92400e", to: "#b45309", accent: "#fde68a" },
+  minimal: { from: "#f8fafc", to: "#e2e8f0", accent: "#475569" },
+};
+
+// AIの思考プロセスを表現するステップ
+const CREATIVE_STEPS = [
+  { icon: Palette, label: "配色設計", desc: "ブランドに最適な色を選定" },
+  { icon: Type, label: "タイポグラフィ", desc: "フォントと文字組みを最適化" },
+  { icon: Layout, label: "レイアウト構成", desc: "コンバージョン重視の配置" },
+  { icon: Zap, label: "インタラクション", desc: "心地よいアニメーション" },
+];
 
 export default function TemplatePreviewCard({
   industry,
   tone,
   pageType,
-}: TemplatePreviewCardProps) {
-  const [preview, setPreview] = useState<PreviewData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchPreview = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const params = new URLSearchParams({
-          industry,
-          tone,
-          pageType,
-        });
-
-        const response = await fetch(`/api/template-preview?${params}`);
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch template preview");
-        }
-
-        const data = await response.json();
-        setPreview(data);
-      } catch (err) {
-        console.error("[TemplatePreviewCard]", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to load preview"
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPreview();
-  }, [industry, tone, pageType]);
+}: DesignVisionCardProps) {
+  const colors = TONE_COLORS[tone] || TONE_COLORS.modern;
+  const industryLabel = INDUSTRY_LABELS[industry] || industry;
+  const toneLabel = TONE_LABELS[tone] || tone;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.1 }}
-      className="w-full mt-6 p-4 rounded-xl border border-border bg-gradient-to-br from-white/50 to-white/20 backdrop-blur-sm"
+      transition={{ duration: 0.5, delay: 0.1 }}
+      className="w-full mt-6 rounded-2xl overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`,
+      }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] font-semibold uppercase text-muted tracking-wide">
-            テンプレートプレビュー
-          </span>
+      {/* ヘッダー: AIクリエイティブエンジン */}
+      <div className="px-5 pt-5 pb-3">
+        <div className="flex items-center gap-2 mb-3">
           <motion.div
-            animate={{ scale: [1, 1.2, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
+            animate={{ rotate: [0, 15, -15, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           >
-            <Check className="w-3.5 h-3.5 text-green-500" />
+            <Sparkles className="w-4 h-4" style={{ color: colors.accent }} />
           </motion.div>
+          <span
+            className="text-[11px] font-bold uppercase tracking-widest"
+            style={{ color: colors.accent }}
+          >
+            AI Design Intelligence
+          </span>
         </div>
 
-        {/* Selected Badge */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-50 border border-green-200">
-          <Check className="w-3 h-3 text-green-600" />
-          <span className="text-[11px] font-semibold text-green-700">
-            選択済み
-          </span>
+        <h3 className="text-[15px] font-bold text-white leading-snug mb-1">
+          あなただけのオリジナルデザインを創ります
+        </h3>
+        <p className="text-[12px] text-white/60 leading-relaxed">
+          {industryLabel} × {toneLabel} — 世界中のデザイントレンドから最適な要素を組み合わせます
+        </p>
+      </div>
+
+      {/* クリエイティブプロセス可視化 */}
+      <div className="px-5 pb-4">
+        <div className="grid grid-cols-2 gap-2">
+          {CREATIVE_STEPS.map((step, i) => (
+            <motion.div
+              key={step.label}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2 + i * 0.1, duration: 0.3 }}
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
+              style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+            >
+              <step.icon
+                className="w-3.5 h-3.5 shrink-0"
+                style={{ color: colors.accent }}
+              />
+              <div>
+                <p className="text-[11px] font-semibold text-white/90 leading-tight">
+                  {step.label}
+                </p>
+                <p className="text-[10px] text-white/40 leading-tight">
+                  {step.desc}
+                </p>
+              </div>
+            </motion.div>
+          ))}
         </div>
       </div>
 
-      {/* Content Area */}
-      <div className="space-y-3">
-        {/* Template Name */}
-        {!loading && preview && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.15 }}
-            className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/60 border border-border/50"
-          >
-            <div>
-              <p className="text-[11px] text-muted font-medium mb-1">
-                選択されたテンプレート
-              </p>
-              <p className="text-[13px] font-semibold text-foreground">
-                {preview.templateName}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] text-muted mb-1">マッチスコア</p>
-              <p className="text-[14px] font-bold text-accent">
-                {Math.round(preview.score * 100)}%
-              </p>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Preview Container */}
-        <div className="relative bg-white rounded-lg border border-border/50 overflow-hidden">
-          {loading && (
+      {/* ボトムバー: 進行中のアニメーション */}
+      <div
+        className="px-5 py-3 flex items-center gap-3"
+        style={{ backgroundColor: "rgba(0,0,0,0.15)" }}
+      >
+        <div className="flex gap-1">
+          {[0, 1, 2].map((i) => (
             <motion.div
-              className="h-[150px] flex items-center justify-center bg-gradient-to-b from-white to-gray-50"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              <div className="flex flex-col items-center gap-2">
-                <Loader2 className="w-5 h-5 text-accent animate-spin" />
-                <p className="text-[11px] text-muted">
-                  プレビューを読み込み中...
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {error && (
-            <motion.div
-              className="h-[150px] flex items-center justify-center bg-red-50"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              <div className="flex flex-col items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-500" />
-                <p className="text-[11px] text-red-600 text-center px-4">
-                  {error}
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {!loading && !error && preview && (
-            <motion.iframe
-              key={preview.templateId}
-              srcDoc={preview.html}
-              className="w-full h-[150px] border-0"
-              sandbox=""
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-              title="Template Preview"
+              key={i}
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: colors.accent }}
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{
+                duration: 1.5,
+                repeat: Infinity,
+                delay: i * 0.3,
+              }}
             />
-          )}
+          ))}
         </div>
-
-        {/* Info Footer */}
-        {!loading && preview && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="px-3 py-2 rounded-lg bg-blue-50 border border-blue-200"
-          >
-            <p className="text-[11px] text-blue-700 leading-relaxed">
-              このテンプレートを基に、次のステップで詳細な{" "}
-              <span className="font-semibold">HTML/CSS</span>
-              が生成されます。「作成を開始する」をクリックしてください。
-            </p>
-          </motion.div>
-        )}
+        <p className="text-[11px] text-white/50">
+          「作成を開始する」で、AIがデザインの設計から制作まで一貫して行います
+        </p>
       </div>
     </motion.div>
   );

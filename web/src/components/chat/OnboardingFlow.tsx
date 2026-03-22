@@ -523,7 +523,7 @@ export default function OnboardingFlow({
           className="flex items-center gap-1.5 text-[12px] text-muted hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          {step === 0 ? "テンプレート選択に戻る" : "前の質問に戻る"}
+          {step === 0 ? "ページ選択に戻る" : "前の質問に戻る"}
         </button>
       </motion.div>
     </div>

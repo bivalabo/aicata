@@ -12,15 +12,20 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { DesignSpec, DDPInput, DDPConfig, DEFAULT_DDP_CONFIG } from "./types";
+import { ecommerceEngine } from "./engines/ecommerce";
+import type { EngineContext } from "./engines/types";
 
-const DESIGN_DIRECTOR_PROMPT = `あなたはデザインディレクターです。ECサイトのページデザインを「設計」する役割です。
+/** 静的なプロンプトベース — エンジン知識を動的に注入 */
+const DESIGN_DIRECTOR_PROMPT_BASE = `あなたは世界最高峰のECデザインディレクターです。
+データドリブンなデザイン思考と、日本市場の消費者心理に精通しています。
 コードは一切書きません。デザインの設計図（JSON）を出力してください。
 
 あなたの仕事:
-1. ブランドと業界を分析し、最適なデザイン方針を決定する
+1. ブランドと業界を深く分析し、最適なデザイン方針を決定する
 2. ユーザーの目線がどう流れるか（Eye Flow）を設計する
 3. コンバージョンに最適なセクション構成を決める
 4. 色・フォント・トーンを理由付きで選定する
+5. 各セクションに「売れるコピー」を書く
 
 ## 出力フォーマット
 
@@ -37,7 +42,7 @@ const DESIGN_DIRECTOR_PROMPT = `あなたはデザインディレクターです
     "accent": "#hex値",
     "background": "#hex値",
     "text": "#hex値",
-    "reasoning": "なぜこの配色を選んだか"
+    "reasoning": "なぜこの配色を選んだか（心理学的根拠を含む）"
   },
   "typography": {
     "headingFont": "フォント名",
@@ -71,19 +76,30 @@ const DESIGN_DIRECTOR_PROMPT = `あなたはデザインディレクターです
 }
 \`\`\`
 
-## デザイン原則
-
-- **ファーストビュー**: 3秒以内にユーザーが「何のサイトか」わかること
-- **CTA配置**: Above the fold に必ず1つ、ページ下部にも1つ
-- **社会的証明**: レビュー・メディア掲載・実績を必ず含む
-- **信頼シグナル**: 送料・返品・決済方法の安心要素
-- **モバイルファースト**: 60%以上がスマホ閲覧の前提
-- **日本語**: 全てのテキストコンテンツは自然な日本語で
-
 ## 重要: contentBrief のテキストは実際のコンテンツ
 
 "heading" や "bodyText" にプレースホルダーを入れないでください。
 実際のブランドに合った、売れるコピーライティングを書いてください。`;
+
+/**
+ * エンジン知識を注入した完全なシステムプロンプトを構築
+ */
+function buildDirectorSystemPrompt(input: DDPInput): string {
+  const ctx = buildEngineContext(input);
+  const knowledge = ecommerceEngine.getDirectorKnowledge(ctx);
+
+  return `${DESIGN_DIRECTOR_PROMPT_BASE}
+
+${knowledge.corePrinciples}
+
+${knowledge.industryGuidance}
+
+${knowledge.conversionStrategy}
+
+${knowledge.psychologyInsights}
+
+${knowledge.antiPatterns}`;
+}
 
 /**
  * Stage 1: Design Director
@@ -94,12 +110,13 @@ export async function generateDesignSpec(
   input: DDPInput,
   config: DDPConfig,
 ): Promise<DesignSpec> {
+  const systemPrompt = buildDirectorSystemPrompt(input);
   const userPrompt = buildDirectorUserPrompt(input);
 
   const response = await client.messages.create({
     model: config.specModel,
     max_tokens: config.specMaxTokens,
-    system: DESIGN_DIRECTOR_PROMPT,
+    system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
   });
 
@@ -182,9 +199,19 @@ function buildDirectorUserPrompt(input: DDPInput): string {
     parts.push(input.userInstructions);
   }
 
-  // ページ種別に応じたセクション推奨
+  // ページ種別に応じたセクション推奨（エンジン駆動）
   parts.push(`\n## 推奨セクション構成`);
-  parts.push(getRecommendedSections(input.pageType));
+  const ctx = buildEngineContext(input);
+  const engineSections = ecommerceEngine.getRecommendedSections(input.pageType, ctx);
+  if (engineSections.length > 0) {
+    engineSections.forEach((sec, i) => {
+      const marker = sec.priority === "required" ? "【必須】" : sec.priority === "recommended" ? "【推奨】" : "【任意】";
+      parts.push(`${i + 1}. ${sec.category} — ${sec.purpose} ${marker}`);
+      parts.push(`   理由: ${sec.businessReason}`);
+    });
+  } else {
+    parts.push(getRecommendedSections(input.pageType));
+  }
 
   parts.push(`\n上記の情報をもとに、最適なDesignSpec（JSON）を出力してください。`);
 
@@ -266,6 +293,20 @@ function parseDesignSpec(text: string): DesignSpec {
     responsiveStrategy:
       parsed.responsiveStrategy || "モバイルファースト、768px/1024pxブレークポイント",
     toneDescription: parsed.toneDescription || "",
+  };
+}
+
+/**
+ * DDPInput → EngineContext 変換
+ */
+function buildEngineContext(input: DDPInput): EngineContext {
+  return {
+    pageType: input.pageType,
+    industry: input.industry,
+    tones: input.tones,
+    targetAudience: input.targetAudience,
+    brandName: input.brandName,
+    locale: "ja-JP",
   };
 }
 

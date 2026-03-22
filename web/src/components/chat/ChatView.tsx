@@ -279,35 +279,17 @@ export default function ChatView({
     [handleSend],
   );
 
-  // Onboarding completion: immediately show template preview, then send to AI
+  // Onboarding completion: send to AI (DDP pipeline handles everything)
   const handleOnboardingComplete = useCallback(
     async (compiledPrompt: string, pageType: string, selections: OnboardingSelections) => {
       setOnboardingType(null);
       setCurrentPageType(pageType);
 
-      // ── Instant Template Preview ──
-      // AIが応答する前に、テンプレートを即座にプレビューに表示する
-      // これにより、ユーザーは0.1秒以内にプレビューを見ることができる
-      // AIが完了したらカスタマイズ版に差し替え、失敗してもテンプレートが残る
-      const templatePromise = fetchTemplatePreview(
-        selections.industry,
-        selections.tone,
-        pageType,
-      );
-
-      // テンプレートプリフェッチ（非同期だが高速 — ローカルAPI）
-      templatePromise.then((templateData) => {
-        if (templateData) {
-          console.log("[Aicata] Showing instant template preview");
-          onTemplatePreviewChange?.(true);
-          onPageUpdate?.(templateData);
-        }
-      });
-
-      // チャットAPI送信（並行して実行）
+      // DDP パイプラインがゼロからオリジナルデザインを生成する
+      // テンプレートプリフェッチは不要（DDPはテンプレートに依存しない）
       handleSend(compiledPrompt);
     },
-    [handleSend, onPageUpdate],
+    [handleSend],
   );
 
   const handleOnboardingCancel = useCallback(() => {
