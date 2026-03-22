@@ -94,6 +94,7 @@ model Page {
   conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   versions        PageVersion[]
   deployments     ThemeDeployment[]
+  mediaAssets     MediaAsset[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -154,6 +155,45 @@ model Message {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+// ============================================================
+// メディア資産管理
+// Aicataは画像ファイルを保持しない。URLのみを記録し、
+// デプロイ時にShopify Files APIへ直接転送する。
+// ============================================================
+
+/// クロール時に収集した画像URLとShopify CDN URLの対応を管理
+model MediaAsset {
+  id              String    @id @default(cuid())
+  /// 元サイトの画像URL（クロール時に収集）
+  sourceUrl       String
+  /// Shopify CDN上のURL（デプロイ後に設定）
+  shopifyCdnUrl   String?
+  /// Shopify Files APIのファイルID（GID形式）
+  shopifyFileId   String?
+  /// アップロード状態: pending, uploading, uploaded, failed
+  status          String    @default("pending")
+  /// ファイルのコンテキスト: hero, product, logo, background, content
+  context         String    @default("content")
+  /// alt テキスト
+  alt             String    @default("")
+  /// 元サイトのドメイン（重複検出用）
+  sourceDomain    String    @default("")
+  /// MIMEタイプ（推定）
+  mimeType        String?
+  /// 関連するページID（任意）
+  pageId          String?
+  page            Page?     @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  /// エラーメッセージ（failedの場合）
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([sourceUrl, sourceDomain])
+  @@index([sourceDomain])
+  @@index([status])
+  @@index([pageId])
 }
 
 // ============================================================

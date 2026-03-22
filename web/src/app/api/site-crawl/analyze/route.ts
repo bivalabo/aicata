@@ -5,6 +5,7 @@
 
 import { parse as parseHtml } from "node-html-parser";
 import type { DesignTone } from "@/lib/design-engine/types";
+import { extractImageUrls, saveExtractedImages } from "@/lib/media-assets";
 
 export const maxDuration = 120; // 最大2分
 
@@ -397,12 +398,36 @@ export async function POST(request: Request) {
     const successfulPages = analyzed.filter((p) => p.status === "ok");
     const unifiedContext = buildUnifiedContext(successfulPages);
 
+    // ── メディア資産: 画像URLをDBに保存 ──
+    // Aicataはファイルを保持せず、URLのみ記録
+    // デプロイ時にShopify Files APIへ直接転送する
+    let totalImagesSaved = 0;
+    try {
+      for (const page of successfulPages) {
+        if (page.images.length > 0) {
+          const domain = new URL(page.url).hostname;
+          const extracted = page.images.map((img) => ({
+            src: img.src,
+            alt: img.alt,
+            context: img.context as "hero" | "product" | "logo" | "background" | "content",
+          }));
+          const saved = await saveExtractedImages(extracted, domain);
+          totalImagesSaved += saved;
+        }
+      }
+      console.log(`[Batch Analyze] Saved ${totalImagesSaved} media asset URLs to DB`);
+    } catch (e) {
+      // メディア保存の失敗は解析結果に影響させない
+      console.warn("[Batch Analyze] Media asset save error:", e);
+    }
+
     const result: AnalyzeResult = {
       pages: analyzed,
       unifiedContext,
       analyzedCount: successfulPages.length,
       totalPages: requestPages.length,
-    };
+      totalImagesSaved,
+    } as AnalyzeResult & { totalImagesSaved: number };
 
     return Response.json(result);
   } catch (error) {

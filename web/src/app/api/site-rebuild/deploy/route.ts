@@ -4,6 +4,7 @@
 // ============================================================
 
 import { prisma } from "@/lib/db";
+import { preparePageForDeploy } from "@/lib/media-assets";
 
 export const maxDuration = 120;
 
@@ -46,6 +47,33 @@ export async function POST(request: Request) {
     }
 
     const results: DeployResult["results"] = [];
+
+    // ── メディア資産: デプロイ前に画像をShopifyにアップロード ──
+    // Aicataはファイルを保持しない。元サイトのURLをShopify Files APIに渡し、
+    // Shopify CDN URLでHTML内の画像参照を書き換える
+    for (const pageId of pageIds) {
+      try {
+        const page = await prisma.page.findUnique({ where: { id: pageId } });
+        if (page?.html) {
+          const updatedHtml = await preparePageForDeploy(
+            store.shop,
+            store.accessToken,
+            pageId,
+            page.html,
+          );
+          if (updatedHtml !== page.html) {
+            await prisma.page.update({
+              where: { id: pageId },
+              data: { html: updatedHtml },
+            });
+            console.log(`[Batch Deploy] Media assets uploaded & URLs rewritten for page ${pageId}`);
+          }
+        }
+      } catch (e) {
+        // メディアアップロードの失敗はデプロイ自体を止めない
+        console.warn(`[Batch Deploy] Media upload failed for ${pageId}:`, e);
+      }
+    }
 
     // Deploy each page sequentially
     for (const pageId of pageIds) {
