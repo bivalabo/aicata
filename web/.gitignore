@@ -44,3 +44,4 @@ next-env.d.ts
 /prisma/data/
 /prisma/*.db
 /prisma/*.db-journal
+.env*.local

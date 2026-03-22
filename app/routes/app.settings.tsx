@@ -37,7 +37,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       id: shop.id,
       domain: session.shop,
       preferredModel: shop.preferredModel || "claude-sonnet-4-20250514",
-      brandTone: shop.brandTone || "professional",
       plan: shop.plan || "free",
     },
     tokenUsage,
@@ -52,11 +51,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "updateSettings") {
     const preferredModel = formData.get("preferredModel") as string;
-    const brandTone = formData.get("brandTone") as string;
 
-    await updateShopSettings(shop.id, {
+    await updateShopSettings(session.shop, {
       preferredModel,
-      brandTone,
     });
 
     return json({ success: true, message: "設定を保存しました" });
@@ -73,27 +70,17 @@ export default function SettingsPage() {
   const isSubmitting = navigation.state === "submitting";
 
   const [preferredModel, setPreferredModel] = useState(shop.preferredModel);
-  const [brandTone, setBrandTone] = useState(shop.brandTone);
-
   const handleSave = useCallback(() => {
     const formData = new FormData();
     formData.append("intent", "updateSettings");
     formData.append("preferredModel", preferredModel);
-    formData.append("brandTone", brandTone);
     submit(formData, { method: "post" });
-  }, [preferredModel, brandTone, submit]);
+  }, [preferredModel, submit]);
 
   const modelOptions = [
     { label: "Claude Sonnet（推奨・バランス型）", value: "claude-sonnet-4-20250514" },
     { label: "Claude Haiku（高速・軽量）", value: "claude-haiku-4-5-20251001" },
     { label: "Claude Opus（高精度・プレミアム）", value: "claude-opus-4-20250514" },
-  ];
-
-  const toneOptions = [
-    { label: "プロフェッショナル", value: "professional" },
-    { label: "カジュアル・フレンドリー", value: "casual" },
-    { label: "丁寧・フォーマル", value: "formal" },
-    { label: "エネルギッシュ", value: "energetic" },
   ];
 
   const planLabels: Record<string, string> = {
@@ -131,13 +118,6 @@ export default function SettingsPage() {
                   value={preferredModel}
                   onChange={setPreferredModel}
                   helpText="タスクの複雑さに応じて最適なモデルを選択してください"
-                />
-                <Select
-                  label="ブランドトーン"
-                  options={toneOptions}
-                  value={brandTone}
-                  onChange={setBrandTone}
-                  helpText="AIが生成するテキストのトーンに影響します"
                 />
               </FormLayout>
               <InlineStack align="end">

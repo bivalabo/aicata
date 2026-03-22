@@ -11,13 +11,13 @@ if (
   process.env.SHOPIFY_APP_URL = process.env.HOST;
 }
 
-let hmrConfig: UserConfig["server"] = undefined;
+let hmrConfig: { host: string; port: number; protocol: string } | undefined = undefined;
 if (process.env.SHOPIFY_APP_URL) {
   const host = new URL(process.env.SHOPIFY_APP_URL);
   hmrConfig = {
     host: host.hostname,
     port: parseInt(host.port || "443"),
-    protocol: host.protocol.replace(":", "") as "ws" | "wss",
+    protocol: host.protocol.replace(":", ""),
   };
 }
 
@@ -28,8 +28,8 @@ export default defineConfig({
     hmr: hmrConfig
       ? {
           protocol: hmrConfig.protocol as "ws" | "wss",
-          host: hmrConfig.host as string,
-          port: Number(hmrConfig.port),
+          host: hmrConfig.host,
+          port: hmrConfig.port,
           clientPort: 443,
         }
       : undefined,

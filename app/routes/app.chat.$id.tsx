@@ -341,7 +341,7 @@ export default function ChatPage() {
                           margin: "0 auto",
                         }}
                       >
-                        <Icon source={ChatIcon} tone="textInverse" />
+                        <Icon source={ChatIcon} tone="base" />
                       </div>
                       <Text as="p" variant="headingMd" alignment="center">
                         Aicata へようこそ
@@ -488,17 +488,18 @@ export default function ChatPage() {
             >
               <InlineStack gap="300" blockAlign="end" wrap={false}>
                 <div style={{ flex: 1 }}>
-                  <TextField
-                    label=""
-                    labelHidden
-                    value={message}
-                    onChange={setMessage}
-                    onKeyDown={handleKeyDown}
-                    placeholder="メッセージを入力..."
-                    multiline={2}
-                    autoComplete="off"
-                    disabled={isBusy}
-                  />
+                  <div onKeyDown={handleKeyDown}>
+                    <TextField
+                      label=""
+                      labelHidden
+                      value={message}
+                      onChange={setMessage}
+                      placeholder="メッセージを入力..."
+                      multiline
+                      autoComplete="off"
+                      disabled={isBusy}
+                    />
+                  </div>
                 </div>
                 <div style={{ paddingBottom: "4px" }}>
                   <Button

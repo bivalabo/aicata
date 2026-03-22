@@ -81,8 +81,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             create: original.sections.map((s) => ({
               name: s.name,
               type: s.type,
-              schemaJson: s.schemaJson,
-              liquidContent: s.liquidContent,
+              schema: s.schema as Parameters<typeof prisma.section.create>[0]["data"]["schema"],
               order: s.order,
             })),
           },
@@ -209,7 +208,6 @@ export default function TemplatesPage() {
                             {
                               content: "削除",
                               onAction: () => handleDelete(template.id),
-                              destructive: true,
                             },
                           ]}
                         >

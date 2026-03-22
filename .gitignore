@@ -67,3 +67,4 @@ next-env.d.ts
 # -- その他 --
 *.pem
 .sync-marker
+.env*.local

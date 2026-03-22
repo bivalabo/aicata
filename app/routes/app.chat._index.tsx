@@ -206,7 +206,7 @@ export default function ChatListPage() {
                         {categoryLabels[category] || category}
                       </Text>
                       <Badge tone="info">
-                        {templates.length}
+                        {String(templates.length)}
                       </Badge>
                     </InlineStack>
                     <div

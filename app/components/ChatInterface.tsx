@@ -84,13 +84,14 @@ export function ChatInterface({
       )}
 
       {/* メッセージ表示エリア */}
-      <Box
+      <div
         ref={scrollContainerRef}
-        padding="400"
-        minHeight="450px"
-        maxHeight="calc(100vh - 300px)"
-        overflowY="scroll"
-        as="div"
+        style={{
+          padding: "var(--p-space-400)",
+          minHeight: "450px",
+          maxHeight: "calc(100vh - 300px)",
+          overflowY: "scroll",
+        }}
       >
         <BlockStack gap="400">
           {/* ウェルカムメッセージ */}
@@ -143,7 +144,7 @@ export function ChatInterface({
             </Box>
           )}
         </BlockStack>
-      </Box>
+      </div>
 
       <Divider />
 
@@ -151,18 +152,18 @@ export function ChatInterface({
       <Box padding="400">
         <InlineStack gap="300" blockAlign="end">
           <Box width="100%">
-            <TextField
-              label=""
-              labelHidden
-              value={inputValue}
-              onChange={setInputValue}
-              onKeyDown={handleKeyDown}
-              placeholder="メッセージを入力... (Shift+Enterで改行)"
-              multiline={3}
-              autoComplete="off"
-              disabled={isLoading}
-              focused={!isLoading}
-            />
+            <div onKeyDown={handleKeyDown}>
+              <TextField
+                label=""
+                labelHidden
+                value={inputValue}
+                onChange={setInputValue}
+                placeholder="メッセージを入力... (Shift+Enterで改行)"
+                multiline
+                autoComplete="off"
+                disabled={isLoading}
+              />
+            </div>
           </Box>
           <Button
             variant="primary"
