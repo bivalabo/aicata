@@ -18,9 +18,11 @@ import {
   Settings,
   Palette,
   Type,
+  Zap,
 } from "lucide-react";
 import clsx from "clsx";
 import { PAGE_TYPE_LABELS } from "./PageCard";
+import SiteMapInfographic from "./SiteMapInfographic";
 
 // ── Types ──
 
@@ -89,6 +91,18 @@ export default function SiteRebuildFlow({
   const [discoveredPages, setDiscoveredPages] = useState<DiscoveredPage[]>([]);
   const [storeName, setStoreName] = useState<string>("");
   const [crawlMethod, setCrawlMethod] = useState<string>("");
+  const [crawlProgress, setCrawlProgress] = useState<string>("");
+  const [ddpCrawlStats, setDdpCrawlStats] = useState<{
+    totalPagesFound: number;
+    totalPagesCrawled: number;
+    totalPagesSkipped: number;
+    crawlDurationMs: number;
+  } | null>(null);
+  const [ddpUnifiedDesign, setDdpUnifiedDesign] = useState<{
+    dominantColors: string[];
+    fonts: string[];
+    tones: string[];
+  } | null>(null);
 
   // Analyze state
   const [analyzedPages, setAnalyzedPages] = useState<PageAnalysis[]>([]);
@@ -136,6 +150,85 @@ export default function SiteRebuildFlow({
       setStep("select");
     } catch (err) {
       setError("サイトのクロールに失敗しました");
+      setStep("input");
+    }
+  }, [siteUrl]);
+
+  // ── Step 1b: Deep crawl with DDP Site Crawler ──
+  const handleDeepCrawl = useCallback(async () => {
+    if (!siteUrl.trim()) return;
+    setError(null);
+    setStep("crawling");
+    setCrawlProgress("サイトに接続中...");
+
+    try {
+      const res = await fetch("/api/site-rebuild/crawl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: siteUrl.trim() }),
+      });
+
+      if (!res.ok || !res.body) {
+        setError("深層クロールに失敗しました");
+        setStep("input");
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === "progress") {
+              setCrawlProgress(data.message || `${data.current}/${data.total} ページ`);
+            } else if (data.type === "complete") {
+              const structure = data.structure;
+              if (!structure || !structure.pages) {
+                setError("サイト構造の取得に失敗しました");
+                setStep("input");
+                return;
+              }
+
+              const pages = structure.pages
+                .filter((p: any) => p.status === "ok")
+                .map((p: any) => ({
+                  url: p.url,
+                  path: p.path,
+                  inferredType: p.pageType,
+                  title: p.title || p.path,
+                  depth: p.depth || 0,
+                  selected: true,
+                }));
+
+              setDiscoveredPages(pages);
+              setStoreName(structure.siteName || "");
+              setCrawlMethod("DDP深層クロール");
+              setDdpCrawlStats(structure.stats || null);
+              setDdpUnifiedDesign(structure.unifiedDesign || null);
+              setStep("select");
+            } else if (data.type === "error") {
+              setError(data.error || "クロールに失敗しました");
+              setStep("input");
+            }
+          } catch {
+            // Skip malformed SSE
+          }
+        }
+      }
+    } catch (err) {
+      setError("深層クロールに失敗しました");
       setStep("input");
     }
   }, [siteUrl]);
@@ -287,7 +380,7 @@ export default function SiteRebuildFlow({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="relative w-full max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col mx-4">
+      <div className="relative w-full max-w-3xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col mx-4">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-3">
@@ -338,12 +431,12 @@ export default function SiteRebuildFlow({
                     autoFocus
                   />
                   <button
-                    onClick={handleCrawl}
+                    onClick={handleDeepCrawl}
                     disabled={!siteUrl.trim()}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-gradient-to-r from-accent to-[#5b8def] hover:shadow-lg hover:shadow-accent/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    クロール開始
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <Zap className="w-3.5 h-3.5" />
+                    分析開始
                   </button>
                 </div>
               </div>
@@ -376,7 +469,7 @@ export default function SiteRebuildFlow({
                 サイトを分析中...
               </p>
               <p className="text-[13px] text-muted-foreground">
-                sitemap.xml からページ構造を検出しています
+                {crawlProgress || "ページ構造を検出しています"}
               </p>
             </div>
           )}
@@ -384,33 +477,16 @@ export default function SiteRebuildFlow({
           {/* ── STEP: Select pages ── */}
           {step === "select" && (
             <div className="space-y-4">
-              {/* Summary */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {storeName && (
-                    <span className="text-[14px] font-semibold text-foreground">
-                      {storeName}
-                    </span>
-                  )}
-                  <span className="text-[12px] text-muted-foreground bg-black/[0.04] px-2 py-0.5 rounded-full">
-                    {crawlMethod}で検出
+              {/* Header */}
+              <div className="flex items-center gap-2">
+                {storeName && (
+                  <span className="text-[14px] font-semibold text-foreground">
+                    {storeName}
                   </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => toggleAll(true)}
-                    className="text-[12px] text-accent hover:underline"
-                  >
-                    すべて選択
-                  </button>
-                  <span className="text-[12px] text-muted-foreground">|</span>
-                  <button
-                    onClick={() => toggleAll(false)}
-                    className="text-[12px] text-muted-foreground hover:underline"
-                  >
-                    すべて解除
-                  </button>
-                </div>
+                )}
+                <span className="text-[12px] text-muted-foreground bg-black/[0.04] px-2 py-0.5 rounded-full">
+                  {crawlMethod}で検出
+                </span>
               </div>
 
               {error && (
@@ -420,40 +496,26 @@ export default function SiteRebuildFlow({
                 </div>
               )}
 
-              {/* Page list */}
-              <div className="space-y-1 max-h-[400px] overflow-y-auto">
-                {discoveredPages.map((page, i) => {
-                  const Icon =
-                    TYPE_ICONS[page.inferredType] || Settings;
-                  return (
-                    <label
-                      key={page.url}
-                      className={clsx(
-                        "flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors",
-                        page.selected
-                          ? "bg-accent/[0.04] border border-accent/15"
-                          : "hover:bg-black/[0.02] border border-transparent",
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={page.selected}
-                        onChange={() => togglePage(i)}
-                        className="w-4 h-4 rounded border-border text-accent focus:ring-accent/30"
-                      />
-                      <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] text-foreground truncate">
-                          {page.path}
-                        </p>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground bg-black/[0.04] px-1.5 py-0.5 rounded shrink-0">
-                        {PAGE_TYPE_LABELS[page.inferredType] ||
-                          page.inferredType}
-                      </span>
-                    </label>
-                  );
-                })}
+              {/* Visual Sitemap Infographic */}
+              <div className="max-h-[450px] overflow-y-auto rounded-xl bg-[#0a0a0f] p-4 border border-[#2a2a3a]">
+                <SiteMapInfographic
+                  siteName={storeName}
+                  rootUrl={siteUrl}
+                  pages={discoveredPages.map((p) => ({
+                    url: p.url,
+                    path: p.path,
+                    title: (p as any).title || p.path,
+                    pageType: p.inferredType,
+                    depth: (p as any).depth || 0,
+                    status: "ok" as const,
+                    selected: p.selected,
+                  }))}
+                  stats={ddpCrawlStats || undefined}
+                  unifiedDesign={ddpUnifiedDesign || undefined}
+                  selectable
+                  onTogglePage={togglePage}
+                  onToggleAll={toggleAll}
+                />
               </div>
             </div>
           )}
