@@ -25,6 +25,7 @@ import {
   Gift,
   Globe,
   PenLine,
+  Rocket,
 } from "lucide-react";
 import clsx from "clsx";
 import TemplatePreviewCard from "./TemplatePreviewCard";
@@ -47,10 +48,10 @@ interface StepConfig {
   options: StepOption[];
 }
 
-/** オンボーディングで選択されたパラメータ（テンプレートプリフェッチ用） */
+/** オンボーディングで選択されたパラメータ */
 export interface OnboardingSelections {
-  industry: string;  // e.g. "food", "fashion"
-  tone: string;      // e.g. "natural", "luxury"
+  industry: string;
+  tone: string;
   audience: string | null;
   freeText: string;
 }
@@ -64,7 +65,12 @@ export interface BrandMemoryHint {
 }
 
 interface OnboardingFlowProps {
-  templateType: string; // Gen-3 PageType: "landing", "product", "collection", "cart", "about"
+  /**
+   * フローのモード:
+   * - "site-build": サイト全体を構築（自然な会話フロー）
+   * - ページタイプ文字列: 個別ページ作成（従来フロー）
+   */
+  templateType: string;
   onComplete: (compiledPrompt: string, pageType: string, selections: OnboardingSelections) => void;
   onCancel: () => void;
   /** Brand Memoryがある場合、業種/トーンステップをスキップ */
@@ -114,7 +120,7 @@ const STEPS: StepConfig[] = [
   {
     id: "audience",
     question: "誰に届けたいですか？",
-    subtitle: "ターゲットに合わせたデザインをご提案します（複数の場合は最も重要なものを選択）",
+    subtitle: "ターゲットに合わせたデザインをご提案します",
     options: [
       { id: "individual", label: "個人のお客様（一般消費者）", icon: <Users className="w-4 h-4" /> },
       { id: "business", label: "法人・ビジネス向け", icon: <Briefcase className="w-4 h-4" /> },
@@ -139,7 +145,6 @@ const TEMPLATE_LABELS: Record<string, string> = {
   collection: "コレクションページ",
   cart: "カートページ",
   about: "ブランドページ",
-  // レガシー互換
   top: "トップページ",
 };
 
@@ -222,6 +227,8 @@ export default function OnboardingFlow({
   onCancel,
   brandMemory,
 }: OnboardingFlowProps) {
+  const isSiteBuildMode = templateType === "site-build";
+
   // Brand Memoryがある場合、業種/トーンをプリセットしてフリーテキストステップへ直行
   const hasBrandMemory = !!(
     brandMemory &&
@@ -238,26 +245,23 @@ export default function OnboardingFlow({
     audienceCustomText: brandMemory?.targetAudience || "",
     freeText: "",
   });
-  const [direction, setDirection] = useState(1); // 1 = forward, -1 = back
+  const [direction, setDirection] = useState(1);
 
   const totalSteps = STEPS.length + 1; // +1 for free text step
   const isFinalStep = step === STEPS.length;
 
-  // カスタムオーディエンス入力モード
   const [showCustomAudience, setShowCustomAudience] = useState(false);
 
   const handleSelect = useCallback(
     (stepId: string, optionId: string) => {
       setSelections((prev) => ({ ...prev, [stepId]: optionId }));
 
-      // 「自由に入力する」を選んだ場合はテキスト入力を表示
       if (stepId === "audience" && optionId === "custom") {
         setShowCustomAudience(true);
         return;
       }
       setShowCustomAudience(false);
 
-      // Auto-advance after brief visual feedback
       setTimeout(() => {
         setDirection(1);
         setStep((s) => s + 1);
@@ -266,7 +270,6 @@ export default function OnboardingFlow({
     [],
   );
 
-  // カスタムオーディエンス入力後の次ステップ進行
   const handleCustomAudienceConfirm = useCallback(() => {
     if (selections.audienceCustomText.trim()) {
       setShowCustomAudience(false);
@@ -285,38 +288,63 @@ export default function OnboardingFlow({
   }, [step, onCancel]);
 
   const handleComplete = useCallback(() => {
-    const pageLabel = TEMPLATE_LABELS[templateType] || "ページ";
     const industryOption = STEPS[0].options.find((o) => o.id === selections.industry);
     const toneOption = STEPS[1].options.find((o) => o.id === selections.tone);
     const audienceOption = STEPS[2].options.find((o) => o.id === selections.audience);
 
-    // Gen-3 pageType を正規化 (レガシー "top" → "landing")
-    const normalizedPageType = templateType === "top" ? "landing" : templateType;
-
-    let prompt = `${pageLabel}を作成してください。\n\n`;
-    prompt += `【ページタイプ】${normalizedPageType}\n`;
-    prompt += `【業種】${industryOption?.label || "指定なし"}\n`;
-    prompt += `【雰囲気】${toneOption?.label || "指定なし"}\n`;
-    // ターゲット: カスタム入力がある場合はそちらを優先
+    // ターゲット文言の構築
+    let audienceText: string;
     if (selections.audience === "custom" && selections.audienceCustomText.trim()) {
-      prompt += `【ターゲット】${selections.audienceCustomText.trim()}`;
+      audienceText = selections.audienceCustomText.trim();
     } else {
-      prompt += `【ターゲット】${audienceOption?.label || "指定なし"}`;
+      audienceText = audienceOption?.label || "幅広い層";
     }
 
-    if (selections.freeText.trim()) {
-      prompt += `\n【その他の要望】${selections.freeText.trim()}`;
+    if (isSiteBuildMode) {
+      // ── サイト全体構築モード ──
+      // 自然な会話的プロンプトを生成
+      let prompt = `Shopifyサイト全体を作成してください。\n\n`;
+      prompt += `業種は${industryOption?.label || "一般"}で、`;
+      prompt += `${toneOption?.label || "モダン"}な雰囲気のサイトにしたいです。\n`;
+      prompt += `ターゲットは${audienceText}です。\n`;
+
+      if (selections.freeText.trim()) {
+        prompt += `\n${selections.freeText.trim()}\n`;
+      }
+
+      prompt += `\nまずトップページから作成をお願いします。`;
+
+      onComplete(prompt, "site-build", {
+        industry: selections.industry || "general",
+        tone: selections.tone || "modern",
+        audience: selections.audience,
+        freeText: selections.freeText,
+      });
+    } else {
+      // ── 個別ページモード（従来フロー） ──
+      const pageLabel = TEMPLATE_LABELS[templateType] || "ページ";
+      const normalizedPageType = templateType === "top" ? "landing" : templateType;
+
+      let prompt = `${pageLabel}を作成してください。\n\n`;
+      prompt += `【ページタイプ】${normalizedPageType}\n`;
+      prompt += `【業種】${industryOption?.label || "指定なし"}\n`;
+      prompt += `【雰囲気】${toneOption?.label || "指定なし"}\n`;
+      prompt += `【ターゲット】${audienceText}`;
+
+      if (selections.freeText.trim()) {
+        prompt += `\n【その他の要望】${selections.freeText.trim()}`;
+      }
+
+      prompt += `\n\nこの情報をもとに、素敵な${pageLabel}を作成してください。`;
+
+      onComplete(prompt, normalizedPageType, {
+        industry: selections.industry || "general",
+        tone: selections.tone || "modern",
+        audience: selections.audience,
+        freeText: selections.freeText,
+      });
     }
-
-    prompt += `\n\nこの情報をもとに、素敵な${pageLabel}を作成してください。`;
-
-    onComplete(prompt, normalizedPageType, {
-      industry: selections.industry || "general",
-      tone: selections.tone || "modern",
-      audience: selections.audience,
-      freeText: selections.freeText,
-    });
-  }, [selections, templateType, onComplete]);
+  }, [selections, templateType, onComplete, isSiteBuildMode]);
 
   const slideVariants = {
     enter: (d: number) => ({ x: d > 0 ? 80 : -80, opacity: 0 }),
@@ -332,9 +360,23 @@ export default function OnboardingFlow({
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col items-center gap-4 mb-8"
       >
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] flex items-center justify-center shadow-lg shadow-[#7c5cfc]/15">
-          <Sparkles className="w-6 h-6 text-white" />
+        <div className={clsx(
+          "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg",
+          isSiteBuildMode
+            ? "bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] shadow-[#7c5cfc]/15"
+            : "bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] shadow-[#7c5cfc]/15",
+        )}>
+          {isSiteBuildMode ? (
+            <Rocket className="w-6 h-6 text-white" />
+          ) : (
+            <Sparkles className="w-6 h-6 text-white" />
+          )}
         </div>
+        {isSiteBuildMode && (
+          <p className="text-[13px] font-medium text-accent">
+            サイト全体を構築します
+          </p>
+        )}
         <ProgressDots total={totalSteps} current={step} />
       </motion.div>
 
@@ -422,7 +464,7 @@ export default function OnboardingFlow({
               )}
             </motion.div>
           ) : (
-            /* Final Step: Free Text */
+            /* Final Step: Free Text + Confirmation */
             <motion.div
               key="step-final"
               custom={direction}
@@ -434,14 +476,23 @@ export default function OnboardingFlow({
               className="w-full flex flex-col items-center"
             >
               <h2 className="text-lg font-bold text-foreground text-center mb-1.5">
-                その他のご要望はありますか？
+                {isSiteBuildMode
+                  ? "その他のご要望はありますか？"
+                  : "その他のご要望はありますか？"}
               </h2>
               <p className="text-[13px] text-muted mb-6 text-center">
-                ブランド名、参考サイト、こだわりポイントなど（任意）
+                {isSiteBuildMode
+                  ? "ブランド名、参考サイト、こだわりポイントなど（任意）"
+                  : "ブランド名、参考サイト、こだわりポイントなど（任意）"}
               </p>
 
               {/* Summary pills */}
               <div className="flex flex-wrap gap-2 mb-5 justify-center">
+                {isSiteBuildMode && (
+                  <span className="text-[12px] px-3 py-1 rounded-full bg-[#7c5cfc]/10 text-[#7c5cfc] font-medium">
+                    サイト全体を構築
+                  </span>
+                )}
                 {selections.industry && (
                   <span className="text-[12px] px-3 py-1 rounded-full bg-accent/10 text-accent font-medium">
                     {STEPS[0].options.find((o) => o.id === selections.industry)?.label}
@@ -461,8 +512,8 @@ export default function OnboardingFlow({
                 )}
               </div>
 
-              {/* Template Preview */}
-              {selections.industry && selections.tone && (
+              {/* Template Preview (for individual page mode) */}
+              {!isSiteBuildMode && selections.industry && selections.tone && (
                 <TemplatePreviewCard
                   industry={selections.industry}
                   tone={selections.tone}
@@ -476,7 +527,11 @@ export default function OnboardingFlow({
                 onChange={(e) =>
                   setSelections((prev) => ({ ...prev, freeText: e.target.value }))
                 }
-                placeholder="例: ブランド名は「MUJI STYLE」で、無印良品のような世界観にしたいです。参考サイト: https://..."
+                placeholder={
+                  isSiteBuildMode
+                    ? "例: ブランド名は「MUJI STYLE」。参考サイト: https://... トップページ以外に、商品一覧とブランドストーリーのページも欲しいです。"
+                    : "例: ブランド名は「MUJI STYLE」で、無印良品のような世界観にしたいです。参考サイト: https://..."
+                }
                 className={clsx(
                   "w-full h-28 px-4 py-3 rounded-xl border border-border bg-white/70",
                   "text-[13px] text-foreground placeholder:text-muted-foreground/50",
@@ -502,8 +557,12 @@ export default function OnboardingFlow({
                   "transition-all duration-200",
                 )}
               >
-                <Sparkles className="w-4 h-4" />
-                作成を開始する
+                {isSiteBuildMode ? (
+                  <Rocket className="w-4 h-4" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                {isSiteBuildMode ? "サイト構築を開始する" : "作成を開始する"}
                 <ArrowRight className="w-4 h-4" />
               </motion.button>
             </motion.div>
@@ -523,7 +582,7 @@ export default function OnboardingFlow({
           className="flex items-center gap-1.5 text-[12px] text-muted hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          {step === 0 ? "ページ選択に戻る" : "前の質問に戻る"}
+          {step === 0 ? "戻る" : "前の質問に戻る"}
         </button>
       </motion.div>
     </div>

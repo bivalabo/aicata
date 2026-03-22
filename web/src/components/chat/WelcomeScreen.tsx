@@ -17,6 +17,8 @@ import {
   Link2,
   ArrowLeft,
   Loader2,
+  Rocket,
+  RefreshCw,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -24,19 +26,26 @@ import clsx from "clsx";
 // Types
 // ============================================================
 
-/** ページ作成テンプレートのアクション定義 */
-interface ActionItem {
+interface WelcomeScreenProps {
+  onSelectTemplate: (prompt: string, pageType?: string) => void;
+  /** サイト全体構築フローを開始 */
+  onStartSiteBuild?: (mode: "new" | "rebuild", url?: string) => void;
+  /** Brand Memoryが有効かどうか */
+  hasBrandMemory?: boolean;
+  brandName?: string;
+}
+
+/** 個別ページ作成アクション */
+interface PageAction {
   icon: React.ElementType;
   title: string;
   description: string;
-  /** pageType — Gen-3 design engine の PageType に対応 */
   pageType: string;
-  /** チャットに送信するプロンプト */
   prompt: string;
   iconBg: string;
 }
 
-/** ユーティリティ系（SEO, 改善など） */
+/** ユーティリティ系 */
 interface UtilityItem {
   icon: React.ElementType;
   title: string;
@@ -45,102 +54,59 @@ interface UtilityItem {
   iconBg: string;
 }
 
-interface WelcomeScreenProps {
-  onSelectTemplate: (prompt: string, pageType?: string) => void;
-  /** Brand Memoryが有効かどうか */
-  hasBrandMemory?: boolean;
-  brandName?: string;
-}
-
 // ============================================================
 // Action Definitions
 // ============================================================
 
-/** ページ作成アクション — Gen-3 対応の全ページタイプ */
-const PAGE_CREATION_ACTIONS: ActionItem[] = [
+/** 個別ページタイプ — サブメニュー用 */
+const INDIVIDUAL_PAGE_ACTIONS: PageAction[] = [
   {
     icon: Store,
     title: "トップページ",
-    description: "ストアの顔となるホームページ",
+    description: "ストアのホームページ",
     pageType: "landing",
-    prompt: "Shopifyストアのトップページを新しく作りたいです。",
+    prompt: "Shopifyストアのトップページを作成してください。",
     iconBg: "bg-violet-500",
   },
   {
     icon: ShoppingBag,
     title: "商品詳細ページ",
-    description: "購買意欲を高めるプロダクトページ",
+    description: "プロダクトページ",
     pageType: "product",
-    prompt: "商品を魅力的に紹介するページを作りたいです。",
+    prompt: "商品を魅力的に紹介するページを作成してください。",
     iconBg: "bg-blue-500",
   },
   {
     icon: Grid3X3,
     title: "コレクションページ",
-    description: "商品カテゴリーの一覧ページ",
+    description: "カテゴリー一覧",
     pageType: "collection",
-    prompt: "商品コレクション（カテゴリー）ページを作りたいです。",
+    prompt: "商品コレクション（カテゴリー）ページを作成してください。",
     iconBg: "bg-teal-500",
-  },
-  {
-    icon: ShoppingCart,
-    title: "カートページ",
-    description: "購入完了までスムーズに導くカート",
-    pageType: "cart",
-    prompt: "カートページのデザインを改善したいです。",
-    iconBg: "bg-emerald-500",
-  },
-  {
-    icon: Layout,
-    title: "ランディングページ",
-    description: "キャンペーン・セールのLP制作",
-    pageType: "landing",
-    prompt: "キャンペーン用のランディングページを作りたいです。",
-    iconBg: "bg-orange-500",
   },
   {
     icon: Palette,
     title: "ブランドページ",
-    description: "ブランドストーリーを伝えるAbout",
+    description: "About・ストーリー",
     pageType: "about",
-    prompt: "ブランドの世界観を伝える「私たちについて」ページを作りたいです。",
+    prompt: "ブランドの世界観を伝える「私たちについて」ページを作成してください。",
     iconBg: "bg-pink-500",
   },
-];
-
-/** 追加ページタイプ（「もっと見る」で表示） */
-const ADDITIONAL_PAGE_ACTIONS: ActionItem[] = [
   {
     icon: Layout,
-    title: "ブログページ",
-    description: "記事一覧・コンテンツマーケティング",
-    pageType: "blog",
-    prompt: "ブログ記事の一覧ページを作りたいです。記事のサムネイル、タイトル、概要が並ぶレイアウトで。",
-    iconBg: "bg-indigo-500",
-  },
-  {
-    icon: Layout,
-    title: "お問い合わせページ",
-    description: "フォーム付きのコンタクトページ",
-    pageType: "contact",
-    prompt: "お問い合わせフォーム付きのコンタクトページを作りたいです。",
-    iconBg: "bg-cyan-500",
-  },
-  {
-    icon: Layout,
-    title: "FAQページ",
-    description: "よくある質問のアコーディオン形式",
-    pageType: "about",
-    prompt: "FAQ（よくある質問）ページを作りたいです。アコーディオン形式で見やすいレイアウトで。",
-    iconBg: "bg-lime-600",
-  },
-  {
-    icon: Layout,
-    title: "特集・キャンペーンLP",
-    description: "季節キャンペーンやセール用",
+    title: "ランディングページ",
+    description: "キャンペーンLP",
     pageType: "landing",
-    prompt: "キャンペーン用のランディングページを作りたいです。",
+    prompt: "キャンペーン用のランディングページを作成してください。",
     iconBg: "bg-orange-500",
+  },
+  {
+    icon: ShoppingCart,
+    title: "カートページ",
+    description: "購入フロー",
+    pageType: "cart",
+    prompt: "カートページのデザインを改善したいです。",
+    iconBg: "bg-emerald-500",
   },
 ];
 
@@ -181,14 +147,12 @@ function UrlImportForm({
   const handleSubmit = useCallback(() => {
     const trimmed = url.trim();
     if (!trimmed) return;
-    // 簡易URL検証
     try {
       new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
     } catch {
       return;
     }
     setIsValidating(true);
-    // URLを含むプロンプトを生成して送信
     onSubmit(trimmed);
   }, [url, onSubmit]);
 
@@ -201,10 +165,10 @@ function UrlImportForm({
     >
       <div className="text-center mb-8">
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-indigo-500/15">
-          <Globe className="w-7 h-7 text-white" />
+          <RefreshCw className="w-7 h-7 text-white" />
         </div>
         <h2 className="text-xl font-bold text-foreground mb-2">
-          既存サイトを分析してリビルド
+          既存サイトをリビルド
         </h2>
         <p className="text-[15px] text-muted leading-relaxed">
           URLを入力すると、デザインや構造を解析して
@@ -250,7 +214,7 @@ function UrlImportForm({
           ) : (
             <Sparkles className="w-4 h-4" />
           )}
-          {isValidating ? "分析中..." : "サイトを分析する"}
+          {isValidating ? "分析中..." : "サイトをリビルドする"}
         </motion.button>
 
         <button
@@ -262,7 +226,6 @@ function UrlImportForm({
         </button>
       </div>
 
-      {/* ヒント */}
       <div className="mt-8 p-4 rounded-xl bg-black/[0.02] border border-border/30">
         <p className="text-[12px] text-muted-foreground leading-relaxed text-center">
           対応サイト: Shopify, WordPress, Wix, その他HTML/CSSサイト
@@ -280,20 +243,35 @@ function UrlImportForm({
 
 export default function WelcomeScreen({
   onSelectTemplate,
+  onStartSiteBuild,
   hasBrandMemory = false,
   brandName,
 }: WelcomeScreenProps) {
-  const [mode, setMode] = useState<"main" | "url-import">("main");
-  const [showMore, setShowMore] = useState(false);
+  const [mode, setMode] = useState<"main" | "url-import" | "individual-pages">("main");
 
-  /** URL入力モードのサブミット */
+  /** URL入力モードのサブミット — サイトリビルドフローへ */
   const handleUrlSubmit = useCallback(
     (url: string) => {
-      const prompt = `以下のサイトを分析して、Shopifyテーマとしてリビルドしたいです。\n\nURL: ${url}\n\nこのサイトのデザイントーン、配色、レイアウト構造を解析し、同等以上のクオリティでShopifyテーマを再構築してください。`;
-      onSelectTemplate(prompt, "landing");
+      if (onStartSiteBuild) {
+        onStartSiteBuild("rebuild", url);
+      } else {
+        // フォールバック: 旧方式のプロンプト送信
+        const prompt = `以下のサイトを分析して、Shopifyテーマとしてリビルドしたいです。\n\nURL: ${url}\n\nサイト全体のデザイントーン、配色、レイアウト構造を解析し、同等以上のクオリティでShopifyテーマを再構築してください。`;
+        onSelectTemplate(prompt, "landing");
+      }
     },
-    [onSelectTemplate],
+    [onSelectTemplate, onStartSiteBuild],
   );
+
+  /** 「新しいサイトを作成」— オンボーディングフローへ */
+  const handleNewSiteBuild = useCallback(() => {
+    if (onStartSiteBuild) {
+      onStartSiteBuild("new");
+    } else {
+      // フォールバック: landing ページのオンボーディングフローを開始
+      onSelectTemplate("サイト全体を作成してください。", "landing");
+    }
+  }, [onSelectTemplate, onStartSiteBuild]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 max-w-2xl mx-auto">
@@ -304,7 +282,68 @@ export default function WelcomeScreen({
             onSubmit={handleUrlSubmit}
             onCancel={() => setMode("main")}
           />
+        ) : mode === "individual-pages" ? (
+          /* ── 個別ページ選択モード ── */
+          <motion.div
+            key="individual"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            className="w-full flex flex-col items-center"
+          >
+            <div className="text-center mb-8">
+              <h2 className="text-xl font-bold text-foreground mb-2">
+                どのページを作成しますか？
+              </h2>
+              <p className="text-[14px] text-muted">
+                作成したいページの種類を選んでください
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full mb-6">
+              {INDIVIDUAL_PAGE_ACTIONS.map((action, i) => (
+                <motion.button
+                  key={action.title}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.05 + i * 0.04 }}
+                  onClick={() => onSelectTemplate(action.prompt, action.pageType)}
+                  className={clsx(
+                    "group relative flex flex-col items-center gap-3 p-5 rounded-2xl text-center",
+                    "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
+                    "transition-all duration-200 hover:shadow-sm",
+                  )}
+                >
+                  <div
+                    className={clsx(
+                      "w-12 h-12 rounded-xl flex items-center justify-center",
+                      action.iconBg,
+                    )}
+                  >
+                    <action.icon className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-[14px] font-semibold text-foreground">
+                      {action.title}
+                    </div>
+                    <div className="text-[12px] text-muted mt-1">
+                      {action.description}
+                    </div>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setMode("main")}
+              className="flex items-center gap-1.5 text-[13px] text-muted hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              戻る
+            </button>
+          </motion.div>
         ) : (
+          /* ── メイン画面 ── */
           <motion.div
             key="main"
             initial={{ opacity: 0 }}
@@ -328,12 +367,12 @@ export default function WelcomeScreen({
                 <Sparkles className="w-8 h-8 text-white" />
               </motion.div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground mb-3">
-                どんなページを作りましょうか？
+                Shopifyサイトを作りましょう
               </h1>
               <p className="text-[15px] text-muted leading-relaxed">
-                対話しながらShopifyページを生成。
+                AIがデザインからコーディングまで一貫して対応。
                 <br className="hidden sm:block" />
-                リアルタイムプレビューで仕上がりを確認できます。
+                対話しながらサイト全体を構築できます。
               </p>
               {hasBrandMemory && (
                 <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/[0.06] border border-accent/15 text-[13px] text-accent font-medium">
@@ -345,133 +384,100 @@ export default function WelcomeScreen({
               )}
             </motion.div>
 
-            {/* ページ作成グリッド */}
+            {/* ── 2つのメインアクション ── */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.15 }}
-              className="w-full mb-6"
+              className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8"
             >
-              <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
-                ページを作成
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full">
-                {PAGE_CREATION_ACTIONS.map((action, i) => (
-                  <motion.button
-                    key={action.title}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.2 + i * 0.04 }}
-                    onClick={() =>
-                      onSelectTemplate(action.prompt, action.pageType)
-                    }
-                    className={clsx(
-                      "group relative flex flex-col items-center gap-3 p-5 rounded-2xl text-center",
-                      "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
-                      "transition-all duration-200",
-                      "hover:shadow-sm",
-                    )}
-                  >
-                    <div
-                      className={clsx(
-                        "w-12 h-12 rounded-xl flex items-center justify-center",
-                        action.iconBg,
-                      )}
-                    >
-                      <action.icon className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <div className="text-[14px] font-semibold text-foreground">
-                        {action.title}
-                      </div>
-                      <div className="text-[12px] text-muted mt-1">
-                        {action.description}
-                      </div>
-                    </div>
-                  </motion.button>
-                ))}
-              </div>
-
-              {/* もっと見る — 追加ページタイプ */}
-              {!showMore ? (
-                <button
-                  onClick={() => setShowMore(true)}
-                  className="mt-3 text-[13px] text-accent hover:text-accent-hover font-medium transition-colors"
-                >
-                  + もっとページタイプを見る
-                </button>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full mt-3">
-                  {ADDITIONAL_PAGE_ACTIONS.map((action, i) => (
-                    <motion.button
-                      key={action.title}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: i * 0.04 }}
-                      onClick={() =>
-                        onSelectTemplate(action.prompt, action.pageType)
-                      }
-                      className={clsx(
-                        "group relative flex flex-col items-center gap-3 p-5 rounded-2xl text-center",
-                        "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
-                        "transition-all duration-200",
-                        "hover:shadow-sm",
-                      )}
-                    >
-                      <div
-                        className={clsx(
-                          "w-12 h-12 rounded-xl flex items-center justify-center",
-                          action.iconBg,
-                        )}
-                      >
-                        <action.icon className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <div className="text-[14px] font-semibold text-foreground">
-                          {action.title}
-                        </div>
-                        <div className="text-[12px] text-muted mt-1">
-                          {action.description}
-                        </div>
-                      </div>
-                    </motion.button>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-
-            {/* URL入力モード + ユーティリティ */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.35 }}
-              className="w-full"
-            >
-              {/* URLからリビルド */}
+              {/* 新しいサイトを作成 */}
               <motion.button
-                whileHover={{ scale: 1.005 }}
-                whileTap={{ scale: 0.995 }}
-                onClick={() => setMode("url-import")}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={handleNewSiteBuild}
                 className={clsx(
-                  "w-full flex items-center gap-4 p-4 rounded-2xl text-left mb-4",
-                  "border border-dashed border-accent/30 bg-accent/[0.03]",
-                  "hover:bg-accent/[0.06] hover:border-accent/50",
-                  "transition-all duration-200",
+                  "group flex flex-col items-center gap-4 p-7 rounded-2xl text-center",
+                  "bg-gradient-to-b from-white/70 to-white/40 backdrop-blur-[10px]",
+                  "border-2 border-[#7c5cfc]/20 hover:border-[#7c5cfc]/40",
+                  "shadow-[0_2px_8px_rgba(124,92,252,0.06)] hover:shadow-[0_4px_16px_rgba(124,92,252,0.12)]",
+                  "transition-all duration-300",
                 )}
               >
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shrink-0">
-                  <Globe className="w-5 h-5 text-white" />
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] flex items-center justify-center shadow-lg shadow-[#7c5cfc]/20 group-hover:shadow-xl group-hover:shadow-[#7c5cfc]/25 transition-shadow">
+                  <Rocket className="w-7 h-7 text-white" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold text-foreground flex items-center gap-1.5">
-                    既存サイトからリビルド
-                    <ArrowRight className="w-3.5 h-3.5 text-accent" />
+                <div>
+                  <div className="text-[16px] font-bold text-foreground mb-1">
+                    新しいサイトを作成
                   </div>
-                  <div className="text-[12px] text-muted mt-0.5">
-                    URLを入力 → デザイン解析 → Shopifyテーマとして再構築
+                  <div className="text-[13px] text-muted leading-relaxed">
+                    業種やブランドの雰囲気をヒアリング。
+                    <br />
+                    トップページからサイト全体を構築します。
                   </div>
                 </div>
               </motion.button>
+
+              {/* 既存サイトをリビルド */}
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => setMode("url-import")}
+                className={clsx(
+                  "group flex flex-col items-center gap-4 p-7 rounded-2xl text-center",
+                  "bg-gradient-to-b from-white/70 to-white/40 backdrop-blur-[10px]",
+                  "border-2 border-indigo-500/15 hover:border-indigo-500/35",
+                  "shadow-[0_2px_8px_rgba(99,102,241,0.04)] hover:shadow-[0_4px_16px_rgba(99,102,241,0.10)]",
+                  "transition-all duration-300",
+                )}
+              >
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/15 group-hover:shadow-xl group-hover:shadow-indigo-500/20 transition-shadow">
+                  <RefreshCw className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <div className="text-[16px] font-bold text-foreground mb-1">
+                    既存サイトをリビルド
+                  </div>
+                  <div className="text-[13px] text-muted leading-relaxed">
+                    URLを入力してデザインを解析。
+                    <br />
+                    Shopifyテーマとして再構築します。
+                  </div>
+                </div>
+              </motion.button>
+            </motion.div>
+
+            {/* ── 個別ページ作成 + ユーティリティ ── */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+              className="w-full"
+            >
+              {/* 個別ページリンク */}
+              <button
+                onClick={() => setMode("individual-pages")}
+                className={clsx(
+                  "w-full flex items-center gap-3 p-4 rounded-xl text-left mb-4",
+                  "bg-white/30 border border-white/20",
+                  "hover:bg-white/50 hover:border-accent/20",
+                  "transition-all duration-200",
+                )}
+              >
+                <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                  <Layout className="w-4.5 h-4.5 text-gray-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-medium text-foreground">
+                    個別ページだけ作成する
+                  </div>
+                  <div className="text-[12px] text-muted mt-0.5">
+                    トップページ、商品ページなど1ページずつ作成
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted shrink-0" />
+              </button>
 
               {/* ユーティリティ行 */}
               <div className="grid grid-cols-2 gap-3">
@@ -480,13 +486,12 @@ export default function WelcomeScreen({
                     key={action.title}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.4 + i * 0.04 }}
+                    transition={{ duration: 0.3, delay: 0.35 + i * 0.04 }}
                     onClick={() => onSelectTemplate(action.prompt)}
                     className={clsx(
                       "group flex items-center gap-3 p-4 rounded-xl text-left",
                       "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
-                      "transition-all duration-200",
-                      "hover:shadow-sm",
+                      "transition-all duration-200 hover:shadow-sm",
                     )}
                   >
                     <div
@@ -514,10 +519,10 @@ export default function WelcomeScreen({
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
+              transition={{ delay: 0.5 }}
               className="mt-8 text-[13px] text-muted-foreground"
             >
-              テンプレートを選ぶか、入力欄に自由にメッセージを送ってください
+              または入力欄に自由にメッセージを送ってください
             </motion.p>
           </motion.div>
         )}

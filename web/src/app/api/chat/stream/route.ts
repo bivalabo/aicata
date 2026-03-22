@@ -10,7 +10,7 @@ import {
   buildBrandMemoryPrompt,
 } from "@/lib/brand-memory";
 import { saveMessage } from "@/lib/services/conversation-service";
-import { runDDPForChat } from "@/lib/ddp";
+import { runDDP } from "@/lib/ddp";
 import type { DDPInput } from "@/lib/ddp";
 
 // Next.js Route Segment Config — allow long-running streaming responses
@@ -87,6 +87,9 @@ export async function POST(request: Request) {
       try {
         console.log("[Stream API] Using DDP pipeline for page generation");
 
+        // サイト全体構築リクエストかどうか判定
+        const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
+
         // Brand Memory 取得
         let brandMemoryData;
         try {
@@ -113,42 +116,109 @@ export async function POST(request: Request) {
           brandMemoryData,
         );
 
-        const ddpResult = await runDDPForChat(ddpInput);
-
-        // Save assistant message to DB
-        if (conversationId && ddpResult.fullResponse) {
-          try {
-            await saveMessage(conversationId, "assistant", ddpResult.fullResponse, {
-              model: DEFAULT_MODEL || "claude-sonnet-4-20250514",
-            });
-          } catch (e) {
-            console.error("[Stream API] Failed to save assistant message:", e);
-          }
+        // サイト全体構築の場合、最初のページはトップページ
+        if (isSiteBuildRequest) {
+          ddpInput.pageType = "landing";
         }
 
-        // SSE-compatible streaming response
-        // We send the complete result as a stream for frontend compatibility
+        // ── リアルタイムストリーミング DDP ──
         const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            // Send the full response as chunks
-            const text = ddpResult.fullResponse;
-            const chunkSize = 100;
-            let offset = 0;
+        let streamClosed = false;
 
-            function sendNextChunk() {
-              if (offset >= text.length) {
-                controller.close();
-                return;
+        const stream = new ReadableStream({
+          async start(controller) {
+            const send = (text: string) => {
+              if (streamClosed) return;
+              try {
+                controller.enqueue(encoder.encode(text));
+              } catch {
+                streamClosed = true;
               }
-              const chunk = text.slice(offset, offset + chunkSize);
-              controller.enqueue(encoder.encode(chunk));
-              offset += chunkSize;
-              // Small delay to simulate streaming
-              setTimeout(sendNextChunk, 10);
+            };
+
+            try {
+              // 自然な会話メッセージから開始
+              if (isSiteBuildRequest) {
+                send("承知しました！サイト全体を構築していきますね。\n\n");
+                send("まずはトップページから作成していきます。\n\n");
+              } else {
+                send("ページをデザインしています...\n\n");
+              }
+
+              const result = await runDDP(ddpInput, undefined, (event) => {
+                if (streamClosed) return;
+                if (event.stage === "spec" && event.status === "start") {
+                  send("🎨 デザイン設計図を作成中...\n");
+                } else if (event.stage === "spec" && event.status === "complete") {
+                  const spec = (event as any).spec;
+                  if (spec) {
+                    send(`✅ デザイン方針: ${spec.designPhilosophy}\n`);
+                    send(`   配色: ${spec.colors.reasoning}\n`);
+                    send(`   セクション: ${spec.sections.length}個\n\n`);
+                  }
+                } else if (event.stage === "section" && event.status === "start") {
+                  const sectionId = (event as any).sectionId;
+                  const index = (event as any).index;
+                  const total = (event as any).total;
+                  send(`🔨 セクション ${index + 1}/${total} (${sectionId}) を構築中...\n`);
+                } else if (event.stage === "section" && event.status === "complete") {
+                  const sectionId = (event as any).sectionId;
+                  send(`✅ ${sectionId} 完成\n`);
+                } else if (event.stage === "assembly" && event.status === "start") {
+                  send(`\n⚙️ ページを組み立て中...\n`);
+                } else if (event.stage === "assembly" && event.status === "complete") {
+                  send(`✅ 組み立て完了\n\n`);
+                }
+              });
+
+              // 完成したHTMLを ---PAGE_START---/---PAGE_END--- マーカー付きで送信
+              send(`\n---PAGE_START---\n`);
+
+              const doc = result.fullDocument;
+              const chunkSize = 500;
+              for (let i = 0; i < doc.length; i += chunkSize) {
+                if (streamClosed) break;
+                send(doc.slice(i, i + chunkSize));
+                await new Promise((r) => setTimeout(r, 5));
+              }
+
+              send(`\n---PAGE_END---\n`);
+
+              // サイト全体構築の場合、次のステップを案内
+              if (isSiteBuildRequest) {
+                send(`\nトップページが完成しました！プレビューでご確認ください。\n\n`);
+                send(`続けて他のページも作成できます。例えば：\n`);
+                send(`・「コレクションページを作成してください」\n`);
+                send(`・「商品詳細ページを作成してください」\n`);
+                send(`・「ブランドストーリーページを作成してください」\n\n`);
+                send(`どのページを次に作成しましょうか？`);
+              }
+
+              // Save assistant message to DB
+              const siteGuide = isSiteBuildRequest
+                ? `\n\nトップページが完成しました！続けて他のページも作成できます。例えば「コレクションページを作成してください」「商品詳細ページを作成してください」など、お気軽にお声がけください。`
+                : "";
+              const fullResponse = `ページをデザインしました。\n\n**デザイン方針**: ${result.spec?.designPhilosophy || ""}\n**配色**: ${result.spec?.colors?.reasoning || ""}\n**セクション構成**: ${result.spec?.sections?.length || 0}セクション\n\n---PAGE_START---\n${result.fullDocument}\n---PAGE_END---${siteGuide}`;
+              if (conversationId) {
+                try {
+                  await saveMessage(conversationId, "assistant", fullResponse, {
+                    model: DEFAULT_MODEL || "claude-sonnet-4-20250514",
+                  });
+                } catch (e) {
+                  console.error("[Stream API] Failed to save assistant message:", e);
+                }
+              }
+            } catch (err) {
+              console.error("[Stream API] DDP pipeline error:", err);
+              send(`\nエラーが発生しました。レガシーエンジンにフォールバックします...\n`);
             }
 
-            sendNextChunk();
+            if (!streamClosed) {
+              try { controller.close(); } catch { /* already closed */ }
+            }
+          },
+          cancel() {
+            streamClosed = true;
           },
         });
 
@@ -335,6 +405,9 @@ function detectPageGenerationRequest(
   // 明示的にpageTypeが指定されている場合は生成リクエスト
   if (explicitPageType) return true;
 
+  // サイト全体構築リクエストも生成リクエスト
+  if (detectSiteBuildRequest(text)) return true;
+
   // ページ生成を示すキーワード
   const generationKeywords = [
     "ページを作", "ページ作成", "ページ生成",
@@ -350,6 +423,26 @@ function detectPageGenerationRequest(
 
   const lowerText = text.toLowerCase();
   return generationKeywords.some((kw) => lowerText.includes(kw));
+}
+
+/**
+ * サイト全体構築リクエストかどうかを判定
+ * 「サイト全体」「サイトを作成」「リビルドして」などの自然な表現を検出
+ */
+function detectSiteBuildRequest(text: string): boolean {
+  const siteBuildKeywords = [
+    "サイト全体",
+    "サイトを作成",
+    "サイトを作って",
+    "サイト構築",
+    "サイトをリビルド",
+    "リビルドして",
+    "全ページ",
+    "まずトップページから",
+    "Shopifyサイト全体",
+  ];
+
+  return siteBuildKeywords.some((kw) => text.includes(kw));
 }
 
 /**

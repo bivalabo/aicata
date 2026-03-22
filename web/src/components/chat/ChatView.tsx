@@ -8,15 +8,64 @@ import OnboardingFlow, {
   type OnboardingSelections,
   type BrandMemoryHint,
 } from "./OnboardingFlow";
-import { Sparkles, RefreshCw } from "lucide-react";
+import { Sparkles, RefreshCw, Store, ExternalLink, X } from "lucide-react";
 import { useChat, type Message, type Attachment } from "@/hooks/useChat";
 import { extractPageData, stripPageMarkers, hasPageData } from "@/lib/page-parser";
 import type { PageData } from "@/lib/page-parser";
+import dynamic from "next/dynamic";
 
-/**
- * テンプレートプリフェッチ: オンボーディング完了時に即座にテンプレートを取得
- * → AIが応答する前にプレビューパネルにテンプレートを表示する
- */
+// Lazy-load SiteRebuildFlow (heavy component)
+const SiteRebuildFlow = dynamic(
+  () => import("@/components/pages/SiteRebuildFlow"),
+  { ssr: false },
+);
+
+// ============================================================
+// Shopify Connection Hook
+// ============================================================
+
+interface ShopifyStoreInfo {
+  connected: boolean;
+  store: {
+    id: string;
+    shop: string;
+    name: string;
+    email: string;
+    domain: string;
+    plan: string;
+  } | null;
+}
+
+function useShopifyConnection() {
+  const [storeInfo, setStoreInfo] = useState<ShopifyStoreInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/shopify/store")
+      .then((r) => r.json())
+      .then((data) => {
+        setStoreInfo(data);
+      })
+      .catch(() => {
+        setStoreInfo({ connected: false, store: null });
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const refresh = useCallback(() => {
+    fetch("/api/shopify/store")
+      .then((r) => r.json())
+      .then((data) => setStoreInfo(data))
+      .catch(() => {});
+  }, []);
+
+  return { storeInfo, loading, refresh };
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
 async function fetchTemplatePreview(
   industry: string,
   tone: string,
@@ -26,23 +75,11 @@ async function fetchTemplatePreview(
     const params = new URLSearchParams({ industry, tone, pageType });
     const res = await fetch(`/api/template-preview?${params}`);
     if (!res.ok) return null;
-
     const data = await res.json();
     if (!data.html) return null;
-
-    // template-preview API は assembleFullHtml() の結果を返す
-    // これは <link>タグ + セクションHTML + <style>CSS</style> の形式
-    // extractPageData と同じ方法でHTML/CSSを分離する
     const styleMatch = data.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
     const css = styleMatch ? styleMatch[1].trim() : "";
     const html = data.html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").trim();
-
-    console.log("[Aicata] Template prefetched:", {
-      templateId: data.templateId,
-      htmlLength: html.length,
-      cssLength: css.length,
-    });
-
     return { html, css };
   } catch (e) {
     console.warn("[Aicata] Template prefetch failed:", e);
@@ -50,21 +87,18 @@ async function fetchTemplatePreview(
   }
 }
 
-// Templates that trigger the onboarding flow (page creation)
-// Maps keyword fragments → Gen-3 PageType
 const PAGE_CREATION_TEMPLATES: Record<string, string> = {
   "トップページを新しく作りたい": "landing",
+  "トップページを作成して": "landing",
   "商品を魅力的に紹介するページ": "product",
   "商品コレクション（カテゴリー）ページ": "collection",
   "カートページのデザイン": "cart",
-  "ランディングページを作りたい": "landing",
+  "ランディングページを作り": "landing",
   "私たちについて": "about",
 };
 
-/** URL pattern detection for site rebuild flow */
 const URL_PATTERN = /https?:\/\/[^\s]+/;
 
-/** Check if a prompt matches a page creation template and return its type */
 function detectTemplateType(prompt: string): string | null {
   for (const [keyword, type] of Object.entries(PAGE_CREATION_TEMPLATES)) {
     if (prompt.includes(keyword)) return type;
@@ -72,19 +106,63 @@ function detectTemplateType(prompt: string): string | null {
   return null;
 }
 
-/** Check if message contains a URL (for site analysis flow) */
 function containsUrl(text: string): boolean {
   return URL_PATTERN.test(text);
 }
+
+// ============================================================
+// Shopify Connection Banner
+// ============================================================
+
+function ShopifyConnectionBanner({
+  onDismiss,
+  compact = false,
+}: {
+  onDismiss: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`max-w-2xl mx-auto w-full px-4 ${compact ? "pb-1" : "pb-3"}`}>
+      <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-green-50/80 to-emerald-50/80 border border-green-200/40">
+        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shrink-0">
+          <Store className="w-4.5 h-4.5 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-medium text-green-800">
+            Shopifyストアを接続するとデプロイできます
+          </p>
+          <p className="text-[11px] text-green-600 mt-0.5">
+            作成したページをワンクリックでストアに公開
+          </p>
+        </div>
+        <a
+          href="/api/shopify/install"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold text-white bg-gradient-to-r from-green-500 to-emerald-500 hover:shadow-md hover:shadow-green-500/20 transition-all shrink-0"
+        >
+          <ExternalLink className="w-3 h-3" />
+          接続する
+        </a>
+        <button
+          onClick={onDismiss}
+          className="p-1 rounded text-green-400 hover:text-green-600 transition-colors shrink-0"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Main Component
+// ============================================================
 
 interface ChatViewProps {
   conversationId?: string | null;
   onConversationCreated?: (id: string) => void;
   onPageUpdate?: (data: PageData | null) => void;
   onStreamingChange?: (isStreaming: boolean) => void;
-  /** テンプレートプレビュー表示状態の変更通知 */
   onTemplatePreviewChange?: (isTemplate: boolean) => void;
-  /** プレビューからのセクション編集リクエスト — チャット入力にプリセット */
   pendingMessage?: string | null;
   onPendingMessageConsumed?: () => void;
 }
@@ -110,9 +188,21 @@ export default function ChatView({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Onboarding state
+  // ── Shopify Connection ──
+  const { storeInfo, loading: shopifyLoading } = useShopifyConnection();
+  const [shopifyBannerDismissed, setShopifyBannerDismissed] = useState(false);
+  const showShopifyBanner =
+    !shopifyLoading &&
+    storeInfo &&
+    !storeInfo.connected &&
+    !shopifyBannerDismissed &&
+    messages.length > 0; // ページ生成後に表示
+
+  // ── Rebuild Flow Modal ──
+  const [showRebuildFlow, setShowRebuildFlow] = useState(false);
+
+  // ── Onboarding state ──
   const [onboardingType, setOnboardingType] = useState<string | null>(null);
-  // Listen for page-type-specific creation from SiteMapView
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -123,7 +213,8 @@ export default function ChatView({
     window.addEventListener("aicata:start-onboarding", handler);
     return () => window.removeEventListener("aicata:start-onboarding", handler);
   }, []);
-  // Brand Memory — 存在すればオンボーディングをスキップ
+
+  // ── Brand Memory ──
   const [brandMemoryHint, setBrandMemoryHint] = useState<BrandMemoryHint | null>(null);
   useEffect(() => {
     fetch("/api/brand-memory")
@@ -140,9 +231,8 @@ export default function ChatView({
       })
       .catch(() => {});
   }, []);
-  // Gen-3 page type for the current session
+
   const [currentPageType, setCurrentPageType] = useState<string | null>(null);
-  // URL analysis loading state
   const [isAnalyzingUrl, setIsAnalyzingUrl] = useState(false);
 
   // ストリーミング状態の変化を親コンポーネントに通知
@@ -159,22 +249,15 @@ export default function ChatView({
         if (msg.content.includes("---PAGE_START---")) {
           const data = extractPageData(msg.content);
           if (data) {
-            // Validate: ensure html has actual renderable content (not just link tags)
             const bodyContent = data.html.replace(/<link[^>]*>/gi, "").trim();
             console.log("[Aicata] Page extracted:", {
               htmlLength: data.html.length,
               cssLength: data.css.length,
               bodyContentLength: bodyContent.length,
-              htmlPreview: data.html.slice(0, 200),
-              cssPreview: data.css.slice(0, 200),
-              hasPageEnd: msg.content.includes("---PAGE_END---"),
             });
-            // AI生成コンテンツが来た → テンプレートプレビューから昇格
             onTemplatePreviewChange?.(false);
             onPageUpdate(data);
             return;
-          } else {
-            console.warn("[Aicata] PAGE_START found but extractPageData returned null. Content length:", msg.content.length);
           }
         }
       }
@@ -186,14 +269,13 @@ export default function ChatView({
     const container = scrollContainerRef.current;
     if (!container) return;
     const isNearBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight <
-      200;
+      container.scrollHeight - container.scrollTop - container.clientHeight < 200;
     if (isNearBottom) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
 
-  // Load conversation messages (skip during streaming to prevent race condition)
+  // Load conversation messages
   const isStreamingRef = useRef(false);
   isStreamingRef.current = isStreaming;
 
@@ -228,30 +310,22 @@ export default function ChatView({
     async (content: string, attachments?: Attachment[]) => {
       let urlAnalysis: unknown;
 
-      // Check if message contains a URL and analyze it
       if (containsUrl(content)) {
         const urlMatch = content.match(URL_PATTERN);
         if (urlMatch) {
           const url = urlMatch[0];
           setIsAnalyzingUrl(true);
           try {
-            console.log("[ChatView] Analyzing URL:", url);
             const res = await fetch("/api/analyze-url", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ url }),
             });
-
             if (res.ok) {
               urlAnalysis = await res.json();
-              console.log("[ChatView] URL analysis completed:", urlAnalysis);
-            } else {
-              console.warn("[ChatView] URL analysis failed:", res.status);
-              // Continue without analysis
             }
           } catch (e) {
             console.error("[ChatView] URL analysis error:", e);
-            // Continue without analysis on error
           } finally {
             setIsAnalyzingUrl(false);
           }
@@ -263,30 +337,55 @@ export default function ChatView({
     [sendMessage, currentPageType],
   );
 
-  // WelcomeScreen template selection: route to onboarding or direct send
+  // WelcomeScreen: template selection
   const handleSelectTemplate = useCallback(
     (prompt: string, pageType?: string) => {
       const detectedType = pageType || detectTemplateType(prompt);
       if (detectedType) {
-        // Page creation → store pageType and show onboarding flow
         setCurrentPageType(detectedType);
         setOnboardingType(detectedType);
       } else {
-        // Non-page template (SEO, etc.) → send directly
         handleSend(prompt);
       }
     },
     [handleSend],
   );
 
-  // Onboarding completion: send to AI (DDP pipeline handles everything)
+  // WelcomeScreen: "新しいサイトを作成" or "リビルド"
+  const handleStartSiteBuild = useCallback(
+    (mode: "new" | "rebuild", url?: string) => {
+      if (mode === "new") {
+        // 新しいサイト構築 → オンボーディング
+        setCurrentPageType("landing");
+        setOnboardingType("site-build");
+      } else if (mode === "rebuild") {
+        // リビルド → ビジュアルサイトマップフローを開く
+        setShowRebuildFlow(true);
+      }
+    },
+    [],
+  );
+
+  // SiteRebuildFlow完了
+  const handleRebuildComplete = useCallback(
+    (analyzedPages: any[], context: any) => {
+      setShowRebuildFlow(false);
+      // 完了通知 — ページはDBに保存済みなので、チャットで案内
+      const pageCount = analyzedPages.length;
+      const types = [...new Set(analyzedPages.map((p: any) => p.pageType))];
+      const summary = `サイトのリビルドが完了しました！${pageCount}ページを生成しました（${types.join("、")}）。サイトマップ画面で確認できます。`;
+
+      // リビルド完了メッセージとしてチャットに表示
+      handleSend(summary);
+    },
+    [handleSend],
+  );
+
+  // Onboarding completion
   const handleOnboardingComplete = useCallback(
     async (compiledPrompt: string, pageType: string, selections: OnboardingSelections) => {
       setOnboardingType(null);
-      setCurrentPageType(pageType);
-
-      // DDP パイプラインがゼロからオリジナルデザインを生成する
-      // テンプレートプリフェッチは不要（DDPはテンプレートに依存しない）
+      setCurrentPageType(pageType === "site-build" ? "landing" : pageType);
       handleSend(compiledPrompt);
     },
     [handleSend],
@@ -296,61 +395,39 @@ export default function ChatView({
     setOnboardingType(null);
   }, []);
 
-  // For display: strip page markers from assistant messages
+  // Strip page markers from display
   const displayContent = useCallback((content: string) => {
-    // 1. PAGE_START/END マーカーがある → マーカー間のコードを除去
     if (hasPageData(content)) {
       const stripped = stripPageMarkers(content);
-      // マーカー除去後に残ったテキストがあればそれを表示
       if (stripped.trim()) return stripped;
-      // 全てコードだった場合 → プレビューで確認してもらう
       return "ページをプレビューに反映しました。右側のプレビューパネルでご確認ください。";
     }
 
-    // 2. 再開時のCSS/HTMLコード出力を検出して非表示にする
-    //    （マーカーなしでCSSやHTMLの続きが出力される場合）
     const trimmed = content.trim();
-
-    // ほぼ全体がCSS/HTMLコード → 非表示
     const codeLines = trimmed.split("\n").filter((line) => {
       const l = line.trim();
       return (
-        l.startsWith(".") ||
-        l.startsWith("#") ||
-        l.startsWith("@media") ||
-        l.startsWith("@keyframes") ||
-        l.match(/^\w+[-\w]*\s*\{/) ||
-        l.match(/^\s*[\w-]+\s*:/) ||
-        l.startsWith("}") ||
-        l.startsWith("<") ||
-        l.startsWith("</") ||
-        l === ""
+        l.startsWith(".") || l.startsWith("#") || l.startsWith("@media") ||
+        l.startsWith("@keyframes") || l.match(/^\w+[-\w]*\s*\{/) ||
+        l.match(/^\s*[\w-]+\s*:/) || l.startsWith("}") ||
+        l.startsWith("<") || l.startsWith("</") || l === ""
       );
     });
 
     const totalLines = trimmed.split("\n").filter((l) => l.trim()).length;
     if (totalLines > 5 && codeLines.length / totalLines > 0.7) {
-      // 70%以上がコード行 → ユーザーにはコードを見せない
-      // テキスト部分だけ抽出
       const textParts = trimmed
         .split("\n")
         .filter((line) => {
           const l = line.trim();
           return (
-            l &&
-            !l.startsWith(".") &&
-            !l.startsWith("#") &&
-            !l.startsWith("@") &&
-            !l.match(/^\w+[-\w]*\s*\{/) &&
-            !l.match(/^\s*[\w-]+\s*:/) &&
-            !l.startsWith("}") &&
-            !l.startsWith("<") &&
-            !l.startsWith("---PAGE")
+            l && !l.startsWith(".") && !l.startsWith("#") && !l.startsWith("@") &&
+            !l.match(/^\w+[-\w]*\s*\{/) && !l.match(/^\s*[\w-]+\s*:/) &&
+            !l.startsWith("}") && !l.startsWith("<") && !l.startsWith("---PAGE")
           );
         })
         .join("\n")
         .trim();
-
       return textParts || "ページの生成を続行しています。プレビューパネルで確認できます。";
     }
 
@@ -360,13 +437,10 @@ export default function ChatView({
   const lastMessage = messages[messages.length - 1];
   const showStreamingIndicator =
     isStreaming && lastMessage?.role === "assistant" && !lastMessage.content;
-
   const isGeneratingPage =
-    isStreaming &&
-    lastMessage?.role === "assistant" &&
+    isStreaming && lastMessage?.role === "assistant" &&
     lastMessage.content.includes("---PAGE_START---");
 
-  // Determine what to show in the main area
   const showWelcome = messages.length === 0 && !isStreaming && !onboardingType;
   const showOnboarding = onboardingType !== null && messages.length === 0;
 
@@ -384,6 +458,7 @@ export default function ChatView({
         ) : showWelcome ? (
           <WelcomeScreen
             onSelectTemplate={handleSelectTemplate}
+            onStartSiteBuild={handleStartSiteBuild}
             hasBrandMemory={!!brandMemoryHint}
             brandName={brandMemoryHint?.brandName}
           />
@@ -391,21 +466,12 @@ export default function ChatView({
           <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
             {messages.map((msg) =>
               msg.role === "assistant" && !msg.content && isStreaming ? (
-                <ChatMessage
-                  key={msg.id}
-                  role="assistant"
-                  content=""
-                  isStreaming
-                />
+                <ChatMessage key={msg.id} role="assistant" content="" isStreaming />
               ) : (
                 <ChatMessage
                   key={msg.id}
                   role={msg.role}
-                  content={
-                    msg.role === "assistant"
-                      ? displayContent(msg.content)
-                      : msg.content
-                  }
+                  content={msg.role === "assistant" ? displayContent(msg.content) : msg.content}
                   attachments={msg.attachments}
                 />
               ),
@@ -414,6 +480,11 @@ export default function ChatView({
           </div>
         )}
       </div>
+
+      {/* ── Shopify 未接続バナー ── */}
+      {showShopifyBanner && (
+        <ShopifyConnectionBanner onDismiss={() => setShopifyBannerDismissed(true)} />
+      )}
 
       {/* ── 不完全な生成の検出 + 続行バナー ── */}
       {!isStreaming && messages.length > 0 && (() => {
@@ -468,9 +539,7 @@ export default function ChatView({
             <div className="relative w-5 h-5 shrink-0">
               <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-accent border-r-accent/30 animate-spin" style={{ animationDuration: "1s" }} />
             </div>
-            <span className="text-[13px] text-accent font-medium">
-              サイトを分析中...
-            </span>
+            <span className="text-[13px] text-accent font-medium">サイトを分析中...</span>
           </div>
         </div>
       )}
@@ -515,6 +584,14 @@ export default function ChatView({
             onPrefillConsumed={onPendingMessageConsumed}
           />
         </div>
+      )}
+
+      {/* ── SiteRebuildFlow モーダル ── */}
+      {showRebuildFlow && (
+        <SiteRebuildFlow
+          onClose={() => setShowRebuildFlow(false)}
+          onComplete={handleRebuildComplete}
+        />
       )}
     </div>
   );
