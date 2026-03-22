@@ -39,3 +39,7 @@ export { renderAllSections } from "./stage2-section-artisan";
 export { assembleAndValidate } from "./stage3-harmony-assembler";
 export { reviewPage } from "./stage4-reviewer";
 export type { ReviewResult, ReviewSuggestion } from "./stage4-reviewer";
+
+// Media Strategy
+export { classifyImages, applyMediaStrategy } from "./media-strategy";
+export type { MediaStrategy, ImageDecision, MediaDecision, GenerationTier } from "./media-strategy";

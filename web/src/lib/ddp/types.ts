@@ -103,6 +103,8 @@ export interface ContentBrief {
   listItems?: Array<{ title: string; description: string }>;
   /** 追加指示 */
   additionalNotes?: string;
+  /** 画像戦略: このセクションで使用する画像の方針 */
+  imageInstructions?: string;
 }
 
 // ── Stage 2 Output: Rendered Section ──

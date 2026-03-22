@@ -17,6 +17,8 @@ import type {
   AssembledPageResult,
   ValidationResult,
 } from "./types";
+import type { MediaStrategy } from "./media-strategy";
+import { applyMediaStrategy } from "./media-strategy";
 
 /**
  * Stage 3: 全セクションを組み立てて最終ページを生成
@@ -24,6 +26,7 @@ import type {
 export function assembleAndValidate(
   spec: DesignSpec,
   sections: RenderedSection[],
+  mediaStrategy?: MediaStrategy,
 ): AssembledPageResult {
   // 1. Google Fonts リンク
   const fontsLink = buildFontsLink(spec);
@@ -62,6 +65,19 @@ export function assembleAndValidate(
         `プレースホルダー "${placeholder}" → "${replacement}" に自動置換`,
       );
     }
+  }
+
+  // 画像戦略の適用: placehold.co URLをCSS/SVG/ストックフォトに置換
+  if (mediaStrategy && mediaStrategy.decisions.length > 0) {
+    fixedHtml = applyMediaStrategy(fixedHtml, mediaStrategy, {
+      primary: spec.colors.primary,
+      secondary: spec.colors.secondary,
+      accent: spec.colors.accent,
+      background: spec.colors.background,
+    });
+    validation.autoFixedIssues.push(
+      `画像戦略適用: ${mediaStrategy.stats.generated}枚の画像を最適化`,
+    );
   }
 
   // 完成HTML

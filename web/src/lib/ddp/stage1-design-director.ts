@@ -13,6 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { DesignSpec, DDPInput, DDPConfig, DEFAULT_DDP_CONFIG } from "./types";
 import { ecommerceEngine } from "./engines/ecommerce";
+import { classifyImages, buildImageStrategyPrompt } from "./media-strategy";
 import type { EngineContext } from "./engines/types";
 
 /** 静的なプロンプトベース — エンジン知識を動的に注入 */
@@ -191,6 +192,18 @@ function buildDirectorUserPrompt(input: DDPInput): string {
       parts.push(`- 検出フォント: ${ua.fonts.join(", ")}`);
     }
     parts.push(`\n既存コンテンツを活かしつつ、デザインを一新してください。`);
+
+    // 画像戦略: 元サイトの画像を分類し、最適な方針をプロンプトに注入
+    if (ua.images.length > 0) {
+      const strategy = classifyImages(ua.images, input.industry);
+      const strategyPrompt = buildImageStrategyPrompt(ua.images, strategy);
+      if (strategyPrompt) {
+        parts.push(strategyPrompt);
+      }
+      // 戦略をメタデータとして保存（後段のステージで参照）
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (input as any).__mediaStrategy = strategy;
+    }
   }
 
   // ユーザー指示

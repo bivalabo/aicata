@@ -112,7 +112,9 @@ export async function runDDP(
   // ── Stage 3: Harmony Assembler ──
   onProgress?.({ stage: "assembly", status: "start" });
 
-  const result = assembleAndValidate(spec, sections);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mediaStrategy = (input as any).__mediaStrategy;
+  const result = assembleAndValidate(spec, sections, mediaStrategy);
 
   console.log("[DDP] Stage 3 complete:", {
     htmlLength: result.html.length,
