@@ -29,6 +29,7 @@ export async function GET() {
     // BrandMemory は Prisma client に反映されていない場合があるため dynamic access
     let memory = null;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const model = (prisma as any).brandMemory;
       if (model && typeof model.findUnique === "function") {
         memory = await model.findUnique({ where: { storeId: store.id } });
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const brandMemoryModel = (prisma as any).brandMemory;
     if (!brandMemoryModel) {
       return Response.json(
@@ -146,7 +148,7 @@ export async function POST(request: Request) {
 
     // ── Action: Learn from generated page ──
     if (action === "learn-from-page") {
-      const { templateId, pageType, tones: pageTones } = body;
+      const { templateId, pageType: _pageType, tones: pageTones } = body;
 
       const existing = await brandMemoryModel.findUnique({
         where: { storeId: store.id },
@@ -205,6 +207,7 @@ export async function POST(request: Request) {
       avoidKeywords,
     } = body;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: Record<string, any> = {};
     if (brandName !== undefined) data.brandName = brandName;
     if (brandStory !== undefined) data.brandStory = brandStory;

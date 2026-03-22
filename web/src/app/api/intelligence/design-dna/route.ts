@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, safeJsonParse } from "@/lib/prisma-extended";
-import type { DesignDNA, DesignDNAPreferences } from "@/lib/ace-adis";
+import type { DesignDNA } from "@/lib/ace-adis";
 import { createDefaultDesignDNA } from "@/lib/ace-adis";
 import { cacheControlHeader, CACHE_PRESETS } from "@/lib/api-cache";
 

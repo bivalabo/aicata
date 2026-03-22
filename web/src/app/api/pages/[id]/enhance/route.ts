@@ -10,7 +10,7 @@
 // ============================================================
 
 import { prisma } from "@/lib/db";
-import { analyzeDesignContext } from "@/lib/design-engine";
+// import { analyzeDesignContext } from "@/lib/design-engine"; // Reserved for future enhancement
 import { parse as parseHtml } from "node-html-parser";
 import { detectAndAnnotateSections } from "@/lib/section-detector";
 

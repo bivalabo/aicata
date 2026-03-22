@@ -5,7 +5,7 @@
 
 import { parse as parseHtml } from "node-html-parser";
 import type { DesignTone } from "@/lib/design-engine/types";
-import { extractImageUrls, saveExtractedImages } from "@/lib/media-assets";
+import { saveExtractedImages } from "@/lib/media-assets";
 
 export const maxDuration = 120; // 最大2分
 
@@ -115,7 +115,6 @@ async function analyzeSinglePage(
 
     // Images (top 10)
     const images: Array<{ src: string; alt: string; context: string }> = [];
-    const baseUrl = new URL(url);
     root.querySelectorAll("img[src]").forEach((el) => {
       if (images.length >= 10) return;
       const src = el.getAttribute("src");

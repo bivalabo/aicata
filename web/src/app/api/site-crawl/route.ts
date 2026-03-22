@@ -83,7 +83,7 @@ async function fetchSitemap(
     // Regular sitemap
     const urls = extractUrlsFromSitemap(xml);
     return { urls, method: "sitemap" };
-  } catch (error) {
+  } catch {
     console.log("[Site Crawl] Sitemap unavailable, falling back to HTML scan");
     return { urls: [], method: "html-scan" };
   }
@@ -91,7 +91,7 @@ async function fetchSitemap(
 
 async function parseSitemapIndex(
   xml: string,
-  baseUrl: string,
+  _baseUrl: string,
 ): Promise<{ urls: string[]; method: "sitemap" }> {
   // Extract child sitemap URLs
   const sitemapUrls: string[] = [];

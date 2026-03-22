@@ -250,7 +250,7 @@ function buildSectionLiquid(
   overrides?: Record<string, string>,
 ): string {
   let html = section.html;
-  let css = section.css;
+  const css = section.css;
 
   // プレースホルダーの置換
   for (const ph of section.placeholders) {

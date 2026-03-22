@@ -51,7 +51,7 @@ export function assembleAndValidate(
 
   // 6. 問題の自動修正
   let fixedHtml = sectionsHtml;
-  let fixedCss = `${rootCss}\n\n${resetCss}\n\n${sectionsCss}`;
+  const fixedCss = `${rootCss}\n\n${resetCss}\n\n${sectionsCss}`;
 
   // プレースホルダー除去
   if (validation.remainingPlaceholders.length > 0) {
