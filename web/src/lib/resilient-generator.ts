@@ -1,18 +1,21 @@
 // ============================================================
-// Aicata — Resilient Generation Engine
+// Aicata — Resilient Generation Engine (v2 with DDP)
 //
 // 「止まらない、最後まで作り上げる」を保証するシステム
 //
 // 設計原則:
-//   1. 自動リトライ（指数バックオフ）— 一時的障害を自動回復
-//   2. チェックポイント保存 — 途中成果を必ず保存、再開可能
-//   3. フォールバックチェーン — 主手段が失敗しても代替手段で完遂
-//   4. 部分成功の保証 — 10ページ中7ページ成功なら7ページは確実に保存
+//   1. DDP (Design Decomposition Pipeline) を最優先で使用
+//   2. 自動リトライ（指数バックオフ）— 一時的障害を自動回復
+//   3. チェックポイント保存 — 途中成果を必ず保存、再開可能
+//   4. フォールバックチェーン — DDP失敗時はレガシー単発生成にフォールバック
+//   5. 部分成功の保証 — 10ページ中7ページ成功なら7ページは確実に保存
 // ============================================================
 
 import { anthropic, buildSystemPrompt, DEFAULT_MODEL } from "./anthropic";
 import { prisma } from "./db";
 import { getActiveBrandMemory, buildBrandMemoryPrompt } from "./brand-memory";
+import { runDDP } from "./ddp";
+import type { DDPInput } from "./ddp";
 
 // ── Configuration ──
 
@@ -31,6 +34,8 @@ export interface GenerationTask {
   title: string;
   conversationId: string;
   metadata?: Record<string, unknown>;
+  /** DDP用の入力データ（あればDDPを優先使用） */
+  ddpInput?: DDPInput;
 }
 
 export interface GenerationResult {
@@ -56,9 +61,64 @@ export interface CheckpointData {
 
 /**
  * 1ページを確実に生成する
- * 失敗した場合は自動リトライし、部分的な成功でもHTMLを返す
+ *
+ * 戦略:
+ *   1. DDP (Design Decomposition Pipeline) を最優先で試みる
+ *   2. DDP が失敗した場合、レガシー単発生成にフォールバック
+ *   3. 失敗した場合は自動リトライし、部分的な成功でもHTMLを返す
  */
 export async function generatePageResilently(
+  task: GenerationTask,
+  onProgress?: (event: { type: string; [key: string]: unknown }) => void,
+): Promise<GenerationResult> {
+  // ── DDP を最優先で試みる ──
+  if (task.ddpInput) {
+    try {
+      console.log(`[Resilient Gen] Attempting DDP for "${task.title}"...`);
+      onProgress?.({ type: "ddp_start", taskId: task.id });
+
+      const ddpResult = await runDDP(task.ddpInput, undefined, (event) => {
+        onProgress?.({ type: "ddp_progress", taskId: task.id, ...event });
+      });
+
+      if (ddpResult.html.length > 100) {
+        const pageId = await saveGeneratedPage(
+          task,
+          ddpResult.html,
+          ddpResult.css,
+        );
+
+        console.log(`[Resilient Gen] ✓ DDP succeeded for "${task.title}"`, {
+          sectionCount: ddpResult.spec.sections.length,
+          valid: ddpResult.validation.isValid,
+          autoFixed: ddpResult.validation.autoFixedIssues.length,
+        });
+
+        return {
+          taskId: task.id,
+          status: "success",
+          html: ddpResult.html,
+          css: ddpResult.css,
+          fullContent: ddpResult.fullDocument,
+          pageId,
+          attempts: 1,
+        };
+      }
+
+      console.warn(`[Resilient Gen] DDP output too short for "${task.title}", falling back to legacy`);
+    } catch (err) {
+      console.error(`[Resilient Gen] DDP failed for "${task.title}", falling back to legacy:`, err);
+    }
+  }
+
+  // ── レガシーフォールバック: 単発生成 ──
+  return generatePageLegacy(task, onProgress);
+}
+
+/**
+ * レガシー単発生成（DDP失敗時のフォールバック）
+ */
+async function generatePageLegacy(
   task: GenerationTask,
   onProgress?: (event: { type: string; [key: string]: unknown }) => void,
 ): Promise<GenerationResult> {

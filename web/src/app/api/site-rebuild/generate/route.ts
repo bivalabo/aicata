@@ -1,15 +1,13 @@
 // ============================================================
-// Aicata — Batch Page Generator (Site Rebuild)
-// 解析済みページを順次AI生成し、ストリーミングで進捗を返す
+// Aicata — Site Rebuild Generator (v2 with DDP)
+// 解析済みページを DDP パイプラインで順次AI生成し、
+// ストリーミングで進捗を返す
 // ============================================================
 
-import { buildSystemPrompt } from "@/lib/anthropic";
 import { prisma } from "@/lib/db";
-import type { UrlAnalysisResult } from "@/lib/design-engine/types";
-import {
-  generateBatchResilently,
-  type GenerationTask,
-} from "@/lib/resilient-generator";
+import { runDDP } from "@/lib/ddp";
+import type { DDPInput } from "@/lib/ddp";
+import { getActiveBrandMemory } from "@/lib/brand-memory";
 
 export const maxDuration = 300; // 5 minutes
 
@@ -43,134 +41,45 @@ interface GenerateRequest {
   conversationId?: string;
 }
 
-// ── Build a user prompt for a single page from its analysis ──
+// ── Build DDPInput from page analysis ──
 
-function buildPagePrompt(
+function buildDDPInputFromPage(
   page: PageToGenerate,
   unified: UnifiedDesignContext,
-): string {
-  const parts: string[] = [];
-
-  parts.push(
-    `以下の情報をもとに、${page.title || page.path}のページを生成してください。`,
-  );
-  parts.push("");
-
-  // Structured info block
-  parts.push(`【ページ種別】${page.pageType}`);
-  parts.push(`【URL】${page.url}`);
-
-  if (unified.siteName) {
-    parts.push(`【サイト名】${unified.siteName}`);
-  }
-
-  if (page.title) parts.push(`【ページタイトル】${page.title}`);
-  if (page.description) parts.push(`【説明文】${page.description}`);
-
-  if (page.headings.length > 0) {
-    parts.push(`【見出し】${page.headings.slice(0, 5).join(" / ")}`);
-  }
-
-  if (page.textSnippets && page.textSnippets.length > 0) {
-    parts.push(`【主要テキスト】`);
-    page.textSnippets.slice(0, 3).forEach((t) => {
-      parts.push(`  - ${t}`);
-    });
-  }
-
-  if (page.images.length > 0) {
-    parts.push(`【画像】`);
-    page.images.slice(0, 6).forEach((img) => {
-      parts.push(`  - ${img.context}: ${img.src}${img.alt ? ` (${img.alt})` : ""}`);
-    });
-  }
-
-  // Unified design direction
-  parts.push("");
-  parts.push("【デザイン統一指示】");
-  if (unified.dominantColors.length > 0) {
-    parts.push(
-      `  - メインカラー: ${unified.dominantColors.slice(0, 4).join(", ")} を基調に`,
-    );
-  }
-  if (unified.fonts.length > 0) {
-    parts.push(`  - フォント: ${unified.fonts.join(", ")}`);
-  }
-  if (unified.tones.length > 0) {
-    parts.push(`  - トーン: ${unified.tones.join("、")}を意識`);
-  }
-
-  parts.push("");
-  parts.push(
-    "既存コンテンツをそのまま活かしつつ、デザインを一新してください。サイト全体で統一感のあるデザインにしてください。",
-  );
-
-  return parts.join("\n");
-}
-
-// ── Convert page analysis to a lightweight UrlAnalysisResult ──
-
-function toUrlAnalysis(page: PageToGenerate): UrlAnalysisResult {
+  brandMemory?: any,
+): DDPInput {
   return {
-    url: page.url,
-    title: page.title,
-    description: page.description,
-    texts: [
-      ...page.headings.map((h) => ({
-        content: h,
-        role: "heading" as const,
-        tag: "h1",
-      })),
-      ...(page.textSnippets || []).map((t) => ({
-        content: t,
-        role: "body" as const,
-        tag: "p",
-      })),
-    ],
-    images: page.images.map((img) => ({
-      src: img.src,
-      alt: img.alt,
-      context: img.context as "hero" | "product" | "logo" | "content",
-      width: undefined,
-      height: undefined,
-    })),
-    sections: [],
-    colors: page.colors,
-    fonts: page.fonts,
-  } as unknown as UrlAnalysisResult;
+    pageType: page.pageType || "landing",
+    industry: detectIndustryFromKeywords(unified.industryKeywords),
+    brandName: unified.siteName || undefined,
+    tones: unified.tones.length > 0 ? unified.tones : ["modern"],
+    targetAudience: undefined,
+    keywords: unified.industryKeywords || [],
+    userInstructions: `「${page.title || page.path}」のページをリビルドしてください。既存コンテンツを活かしつつ、デザインを最新のトレンドに合わせて一新してください。`,
+    urlAnalysis: {
+      url: page.url,
+      title: page.title,
+      headings: page.headings || [],
+      bodyTexts: page.textSnippets || [],
+      images: page.images || [],
+      colors: [...(page.colors || []), ...(unified.dominantColors || [])],
+      fonts: [...(page.fonts || []), ...(unified.fonts || [])],
+    },
+    brandMemory: brandMemory || undefined,
+  };
 }
 
-// ── Extract HTML/CSS from AI response ──
-
-function extractPageData(
-  text: string,
-): { html: string; css: string } | null {
-  const startMarker = "---PAGE_START---";
-  const endMarker = "---PAGE_END---";
-
-  const startIdx = text.indexOf(startMarker);
-  const endIdx = text.indexOf(endMarker);
-
-  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) return null;
-
-  const content = text.slice(startIdx + startMarker.length, endIdx).trim();
-
-  // Split HTML and CSS
-  const styleMatch = content.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
-  let css = "";
-  let html = content;
-
-  if (styleMatch) {
-    css = styleMatch
-      .map((s) => s.replace(/<\/?style[^>]*>/gi, ""))
-      .join("\n");
-    html = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").trim();
-  }
-
-  return { html, css };
+function detectIndustryFromKeywords(keywords: string[]): string {
+  const joined = keywords.join(" ").toLowerCase();
+  if (joined.includes("beauty") || joined.includes("cosmetic") || joined.includes("skin")) return "beauty";
+  if (joined.includes("fashion") || joined.includes("apparel") || joined.includes("clothing")) return "fashion";
+  if (joined.includes("food") || joined.includes("gourmet") || joined.includes("organic")) return "food";
+  if (joined.includes("tech") || joined.includes("gadget") || joined.includes("electronic")) return "tech";
+  if (joined.includes("health") || joined.includes("wellness") || joined.includes("supplement")) return "health";
+  return "general";
 }
 
-// ── Main handler: SSE streaming ──
+// ── Main handler: SSE streaming with DDP ──
 
 export async function POST(request: Request) {
   try {
@@ -196,6 +105,33 @@ export async function POST(request: Request) {
       rebuildConversationId = conversation.id;
     }
 
+    // Get Brand Memory once
+    let brandMemoryData: {
+      primaryColor: string;
+      secondaryColor: string;
+      accentColor: string;
+      primaryFont: string;
+      bodyFont: string;
+      voiceTone: string;
+      copyKeywords: string[];
+      avoidKeywords: string[];
+    } | undefined;
+    try {
+      const bm = await getActiveBrandMemory();
+      if (bm) {
+        brandMemoryData = {
+          primaryColor: bm.primaryColor,
+          secondaryColor: bm.secondaryColor,
+          accentColor: bm.accentColor,
+          primaryFont: bm.primaryFont,
+          bodyFont: bm.bodyFont,
+          voiceTone: bm.voiceTone,
+          copyKeywords: bm.copyKeywords,
+          avoidKeywords: bm.avoidKeywords,
+        };
+      }
+    } catch { /* non-fatal */ }
+
     // SSE stream for progress
     const encoder = new TextEncoder();
     let streamClosed = false;
@@ -208,7 +144,6 @@ export async function POST(request: Request) {
               encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
             );
           } catch {
-            // Client disconnected
             streamClosed = true;
           }
         };
@@ -219,72 +154,130 @@ export async function POST(request: Request) {
           conversationId: rebuildConversationId,
         });
 
-        // ── Resilient Batch Generation ──
-        // 各ページをGenerationTaskに変換
-        const tasks: GenerationTask[] = pages.map((page, i) => {
-          const urlAnalysis = toUrlAnalysis(page);
-          const promptResult = buildSystemPrompt(
-            buildPagePrompt(page, unifiedContext),
-            [],
-            urlAnalysis,
-            page.pageType,
-          );
-          return {
-            id: `rebuild-${i}-${page.path}`,
-            prompt: buildPagePrompt(page, unifiedContext),
-            systemPrompt: promptResult.prompt,
-            pageType: page.pageType,
-            title: page.title || page.path,
-            conversationId: rebuildConversationId!,
-            metadata: { path: page.path, index: i },
-          };
-        });
+        const results: Array<{
+          pageId: string;
+          title: string;
+          status: "ok" | "error";
+          attempts: number;
+          error?: string;
+        }> = [];
 
-        // Resilient engine で生成（自動リトライ + チェックポイント保存付き）
-        const batchResult = await generateBatchResilently(
-          tasks,
-          (progress) => {
-            if (streamClosed) return;
-            send({
-              type: "progress",
-              current: progress.completed + (progress.currentTask ? 1 : 0),
-              total: progress.total,
-              title: progress.currentTask || "",
-              succeeded: progress.succeeded,
-              failed: progress.failed,
+        let successCount = 0;
+        let failedCount = 0;
+
+        // ── Generate each page with DDP ──
+        for (let i = 0; i < pages.length; i++) {
+          if (streamClosed) break;
+
+          const page = pages[i];
+          const title = page.title || page.path;
+
+          send({
+            type: "progress",
+            current: i + 1,
+            total: pages.length,
+            title,
+            succeeded: successCount,
+            failed: failedCount,
+          });
+
+          try {
+            const ddpInput = buildDDPInputFromPage(
+              page,
+              unifiedContext,
+              brandMemoryData,
+            );
+
+            const ddpResult = await runDDP(ddpInput, undefined, (event) => {
+              if (streamClosed) return;
+              send({
+                type: "ddp_progress",
+                pageIndex: i,
+                title,
+                stage: event.stage,
+                ...("status" in event ? { status: event.status } : {}),
+              });
             });
 
-            // 各ページ完了時にもイベント送信
-            const latest = progress.results[progress.results.length - 1];
-            if (latest && progress.completed === progress.results.length) {
-              send({
-                type: "page_complete",
-                index: progress.completed - 1,
-                pageId: latest.pageId || "",
-                title: latest.taskId,
-                status: latest.status === "failed" ? "error" : "ok",
-                attempts: latest.attempts,
-                error: latest.error,
+            // Save to DB
+            let pageId = "";
+            try {
+              const savedPage = await (prisma.page.create as any)({
+                data: {
+                  title: title,
+                  slug: "",
+                  html: ddpResult.html,
+                  css: ddpResult.css,
+                  status: "draft",
+                  source: "aicata",
+                  version: 1,
+                  conversationId: rebuildConversationId,
+                  pageType: page.pageType,
+                },
               });
+              pageId = savedPage.id;
+
+              await prisma.pageVersion.create({
+                data: {
+                  pageId: savedPage.id,
+                  version: 1,
+                  html: ddpResult.html,
+                  css: ddpResult.css,
+                  prompt: `DDP rebuild: ${title}`,
+                },
+              });
+            } catch (dbErr) {
+              console.error("[Site Rebuild] DB save failed:", dbErr);
             }
-          },
-          () => streamClosed, // キャンセル検知
-        );
+
+            successCount++;
+            results.push({
+              pageId,
+              title,
+              status: "ok",
+              attempts: 1,
+            });
+
+            send({
+              type: "page_complete",
+              index: i,
+              pageId,
+              title,
+              status: "ok",
+              attempts: 1,
+              validation: ddpResult.validation,
+            });
+          } catch (err) {
+            failedCount++;
+            const errorMsg = err instanceof Error ? err.message : "不明なエラー";
+            results.push({
+              pageId: "",
+              title,
+              status: "error",
+              attempts: 1,
+              error: errorMsg,
+            });
+
+            send({
+              type: "page_complete",
+              index: i,
+              pageId: "",
+              title,
+              status: "error",
+              attempts: 1,
+              error: errorMsg,
+            });
+          }
+        }
 
         // Final summary
         send({
           type: "done",
           conversationId: rebuildConversationId,
-          pages: batchResult.results.map((r) => ({
-            pageId: r.pageId || "",
-            title: r.taskId,
-            status: r.status === "failed" ? "error" : "ok",
-            attempts: r.attempts,
-            error: r.error,
-          })),
-          successCount: batchResult.succeeded,
-          totalCount: batchResult.total,
-          failedCount: batchResult.failed,
+          pages: results,
+          successCount,
+          totalCount: pages.length,
+          failedCount,
         });
 
         if (!streamClosed) {
