@@ -153,13 +153,27 @@ export default function SiteMapView({
       const res = await fetch("/api/shopify/pages");
       const data = await res.json();
       await fetchPages();
-      const syncedCount = data.shopifyPageCount || 0;
-      showToast(
-        syncedCount > 0
-          ? `Shopify同期が完了しました（${syncedCount}ページ）`
-          : "Shopify同期が完了しました",
-        "success",
-      );
+      const details = data.syncDetails;
+      if (details) {
+        const parts: string[] = [];
+        if (details.pages > 0) parts.push(`ページ${details.pages}件`);
+        if (details.products > 0) parts.push(`商品${details.products}件`);
+        if (details.collections > 0) parts.push(`コレクション${details.collections}件`);
+        showToast(
+          parts.length > 0
+            ? `Shopify同期完了（${parts.join("、")}）`
+            : "Shopify同期が完了しました",
+          "success",
+        );
+      } else {
+        const syncedCount = data.shopifyPageCount || 0;
+        showToast(
+          syncedCount > 0
+            ? `Shopify同期が完了しました（${syncedCount}件）`
+            : "Shopify同期が完了しました",
+          "success",
+        );
+      }
     } catch {
       showToast("同期に失敗しました");
       setSyncing(false);
