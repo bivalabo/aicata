@@ -168,6 +168,89 @@ export async function listPages(
   );
   return data.pages;
 }
+// --- Products API ---
+
+export interface ShopifyProduct {
+  id: number;
+  title: string;
+  handle: string;
+  body_html: string;
+  vendor: string;
+  product_type: string;
+  status: "active" | "archived" | "draft";
+  published_at: string | null;
+  image: { src: string } | null;
+  images: Array<{ src: string }>;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 商品一覧を取得 */
+export async function listProducts(
+  shop: string,
+  accessToken: string,
+  limit = 250,
+): Promise<ShopifyProduct[]> {
+  const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
+    shop,
+    accessToken,
+    `products.json?limit=${limit}&status=active`,
+  );
+  return data.products;
+}
+
+// --- Collections API ---
+
+export interface ShopifyCollection {
+  id: number;
+  title: string;
+  handle: string;
+  body_html: string;
+  published_at: string | null;
+  sort_order: string;
+  image: { src: string } | null;
+  updated_at: string;
+}
+
+/** カスタムコレクション一覧を取得 */
+export async function listCustomCollections(
+  shop: string,
+  accessToken: string,
+  limit = 250,
+): Promise<ShopifyCollection[]> {
+  const data = await shopifyFetch<{ custom_collections: ShopifyCollection[] }>(
+    shop,
+    accessToken,
+    `custom_collections.json?limit=${limit}`,
+  );
+  return data.custom_collections;
+}
+
+/** スマートコレクション一覧を取得 */
+export async function listSmartCollections(
+  shop: string,
+  accessToken: string,
+  limit = 250,
+): Promise<ShopifyCollection[]> {
+  const data = await shopifyFetch<{ smart_collections: ShopifyCollection[] }>(
+    shop,
+    accessToken,
+    `smart_collections.json?limit=${limit}`,
+  );
+  return data.smart_collections;
+}
+
+/** 全コレクション（カスタム＋スマート）を取得 */
+export async function listAllCollections(
+  shop: string,
+  accessToken: string,
+): Promise<ShopifyCollection[]> {
+  const [custom, smart] = await Promise.all([
+    listCustomCollections(shop, accessToken),
+    listSmartCollections(shop, accessToken),
+  ]);
+  return [...custom, ...smart];
+}
 
 /** ページ詳細を取得 */
 export async function getPage(
@@ -243,7 +326,6 @@ export async function deletePage(
     { method: "DELETE" },
   );
 }
-
 // --- Theme API ---
 
 export interface ShopifyTheme {
