@@ -1,10 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import pg from "pg";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
-  pool: pg.Pool | undefined;
 };
 
 function createPrismaClient(): PrismaClient {
@@ -13,16 +11,13 @@ function createPrismaClient(): PrismaClient {
     throw new Error("DATABASE_URL environment variable is not set");
   }
 
-  // サーバーレス環境向けにコネクションプール制限
-  const pool = new pg.Pool({
+  // PoolConfig を直接渡す（@types/pg バージョン不一致回避）
+  const adapter = new PrismaPg({
     connectionString,
-    max: 2, // 最大接続数を制限
+    max: 2,
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 5000,
   });
-  globalForPrisma.pool = pool;
-
-  const adapter = new PrismaPg({ pool });
   return new PrismaClient({ adapter });
 }
 
