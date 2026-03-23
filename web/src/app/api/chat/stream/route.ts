@@ -42,6 +42,67 @@ function extractText(content: string | ContentBlock[]): string {
     .join("\n");
 }
 
+// ── SSE (Server-Sent Events) ヘルパー ──
+// フロントエンドの useChat は data: JSON\n\n 形式を期待する
+
+const SSE_HEADERS = {
+  "Content-Type": "text/event-stream; charset=utf-8",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+} as const;
+
+class SSEWriter {
+  private encoder = new TextEncoder();
+  private controller: ReadableStreamDefaultController;
+  private closed = false;
+  /** ストリーム中に送った全テキストを蓄積 */
+  public accumulated = "";
+
+  constructor(controller: ReadableStreamDefaultController) {
+    this.controller = controller;
+  }
+
+  get isClosed() {
+    return this.closed;
+  }
+
+  /** テキストチャンクを content_delta イベントとして送信 */
+  sendText(text: string) {
+    if (this.closed) return;
+    this.accumulated += text;
+    this._write(`data: ${JSON.stringify({ type: "content_delta", text })}\n\n`);
+  }
+
+  /** エラーイベント送信 */
+  sendError(message: string, retryable = false) {
+    if (this.closed) return;
+    this._write(`data: ${JSON.stringify({ type: "error", message, retryable })}\n\n`);
+  }
+
+  /** 完了イベント送信 */
+  sendDone(extra?: { model?: string; usage?: unknown; incomplete?: boolean }) {
+    if (this.closed) return;
+    this._write(
+      `data: ${JSON.stringify({ type: "done", content: this.accumulated, ...extra })}\n\n`,
+    );
+  }
+
+  close() {
+    if (this.closed) return;
+    this.closed = true;
+    try { this.controller.close(); } catch { /* already closed */ }
+  }
+
+  private _write(chunk: string) {
+    if (this.closed) return;
+    try {
+      this.controller.enqueue(this.encoder.encode(chunk));
+    } catch {
+      this.closed = true;
+    }
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { messages, conversationId, pageType, urlAnalysis } =
@@ -107,153 +168,116 @@ export async function POST(request: Request) {
 
     // ── DDP パイプライン（新規ページ生成時のみ。Enhanceモードはレガシーパスへ） ──
     if (isPageGenerationRequest && !linkedPage) {
+      console.log("[Stream API] Using DDP pipeline for page generation");
+
+      const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
+      let ddpSucceeded = false;
+
+      // Brand Memory 取得
+      let brandMemoryData;
       try {
-        console.log("[Stream API] Using DDP pipeline for page generation");
-
-        // サイト全体構築リクエストかどうか判定
-        const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
-
-        // Brand Memory 取得
-        let brandMemoryData;
-        try {
-          const bm = await getActiveBrandMemory();
-          if (bm) {
-            brandMemoryData = {
-              primaryColor: bm.primaryColor,
-              secondaryColor: bm.secondaryColor,
-              accentColor: bm.accentColor,
-              primaryFont: bm.primaryFont,
-              bodyFont: bm.bodyFont,
-              voiceTone: bm.voiceTone,
-              copyKeywords: bm.copyKeywords,
-              avoidKeywords: bm.avoidKeywords,
-            };
-          }
-        } catch { /* non-fatal */ }
-
-        // DDPInput 構築
-        const ddpInput = buildDDPInput(
-          latestUserText,
-          pageType,
-          urlAnalysis,
-          brandMemoryData,
-        );
-
-        // サイト全体構築の場合、最初のページはトップページ
-        if (isSiteBuildRequest) {
-          ddpInput.pageType = "landing";
+        const bm = await getActiveBrandMemory();
+        if (bm) {
+          brandMemoryData = {
+            primaryColor: bm.primaryColor,
+            secondaryColor: bm.secondaryColor,
+            accentColor: bm.accentColor,
+            primaryFont: bm.primaryFont,
+            bodyFont: bm.bodyFont,
+            voiceTone: bm.voiceTone,
+            copyKeywords: bm.copyKeywords,
+            avoidKeywords: bm.avoidKeywords,
+          };
         }
+      } catch { /* non-fatal */ }
 
-        // ── リアルタイムストリーミング DDP ──
-        const encoder = new TextEncoder();
-        let streamClosed = false;
+      // DDPInput 構築
+      const ddpInput = buildDDPInput(latestUserText, pageType, urlAnalysis, brandMemoryData);
+      if (isSiteBuildRequest) ddpInput.pageType = "landing";
 
+      // ── DDP をまず同期的に実行し、完了後に SSE ストリームで結果を返す ──
+      // こうすることで、DDP 失敗時にレガシーパスへフォールバックできる（C-2修正）
+      try {
+        const ddpResult = await runDDP(ddpInput, undefined, (event) => {
+          // Progress は console.log のみ（DDPは同期実行）
+          if (event.stage === "spec" && event.status === "complete") {
+            const spec = "spec" in event ? event.spec : null;
+            if (spec) console.log("[DDP] Spec complete:", spec.designPhilosophy.slice(0, 60));
+          } else if (event.stage === "section" && event.status === "complete") {
+            const id = "sectionId" in event ? event.sectionId : "?";
+            console.log("[DDP] Section complete:", id);
+          }
+        });
+
+        ddpSucceeded = true;
+        console.log("[DDP] Pipeline success. Streaming result via SSE...");
+
+        // SSE ストリームで結果を返す
         const stream = new ReadableStream({
           async start(controller) {
-            const send = (text: string) => {
-              if (streamClosed) return;
+            const sse = new SSEWriter(controller);
+
+            // 進捗サマリーテキスト
+            if (isSiteBuildRequest) {
+              sse.sendText("承知しました！サイト全体を構築していきますね。\n\n");
+              sse.sendText("まずはトップページから作成していきます。\n\n");
+            } else {
+              sse.sendText("ページをデザインしました。\n\n");
+            }
+
+            sse.sendText(`**デザイン方針**: ${ddpResult.spec?.designPhilosophy || ""}\n`);
+            sse.sendText(`**配色**: ${ddpResult.spec?.colors?.reasoning || ""}\n`);
+            sse.sendText(`**セクション構成**: ${ddpResult.spec?.sections?.length || 0}セクション\n\n`);
+
+            // 完成 HTML を PAGE_START/PAGE_END マーカー付きで送信
+            sse.sendText(`---PAGE_START---\n`);
+
+            const doc = ddpResult.fullDocument;
+            const chunkSize = 500;
+            for (let i = 0; i < doc.length; i += chunkSize) {
+              if (sse.isClosed) break;
+              sse.sendText(doc.slice(i, i + chunkSize));
+              await new Promise((r) => setTimeout(r, 3));
+            }
+
+            sse.sendText(`\n---PAGE_END---\n`);
+
+            if (isSiteBuildRequest) {
+              sse.sendText(`\nトップページが完成しました！プレビューでご確認ください。\n\n`);
+              sse.sendText(`続けて他のページも作成できます。例えば：\n`);
+              sse.sendText(`・「コレクションページを作成してください」\n`);
+              sse.sendText(`・「商品詳細ページを作成してください」\n`);
+              sse.sendText(`・「ブランドストーリーページを作成してください」\n\n`);
+              sse.sendText(`どのページを次に作成しましょうか？`);
+            }
+
+            sse.sendDone({ model: DEFAULT_MODEL || "claude-sonnet-4-20250514" });
+            sse.close();
+
+            // DB保存（ストリーム外で非同期）
+            if (conversationId) {
               try {
-                controller.enqueue(encoder.encode(text));
-              } catch {
-                streamClosed = true;
+                await saveMessage(conversationId, "assistant", sse.accumulated, {
+                  model: DEFAULT_MODEL || "claude-sonnet-4-20250514",
+                });
+              } catch (e) {
+                console.error("[Stream API] Failed to save DDP assistant message:", e);
               }
-            };
-
-            try {
-              // 自然な会話メッセージから開始
-              if (isSiteBuildRequest) {
-                send("承知しました！サイト全体を構築していきますね。\n\n");
-                send("まずはトップページから作成していきます。\n\n");
-              } else {
-                send("ページをデザインしています...\n\n");
-              }
-
-              const result = await runDDP(ddpInput, undefined, (event) => {
-                if (streamClosed) return;
-                if (event.stage === "spec" && event.status === "start") {
-                  send("🎨 デザイン設計図を作成中...\n");
-                } else if (event.stage === "spec" && event.status === "complete") {
-                  const spec = (event as any).spec;
-                  if (spec) {
-                    send(`✅ デザイン方針: ${spec.designPhilosophy}\n`);
-                    send(`   配色: ${spec.colors.reasoning}\n`);
-                    send(`   セクション: ${spec.sections.length}個\n\n`);
-                  }
-                } else if (event.stage === "section" && event.status === "start") {
-                  const sectionId = (event as any).sectionId;
-                  const index = (event as any).index;
-                  const total = (event as any).total;
-                  send(`🔨 セクション ${index + 1}/${total} (${sectionId}) を構築中...\n`);
-                } else if (event.stage === "section" && event.status === "complete") {
-                  const sectionId = (event as any).sectionId;
-                  send(`✅ ${sectionId} 完成\n`);
-                } else if (event.stage === "assembly" && event.status === "start") {
-                  send(`\n⚙️ ページを組み立て中...\n`);
-                } else if (event.stage === "assembly" && event.status === "complete") {
-                  send(`✅ 組み立て完了\n\n`);
-                }
-              });
-
-              // 完成したHTMLを ---PAGE_START---/---PAGE_END--- マーカー付きで送信
-              send(`\n---PAGE_START---\n`);
-
-              const doc = result.fullDocument;
-              const chunkSize = 500;
-              for (let i = 0; i < doc.length; i += chunkSize) {
-                if (streamClosed) break;
-                send(doc.slice(i, i + chunkSize));
-                await new Promise((r) => setTimeout(r, 5));
-              }
-
-              send(`\n---PAGE_END---\n`);
-
-              // サイト全体構築の場合、次のステップを案内
-              if (isSiteBuildRequest) {
-                send(`\nトップページが完成しました！プレビューでご確認ください。\n\n`);
-                send(`続けて他のページも作成できます。例えば：\n`);
-                send(`・「コレクションページを作成してください」\n`);
-                send(`・「商品詳細ページを作成してください」\n`);
-                send(`・「ブランドストーリーページを作成してください」\n\n`);
-                send(`どのページを次に作成しましょうか？`);
-              }
-
-              // Save assistant message to DB
-              const siteGuide = isSiteBuildRequest
-                ? `\n\nトップページが完成しました！続けて他のページも作成できます。例えば「コレクションページを作成してください」「商品詳細ページを作成してください」など、お気軽にお声がけください。`
-                : "";
-              const fullResponse = `ページをデザインしました。\n\n**デザイン方針**: ${result.spec?.designPhilosophy || ""}\n**配色**: ${result.spec?.colors?.reasoning || ""}\n**セクション構成**: ${result.spec?.sections?.length || 0}セクション\n\n---PAGE_START---\n${result.fullDocument}\n---PAGE_END---${siteGuide}`;
-              if (conversationId) {
-                try {
-                  await saveMessage(conversationId, "assistant", fullResponse, {
-                    model: DEFAULT_MODEL || "claude-sonnet-4-20250514",
-                  });
-                } catch (e) {
-                  console.error("[Stream API] Failed to save assistant message:", e);
-                }
-              }
-            } catch (err) {
-              console.error("[Stream API] DDP pipeline error:", err);
-              send(`\nエラーが発生しました。レガシーエンジンにフォールバックします...\n`);
-            }
-
-            if (!streamClosed) {
-              try { controller.close(); } catch { /* already closed */ }
             }
           },
-          cancel() {
-            streamClosed = true;
-          },
+          cancel() { /* aborted by client */ },
         });
 
-        return new Response(stream, {
-          headers: {
-            "Content-Type": "text/plain; charset=utf-8",
-            "Cache-Control": "no-cache",
-          },
-        });
+        return new Response(stream, { headers: SSE_HEADERS });
       } catch (err) {
         console.error("[Stream API] DDP pipeline failed, falling back to legacy:", err);
-        // Fall through to legacy streaming
+        // ddpSucceeded remains false → fall through to legacy streaming
+      }
+
+      // DDP が失敗した場合のみレガシーパスへフォールバック
+      if (ddpSucceeded) {
+        // Should not reach here (returned above), but just in case
+        return new Response("DDP completed", { status: 200 });
       }
     }
 
@@ -346,72 +370,101 @@ export async function POST(request: Request) {
     // Resolve the model identifier for @ai-sdk/anthropic
     const modelId = DEFAULT_MODEL || "claude-sonnet-4-20250514";
 
-    console.log("[Stream API] Calling Claude via Vercel AI SDK...", {
-      model: modelId,
-      maxOutputTokens: DEFAULT_MAX_TOKENS,
-      messageCount: aiMessages.length,
-      systemPromptLength: systemPrompt.length,
-    });
-
-    // === Vercel AI SDK streamText ===
     // Enhance モードでは既存HTML全体を再出力するため、トークン上限を引き上げ
     const maxTokens = linkedPage
       ? Math.max(DEFAULT_MAX_TOKENS, 32768)
       : DEFAULT_MAX_TOKENS;
 
-    const result = streamText({
+    console.log("[Stream API] Calling Claude via Vercel AI SDK...", {
+      model: modelId,
+      maxOutputTokens: maxTokens,
+      messageCount: aiMessages.length,
+      systemPromptLength: systemPrompt.length,
+      enhanceMode: !!linkedPage,
+    });
+
+    // === Vercel AI SDK streamText → SSE ストリーム変換 ===
+    const aiResult = streamText({
       model: anthropic(modelId),
       system: systemPrompt,
       messages: aiMessages,
       maxOutputTokens: maxTokens,
-      // onFinish callback for DB persistence and post-processing
-      async onFinish({ text, usage }) {
-        console.log("[Stream API] Stream completed:", {
-          contentLength: text.length,
-          usage,
-        });
+    });
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sse = new SSEWriter(controller);
+
+        try {
+          // textStream を SSE content_delta イベントに変換
+          for await (const chunk of aiResult.textStream) {
+            if (sse.isClosed) break;
+            sse.sendText(chunk);
+          }
+
+          // usage情報を取得
+          const usage = await aiResult.usage;
+          const hasPageMarker = sse.accumulated.includes("---PAGE_START---");
+          const isIncomplete = hasPageMarker && !sse.accumulated.includes("---PAGE_END---");
+
+          sse.sendDone({
+            model: modelId,
+            usage,
+            incomplete: isIncomplete,
+          });
+        } catch (err) {
+          console.error("[Stream API] Stream error:", err);
+          sse.sendError(
+            err instanceof Error ? err.message : "ストリーミングエラー",
+            true,
+          );
+        } finally {
+          sse.close();
+        }
+
+        // ── Post-stream: DB保存 & 後処理 ──
+        const fullText = sse.accumulated;
+        console.log("[Stream API] Stream completed:", { contentLength: fullText.length });
 
         // Save assistant message to DB
-        if (conversationId && text) {
+        if (conversationId && fullText) {
           try {
-            await saveMessage(conversationId, "assistant", text, {
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
+            await saveMessage(conversationId, "assistant", fullText, {
               model: modelId,
             });
           } catch (e) {
-            console.error(
-              "[Stream API] Failed to save assistant message:",
-              e,
-            );
+            console.error("[Stream API] Failed to save assistant message:", e);
           }
         }
 
         // ── Enhance モード: 生成されたHTMLをページに自動保存 ──
-        if (linkedPage && text.includes("---PAGE_START---")) {
+        if (linkedPage && fullText.includes("---PAGE_START---")) {
           try {
             const startMarker = "---PAGE_START---";
             const endMarker = "---PAGE_END---";
-            const startIdx = text.indexOf(startMarker) + startMarker.length;
-            const endIdx = text.indexOf(endMarker);
+            const startIdx = fullText.indexOf(startMarker) + startMarker.length;
+            const endIdx = fullText.indexOf(endMarker);
             if (endIdx > startIdx) {
-              const generatedHtml = text.slice(startIdx, endIdx).trim();
-              // HTML と CSS を分離
-              const styleMatch = generatedHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-              const css = styleMatch ? styleMatch[1].trim() : "";
-              const html = generatedHtml.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").trim();
+              const generatedBlock = fullText.slice(startIdx, endIdx).trim();
+              // HTML と CSS を分離（W-2修正: /gi で全 style タグを matchAll）
+              const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+              const styleMatches = [...generatedBlock.matchAll(styleRegex)];
+              const css = styleMatches.map((m) => m[1].trim()).join("\n");
+              // W-1修正: html フィールドには style 除去後のHTMLを保存し重複を防ぐ
+              const htmlOnly = generatedBlock.replace(styleRegex, "").trim();
 
               await prisma.page.update({
                 where: { id: linkedPage.id },
                 data: {
-                  html: generatedHtml, // 完全なHTML（styleタグ含む）
-                  css: css || linkedPage.css, // CSSが抽出できた場合は更新
+                  html: htmlOnly,
+                  css: css || linkedPage.css,
                   updatedAt: new Date(),
                 },
               });
               console.log("[Stream API] Enhanced page HTML auto-saved", {
                 pageId: linkedPage.id,
-                htmlLength: generatedHtml.length,
+                htmlLength: htmlOnly.length,
+                cssLength: css.length,
               });
             }
           } catch (e) {
@@ -420,36 +473,27 @@ export async function POST(request: Request) {
         }
 
         // ── Brand Memory: ページ生成から学習 ──
-        if (designContext && text.includes("---PAGE_START---")) {
+        if (designContext && fullText.includes("---PAGE_START---")) {
           try {
             await fetch(
-              new URL(
-                "/api/brand-memory?action=learn-from-page",
-                request.url,
-              ).href,
+              new URL("/api/brand-memory?action=learn-from-page", request.url).href,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  templateId: isGen3
-                    ? (designContext as any).templateId
-                    : null,
+                  templateId: isGen3 ? (designContext as any).templateId : null,
                   pageType: designContext.pageType,
                   tones: designContext.tones,
                 }),
               },
             );
-          } catch {
-            /* non-fatal */
-          }
+          } catch { /* non-fatal */ }
         }
       },
+      cancel() { /* aborted by client */ },
     });
 
-    // Return the AI SDK's streaming response
-    // The toDataStreamResponse() method creates SSE-compatible output
-    // that works with the useChat() hook on the frontend
-    return result.toTextStreamResponse();
+    return new Response(stream, { headers: SSE_HEADERS });
   } catch (error) {
     console.error("[Stream API] Top-level error:", error);
     return new Response(

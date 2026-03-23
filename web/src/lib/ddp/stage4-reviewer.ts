@@ -150,12 +150,18 @@ export async function reviewPage(
   input?: DDPInput,
 ): Promise<ReviewResult> {
   const systemPrompt = buildReviewerPrompt(input);
-  const userPrompt = `以下のECサイトページをレビューしてください。\n\n${fullDocument.slice(0, 12000)}`;
+  // C-3修正: 12000文字で切り詰めるとページ後半（footer, CTA等）がレビューから漏れる
+  // HTMLを要約: 連続する空白行を圧縮し、コメントを除去してからトリム
+  const compactedDoc = fullDocument
+    .replace(/<!--[\s\S]*?-->/g, "")        // HTMLコメント除去
+    .replace(/\n{3,}/g, "\n\n")             // 3行以上の空行を2行に
+    .replace(/  +/g, " ");                  // 連続スペースを1つに
+  const userPrompt = `以下のECサイトページをレビューしてください。\n\n${compactedDoc.slice(0, 30000)}`;
 
   try {
     const response = await client.messages.create({
       model: config.specModel,
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
     });

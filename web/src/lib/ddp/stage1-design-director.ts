@@ -11,7 +11,7 @@
 // ============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { DesignSpec, DDPInput, DDPConfig, DEFAULT_DDP_CONFIG } from "./types";
+import type { DesignSpec, DDPInput, DDPConfig } from "./types";
 import { ecommerceEngine } from "./engines/ecommerce";
 import { classifyImages, buildImageStrategyPrompt } from "./media-strategy";
 import type { EngineContext } from "./engines/types";
@@ -200,9 +200,7 @@ function buildDirectorUserPrompt(input: DDPInput): string {
       if (strategyPrompt) {
         parts.push(strategyPrompt);
       }
-      // 戦略をメタデータとして保存（後段のステージで参照）
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (input as any).__mediaStrategy = strategy;
+      // メディア戦略はpipeline.tsで直接計算されるため、ここでの保存は不要
     }
   }
 

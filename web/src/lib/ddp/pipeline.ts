@@ -14,6 +14,7 @@ import { generateDesignSpec } from "./stage1-design-director";
 import { renderAllSections } from "./stage2-section-artisan";
 import { assembleAndValidate } from "./stage3-harmony-assembler";
 import { reviewPage } from "./stage4-reviewer";
+import { classifyImages } from "./media-strategy";
 import type {
   DDPInput,
   DDPConfig,
@@ -56,6 +57,26 @@ export async function runDDP(
     finalConfig.sectionModel = process.env.CLAUDE_MODEL_DEFAULT;
   }
 
+  // W-4修正: パイプライン全体のタイムアウトを実装
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(
+      () => reject(new Error(`DDP pipeline timed out after ${finalConfig.timeoutMs}ms`)),
+      finalConfig.timeoutMs,
+    );
+  });
+
+  return Promise.race([
+    _runDDPInternal(input, finalConfig, onProgress),
+    timeoutPromise,
+  ]);
+}
+
+/** 内部実装 — タイムアウトは runDDP で制御 */
+async function _runDDPInternal(
+  input: DDPInput,
+  finalConfig: DDPConfig,
+  onProgress?: (event: DDPProgressEvent) => void,
+): Promise<AssembledPageResult> {
   const client = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
   });
@@ -78,6 +99,12 @@ export async function runDDP(
       philosophy: spec.designPhilosophy.slice(0, 80),
     });
     onProgress?.({ stage: "spec", status: "complete", spec });
+
+    // W-5修正: Stage 1 が成功してもセクションが空の場合はフォールバック
+    if (!spec.sections || spec.sections.length === 0) {
+      console.warn("[DDP] Stage 1 returned empty sections, injecting fallback");
+      spec.sections = createFallbackSpec(input).sections;
+    }
   } catch (err) {
     console.error("[DDP] Stage 1 failed:", err);
     // Fallback: create a minimal spec
@@ -112,8 +139,10 @@ export async function runDDP(
   // ── Stage 3: Harmony Assembler ──
   onProgress?.({ stage: "assembly", status: "start" });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mediaStrategy = (input as any).__mediaStrategy;
+  // W-6修正: mediaStrategy を型安全に計算（input への as any 書き込みを廃止）
+  const mediaStrategy = input.urlAnalysis?.images?.length
+    ? classifyImages(input.urlAnalysis.images, input.industry)
+    : undefined;
   const result = assembleAndValidate(spec, sections, mediaStrategy);
 
   console.log("[DDP] Stage 3 complete:", {
