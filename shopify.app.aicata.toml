@@ -2,8 +2,8 @@
 
 client_id = "53179e11fd3ee1fe63da60fff98692c5"
 name = "Aicata"
-application_url = "https://localhost"
-embedded = true
+application_url = "https://aicata.vercel.app"
+embedded = false
 
 [build]
 automatically_update_urls_on_dev = false
@@ -18,6 +18,6 @@ scopes = "read_analytics,read_content,read_orders,read_products,read_themes,writ
 
 [auth]
 redirect_urls = [
-  "https://localhost/auth/callback",
+  "https://aicata.vercel.app/api/shopify/callback",
   "http://localhost:3000/api/shopify/callback"
 ]
