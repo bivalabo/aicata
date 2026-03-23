@@ -88,13 +88,13 @@ async function fetchTemplatePreview(
 }
 
 const PAGE_CREATION_TEMPLATES: Record<string, string> = {
-  "トップページを新しく作りたい": "landing",
-  "トップページを作成して": "landing",
-  "商品を魅力的に紹介するページ": "product",
-  "商品コレクション（カテゴリー）ページ": "collection",
-  "カートページのデザイン": "cart",
-  "ランディングページを作り": "landing",
-  "私たちについて": "about",
+  "ããããã¼ã¸ãæ°ããä½ããã": "landing",
+  "ããããã¼ã¸ãä½æãã¦": "landing",
+  "ååãé­åçã«ç´¹ä»ãããã¼ã¸": "product",
+  "ååã³ã¬ã¯ã·ã§ã³ï¼ã«ãã´ãªã¼ï¼ãã¼ã¸": "collection",
+  "ã«ã¼ããã¼ã¸ã®ãã¶ã¤ã³": "cart",
+  "ã©ã³ãã£ã³ã°ãã¼ã¸ãä½ã": "landing",
+  "ç§ãã¡ã«ã¤ãã¦": "about",
 };
 
 const URL_PATTERN = /https?:\/\/[^\s]+/;
@@ -129,10 +129,10 @@ function ShopifyConnectionBanner({
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[13px] font-medium text-green-800">
-            Shopifyストアを接続するとデプロイできます
+            Shopifyã¹ãã¢ãæ¥ç¶ããã¨ããã­ã¤ã§ãã¾ã
           </p>
           <p className="text-[11px] text-green-600 mt-0.5">
-            作成したページをワンクリックでストアに公開
+            ä½æãããã¼ã¸ãã¯ã³ã¯ãªãã¯ã§ã¹ãã¢ã«å¬é
           </p>
         </div>
         <a
@@ -140,7 +140,7 @@ function ShopifyConnectionBanner({
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold text-white bg-gradient-to-r from-green-500 to-emerald-500 hover:shadow-md hover:shadow-green-500/20 transition-all shrink-0"
         >
           <ExternalLink className="w-3 h-3" />
-          接続する
+          æ¥ç¶ãã
         </a>
         <button
           onClick={onDismiss}
@@ -188,7 +188,7 @@ export default function ChatView({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // ── Shopify Connection ──
+  // ââ Shopify Connection ââ
   const { storeInfo, loading: shopifyLoading } = useShopifyConnection();
   const [shopifyBannerDismissed, setShopifyBannerDismissed] = useState(false);
   const showShopifyBanner =
@@ -196,12 +196,12 @@ export default function ChatView({
     storeInfo &&
     !storeInfo.connected &&
     !shopifyBannerDismissed &&
-    messages.length > 0; // ページ生成後に表示
+    messages.length > 0; // ãã¼ã¸çæå¾ã«è¡¨ç¤º
 
-  // ── Rebuild Flow Modal ──
+  // ââ Rebuild Flow Modal ââ
   const [showRebuildFlow, setShowRebuildFlow] = useState(false);
 
-  // ── Onboarding state ──
+  // ââ Onboarding state ââ
   const [onboardingType, setOnboardingType] = useState<string | null>(null);
   useEffect(() => {
     const handler = (e: Event) => {
@@ -214,7 +214,7 @@ export default function ChatView({
     return () => window.removeEventListener("aicata:start-onboarding", handler);
   }, []);
 
-  // ── Brand Memory ──
+  // ââ Brand Memory ââ
   const [brandMemoryHint, setBrandMemoryHint] = useState<BrandMemoryHint | null>(null);
   useEffect(() => {
     fetch("/api/brand-memory")
@@ -235,7 +235,7 @@ export default function ChatView({
   const [currentPageType, setCurrentPageType] = useState<string | null>(null);
   const [isAnalyzingUrl, setIsAnalyzingUrl] = useState(false);
 
-  // ストリーミング状態の変化を親コンポーネントに通知
+  // ã¹ããªã¼ãã³ã°ç¶æã®å¤åãè¦ªã³ã³ãã¼ãã³ãã«éç¥
   useEffect(() => {
     onStreamingChange?.(isStreaming);
   }, [isStreaming, onStreamingChange]);
@@ -261,6 +261,22 @@ export default function ChatView({
           }
         }
       }
+
+        // ── 続き生成の結合: PAGE_START がないが、前のメッセージに不完全なページがある ──
+        if (i === messages.length - 1 && !msg.content.includes("---PAGE_START---")) {
+          for (let j = i - 1; j >= 0; j--) {
+            const prevMsg = messages[j];
+            if (prevMsg.role === "assistant" && prevMsg.content.includes("---PAGE_START---") && !prevMsg.content.includes("---PAGE_END---")) {
+              const combinedContent = prevMsg.content + "\n" + msg.content + "\n---PAGE_END---";
+              const data = extractPageData(combinedContent);
+              if (data) {
+                onPageUpdate(data);
+                return;
+              }
+              break;
+            }
+          }
+        }
     }
   }, [messages, onPageUpdate]);
 
@@ -351,31 +367,31 @@ export default function ChatView({
     [handleSend],
   );
 
-  // WelcomeScreen: "新しいサイトを作成" or "リビルド"
+  // WelcomeScreen: "æ°ãããµã¤ããä½æ" or "ãªãã«ã"
   const handleStartSiteBuild = useCallback(
     (mode: "new" | "rebuild", url?: string) => {
       if (mode === "new") {
-        // 新しいサイト構築 → オンボーディング
+        // æ°ãããµã¤ãæ§ç¯ â ãªã³ãã¼ãã£ã³ã°
         setCurrentPageType("landing");
         setOnboardingType("site-build");
       } else if (mode === "rebuild") {
-        // リビルド → ビジュアルサイトマップフローを開く
+        // ãªãã«ã â ãã¸ã¥ã¢ã«ãµã¤ãããããã­ã¼ãéã
         setShowRebuildFlow(true);
       }
     },
     [],
   );
 
-  // SiteRebuildFlow完了
+  // SiteRebuildFlowå®äº
   const handleRebuildComplete = useCallback(
     (analyzedPages: any[], context: any) => {
       setShowRebuildFlow(false);
-      // 完了通知 — ページはDBに保存済みなので、チャットで案内
+      // å®äºéç¥ â ãã¼ã¸ã¯DBã«ä¿å­æ¸ã¿ãªã®ã§ããã£ããã§æ¡å
       const pageCount = analyzedPages.length;
       const types = [...new Set(analyzedPages.map((p: any) => p.pageType))];
-      const summary = `サイトのリビルドが完了しました！${pageCount}ページを生成しました（${types.join("、")}）。サイトマップ画面で確認できます。`;
+      const summary = `ãµã¤ãã®ãªãã«ããå®äºãã¾ããï¼${pageCount}ãã¼ã¸ãçæãã¾ããï¼${types.join("ã")}ï¼ããµã¤ããããç»é¢ã§ç¢ºèªã§ãã¾ãã`;
 
-      // リビルド完了メッセージとしてチャットに表示
+      // ãªãã«ãå®äºã¡ãã»ã¼ã¸ã¨ãã¦ãã£ããã«è¡¨ç¤º
       handleSend(summary);
     },
     [handleSend],
@@ -400,7 +416,7 @@ export default function ChatView({
     if (hasPageData(content)) {
       const stripped = stripPageMarkers(content);
       if (stripped.trim()) return stripped;
-      return "ページをプレビューに反映しました。右側のプレビューパネルでご確認ください。";
+      return "ãã¼ã¸ããã¬ãã¥ã¼ã«åæ ãã¾ãããå³å´ã®ãã¬ãã¥ã¼ããã«ã§ãç¢ºèªãã ããã";
     }
 
     const trimmed = content.trim();
@@ -428,7 +444,7 @@ export default function ChatView({
         })
         .join("\n")
         .trim();
-      return textParts || "ページの生成を続行しています。プレビューパネルで確認できます。";
+      return textParts || "ãã¼ã¸ã®çæãç¶è¡ãã¦ãã¾ãããã¬ãã¥ã¼ããã«ã§ç¢ºèªã§ãã¾ãã";
     }
 
     return content;
@@ -481,12 +497,12 @@ export default function ChatView({
         )}
       </div>
 
-      {/* ── Shopify 未接続バナー ── */}
+      {/* ââ Shopify æªæ¥ç¶ããã¼ ââ */}
       {showShopifyBanner && (
         <ShopifyConnectionBanner onDismiss={() => setShopifyBannerDismissed(true)} />
       )}
 
-      {/* ── 不完全な生成の検出 + 続行バナー ── */}
+      {/* ââ ä¸å®å¨ãªçæã®æ¤åº + ç¶è¡ããã¼ ââ */}
       {!isStreaming && messages.length > 0 && (() => {
         const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
         if (!lastAssistant) return null;
@@ -503,20 +519,28 @@ export default function ChatView({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-medium text-amber-800">
-                  ページの生成が途中で止まっています
+                  ãã¼ã¸ã®çæãéä¸­ã§æ­¢ã¾ã£ã¦ãã¾ã
                 </p>
                 <p className="text-[11px] text-amber-600 mt-0.5">
-                  ネットワーク状況やサーバー負荷により中断された可能性があります
+                  ãããã¯ã¼ã¯ç¶æ³ããµã¼ãã¼è² è·ã«ããä¸­æ­ãããå¯è½æ§ãããã¾ã
                 </p>
               </div>
               <button
-                onClick={() => handleSend(
-                  "前回のページ生成が途中で中断されました。まず「ページの続きを生成します」と一言述べてから、前回の中断箇所の続きとして ---PAGE_START--- から ---PAGE_END--- まで完全なページを再生成してください。",
-                )}
+                onClick={() => {
+                  const pageStartIdx = lastAssistant.content.indexOf("---PAGE_START---");
+                  const partialHtml = pageStartIdx >= 0
+                    ? lastAssistant.content.slice(pageStartIdx + "---PAGE_START---".length)
+                    : "";
+                  const lastChunk = partialHtml.slice(-200).trim();
+                  const continuationMsg = lastChunk
+                    ? `前回のページ生成が途中で中断されました。以下が中断直前のコードの末尾です:\n\`\`\`\n${lastChunk}\n\`\`\`\nこの続きからコードを出力してください。前回の途中から再開し、残りのHTML/CSSを出力して最後に ---PAGE_END--- で閉じてください。`
+                    : "前回のページ生成が途中で中断されました。---PAGE_START--- から ---PAGE_END--- まで完全なページを再生成してください。";
+                  handleSend(continuationMsg);
+                }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-md hover:shadow-amber-500/20 transition-all shrink-0"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                続きを生成
+                ç¶ããçæ
               </button>
             </div>
           </div>
@@ -539,7 +563,7 @@ export default function ChatView({
             <div className="relative w-5 h-5 shrink-0">
               <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-accent border-r-accent/30 animate-spin" style={{ animationDuration: "1s" }} />
             </div>
-            <span className="text-[13px] text-accent font-medium">サイトを分析中...</span>
+            <span className="text-[13px] text-accent font-medium">ãµã¤ããåæä¸­...</span>
           </div>
         </div>
       )}
@@ -553,7 +577,7 @@ export default function ChatView({
                 <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-accent border-r-accent/30 animate-spin" style={{ animationDuration: "1s" }} />
               </div>
               <span className="text-[13px] text-accent font-medium">
-                デザインを構築中...プレビューに反映されます
+                ãã¶ã¤ã³ãæ§ç¯ä¸­...ãã¬ãã¥ã¼ã«åæ ããã¾ã
               </span>
             </div>
           ) : (
@@ -564,7 +588,7 @@ export default function ChatView({
         </div>
       )}
 
-      {/* Input — hide during onboarding */}
+      {/* Input â hide during onboarding */}
       {!showOnboarding && (
         <div className="max-w-2xl mx-auto w-full">
           <ChatInput
@@ -573,12 +597,12 @@ export default function ChatView({
             disabled={(showStreamingIndicator ?? false) || isAnalyzingUrl}
             placeholder={
               messages.length === 0
-                ? "Shopifyストアについて何でも相談してください..."
+                ? "Shopifyã¹ãã¢ã«ã¤ãã¦ä½ã§ãç¸è«ãã¦ãã ãã..."
                 : isAnalyzingUrl
-                  ? "サイトを分析中..."
+                  ? "ãµã¤ããåæä¸­..."
                   : isStreaming
-                    ? "Aicataが応答中..."
-                    : "メッセージを入力..."
+                    ? "Aicataãå¿ç­ä¸­..."
+                    : "ã¡ãã»ã¼ã¸ãå¥å..."
             }
             prefillMessage={pendingMessage}
             onPrefillConsumed={onPendingMessageConsumed}
@@ -586,7 +610,7 @@ export default function ChatView({
         </div>
       )}
 
-      {/* ── SiteRebuildFlow モーダル ── */}
+      {/* ââ SiteRebuildFlow ã¢ã¼ãã« ââ */}
       {showRebuildFlow && (
         <SiteRebuildFlow
           onClose={() => setShowRebuildFlow(false)}
