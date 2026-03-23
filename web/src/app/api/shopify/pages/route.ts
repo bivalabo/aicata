@@ -70,10 +70,8 @@ export async function GET() {
     // 既存の Shopify ID を追跡
     const existingShopifyIds = new Set(
       aicataPages
-        .filter(// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(p: any) => p.shopifyPageId)
-        .map(// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(p: any) => p.shopifyPageId),
+        .filter((p) => p.shopifyPageId)
+        .map((p) => p.shopifyPageId),
     );
 
     // ── 1. Shopify Pages (コンテンツページ) を同期 ──
@@ -180,8 +178,7 @@ export async function GET() {
     });
 
     return Response.json({
-      pages: allPages.map(// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(p: any) => ({
+      pages: allPages.map((p) => ({
         id: p.id,
         title: p.title,
         slug: p.slug,
@@ -209,8 +206,7 @@ export async function GET() {
         orderBy: { updatedAt: "desc" },
       });
       return Response.json({
-        pages: localPages.map(// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(p: any) => ({
+        pages: localPages.map((p) => ({
           id: p.id,
           title: p.title,
           slug: p.slug,
