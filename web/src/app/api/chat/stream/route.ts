@@ -12,6 +12,7 @@ import {
 import { saveMessage } from "@/lib/services/conversation-service";
 import { runDDP } from "@/lib/ddp";
 import type { DDPInput } from "@/lib/ddp";
+import { prisma } from "@/lib/db";
 
 // Next.js Route Segment Config — allow long-running streaming responses
 export const maxDuration = 300; // 5 minutes
@@ -76,14 +77,36 @@ export async function POST(request: Request) {
         content: extractText(m.content),
       }));
 
-    // ── ページ生成リクエストかどうか判定 ──
-    const isPageGenerationRequest = detectPageGenerationRequest(
-      latestUserText,
-      pageType,
-    );
+    // ── Enhance モード: 既存ページに紐づく会話か判定 ──
+    let linkedPage: { id: string; title: string; html: string; css: string; pageType: string } | null = null;
+    if (conversationId) {
+      try {
+        const page = await prisma.page.findFirst({
+          where: { conversationId },
+          select: { id: true, title: true, html: true, css: true, pageType: true },
+        });
+        if (page && page.html) {
+          linkedPage = page;
+          console.log("[Stream API] Enhance mode: linked page found", {
+            pageId: page.id,
+            title: page.title,
+            pageType: page.pageType,
+            htmlLength: page.html.length,
+          });
+        }
+      } catch (e) {
+        console.error("[Stream API] Failed to lookup linked page:", e);
+      }
+    }
 
-    // ── DDP パイプライン（ページ生成時） ──
-    if (isPageGenerationRequest) {
+    // ── ページ生成リクエストかどうか判定 ──
+    // Enhance モードの場合は常にページ生成として扱う
+    const isPageGenerationRequest = linkedPage
+      ? true
+      : detectPageGenerationRequest(latestUserText, pageType);
+
+    // ── DDP パイプライン（新規ページ生成時のみ。Enhanceモードはレガシーパスへ） ──
+    if (isPageGenerationRequest && !linkedPage) {
       try {
         console.log("[Stream API] Using DDP pipeline for page generation");
 
@@ -238,30 +261,39 @@ export async function POST(request: Request) {
     let systemPrompt: string;
     let designContext;
     let isGen3 = false;
-    try {
-      const result = buildSystemPrompt(
-        latestUserText,
-        conversationTexts,
-        urlAnalysis,
-        pageType,
-      );
-      systemPrompt = result.prompt;
-      designContext = result.context;
-      isGen3 = result.gen3;
-      console.log(`[Design Engine ${isGen3 ? "Gen-3" : "Gen-2"}]`, {
-        industry: designContext.industry,
-        pageType: designContext.pageType,
-        tones: designContext.tones,
-        ...(pageType ? { explicitPageType: pageType } : {}),
-        ...(urlAnalysis ? { urlAnalysisIncluded: true } : {}),
-        ...(result.gen3 ? { templateId: result.selectedTemplate?.id } : {}),
-        promptLength: systemPrompt.length,
-      });
-    } catch (e) {
-      console.error("[Design Engine] Prompt composition failed:", e);
-      systemPrompt =
-        "あなたはAicata — ShopifyストアのAIページビルダーです。ユーザーの要望に応じてHTML+CSSでページを生成してください。生成コードは ---PAGE_START--- と ---PAGE_END--- で囲んでください。HTMLを先に、最後に<style>タグでCSSをまとめてください。";
+
+    // ── Enhance モード: 既存HTMLを含む特別なプロンプト ──
+    if (linkedPage) {
+      console.log("[Stream API] Building enhance system prompt for page:", linkedPage.id);
+      systemPrompt = buildEnhanceSystemPrompt(linkedPage);
       designContext = null;
+      isGen3 = false;
+    } else {
+      try {
+        const result = buildSystemPrompt(
+          latestUserText,
+          conversationTexts,
+          urlAnalysis,
+          pageType,
+        );
+        systemPrompt = result.prompt;
+        designContext = result.context;
+        isGen3 = result.gen3;
+        console.log(`[Design Engine ${isGen3 ? "Gen-3" : "Gen-2"}]`, {
+          industry: designContext.industry,
+          pageType: designContext.pageType,
+          tones: designContext.tones,
+          ...(pageType ? { explicitPageType: pageType } : {}),
+          ...(urlAnalysis ? { urlAnalysisIncluded: true } : {}),
+          ...(result.gen3 ? { templateId: result.selectedTemplate?.id } : {}),
+          promptLength: systemPrompt.length,
+        });
+      } catch (e) {
+        console.error("[Design Engine] Prompt composition failed:", e);
+        systemPrompt =
+          "あなたはAicata — ShopifyストアのAIページビルダーです。ユーザーの要望に応じてHTML+CSSでページを生成してください。生成コードは ---PAGE_START--- と ---PAGE_END--- で囲んでください。HTMLを先に、最後に<style>タグでCSSをまとめてください。";
+        designContext = null;
+      }
     }
 
     // ── Brand Memory 注入 ──
@@ -322,11 +354,16 @@ export async function POST(request: Request) {
     });
 
     // === Vercel AI SDK streamText ===
+    // Enhance モードでは既存HTML全体を再出力するため、トークン上限を引き上げ
+    const maxTokens = linkedPage
+      ? Math.max(DEFAULT_MAX_TOKENS, 32768)
+      : DEFAULT_MAX_TOKENS;
+
     const result = streamText({
       model: anthropic(modelId),
       system: systemPrompt,
       messages: aiMessages,
-      maxOutputTokens: DEFAULT_MAX_TOKENS,
+      maxOutputTokens: maxTokens,
       // onFinish callback for DB persistence and post-processing
       async onFinish({ text, usage }) {
         console.log("[Stream API] Stream completed:", {
@@ -347,6 +384,38 @@ export async function POST(request: Request) {
               "[Stream API] Failed to save assistant message:",
               e,
             );
+          }
+        }
+
+        // ── Enhance モード: 生成されたHTMLをページに自動保存 ──
+        if (linkedPage && text.includes("---PAGE_START---")) {
+          try {
+            const startMarker = "---PAGE_START---";
+            const endMarker = "---PAGE_END---";
+            const startIdx = text.indexOf(startMarker) + startMarker.length;
+            const endIdx = text.indexOf(endMarker);
+            if (endIdx > startIdx) {
+              const generatedHtml = text.slice(startIdx, endIdx).trim();
+              // HTML と CSS を分離
+              const styleMatch = generatedHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+              const css = styleMatch ? styleMatch[1].trim() : "";
+              const html = generatedHtml.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").trim();
+
+              await prisma.page.update({
+                where: { id: linkedPage.id },
+                data: {
+                  html: generatedHtml, // 完全なHTML（styleタグ含む）
+                  css: css || linkedPage.css, // CSSが抽出できた場合は更新
+                  updatedAt: new Date(),
+                },
+              });
+              console.log("[Stream API] Enhanced page HTML auto-saved", {
+                pageId: linkedPage.id,
+                htmlLength: generatedHtml.length,
+              });
+            }
+          } catch (e) {
+            console.error("[Stream API] Failed to auto-save enhanced page:", e);
           }
         }
 
@@ -555,4 +624,67 @@ function extractKeywords(text: string): string[] {
     return bracketMatches.map((m) => m.replace(/[【】]/g, ""));
   }
   return [];
+}
+
+/**
+ * Enhance モード用システムプロンプト
+ * 既存ページのHTML/CSSを含め、ユーザーの改善要望に基づいて修正させる
+ */
+function buildEnhanceSystemPrompt(page: {
+  id: string;
+  title: string;
+  html: string;
+  css: string;
+  pageType: string;
+}): string {
+  const parts = [
+    "あなたはAicata — ShopifyストアのAIページビルダーです。",
+    "",
+    "## 現在のモード: 既存ページ改善モード",
+    "",
+    `ユーザーは既存ページ「${page.title}」（タイプ: ${page.pageType}）を改善しようとしています。`,
+    "以下が現在のページのHTML/CSSです。ユーザーの要望に基づいてこのページを改善してください。",
+    "",
+    "## 重要なルール",
+    "",
+    "1. **必ず改善後の完全なHTML+CSSを出力してください。** 部分的なコードや説明だけではなく、ページ全体を出力します。",
+    "2. **出力コードは必ず `---PAGE_START---` と `---PAGE_END---` で囲んでください。** これがないとプレビューに反映されません。",
+    "3. **既存のコンテンツ（テキスト、画像URL等）はできるだけ活かしてください。** デザインやレイアウトを改善しつつ、コンテンツは保持します。",
+    "4. HTMLを先に出力し、最後に `<style>` タグでCSSをまとめてください。",
+    "5. レスポンシブデザインを心がけてください。",
+    "6. モダンなCSS機能（Grid, Flexbox, CSS変数, アニメーション等）を活用してください。",
+    "7. まず簡潔に改善内容を説明し（2-3行程度）、その後にコードを出力してください。",
+    "",
+    "## 出力フォーマット例",
+    "",
+    "```",
+    "改善内容の説明（2-3行）",
+    "",
+    "---PAGE_START---",
+    "<div class=\"page-container\">",
+    "  <!-- 改善後のHTML -->",
+    "</div>",
+    "<style>",
+    "  /* 改善後のCSS */",
+    "</style>",
+    "---PAGE_END---",
+    "```",
+    "",
+    "## 現在のページHTML",
+    "",
+    "```html",
+    page.html,
+    "```",
+  ];
+
+  if (page.css && page.css.trim()) {
+    parts.push("");
+    parts.push("## 現在のページCSS");
+    parts.push("");
+    parts.push("```css");
+    parts.push(page.css);
+    parts.push("```");
+  }
+
+  return parts.join("\n");
 }
