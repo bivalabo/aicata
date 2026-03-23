@@ -1,7 +1,7 @@
 /**
  * Shopify ページ同期 API
  *
- * GET  /api/shopify/pages        — Shopifyからページ一覧を取得し、Aicata DBと同期
+ * GET  /api/shopify/pages        — Shopifyからページ・商品・コレクションを取得し、Aicata DBと同期
  * POST /api/shopify/pages        — Aicataで作成したページをShopifyにデプロイ
  */
 import { prisma } from "@/lib/db";
@@ -19,31 +19,67 @@ async function getConnectedStore() {
 }
 
 /**
- * GET: Shopifyからページ一覧を取得し、Aicata DBとマージして返す
+ * Shopify Pages の handle からページタイプを推定する
+ */
+function classifyPageType(handle: string, title: string): string {
+  const h = handle.toLowerCase();
+  const t = title.toLowerCase();
+
+  if (h.includes("contact") || t.includes("contact") || t.includes("お問い合わせ"))
+    return "contact";
+  if (h.includes("about") || t.includes("about") || t.includes("私たちについて"))
+    return "about";
+  if (h.includes("faq") || t.includes("faq") || t.includes("よくある質問"))
+    return "about";
+  if (h.includes("blog") || t.includes("blog"))
+    return "blog";
+  // デフォルトはコンテンツページ（generalだとユーティリティに分類されるため）
+  return "about";
+}
+
+/**
+ * GET: Shopifyからページ・商品・コレクションを取得し、Aicata DBとマージして返す
  */
 export async function GET() {
   try {
     const store = await getConnectedStore();
 
-    // Shopifyからページ一覧を取得
-    const shopifyPages = await shopify.listPages(store.shop, store.accessToken);
+    // Shopifyから並行で取得
+    const [shopifyPages, shopifyProducts, shopifyCollections] =
+      await Promise.all([
+        shopify.listPages(store.shop, store.accessToken),
+        shopify
+          .listProducts(store.shop, store.accessToken)
+          .catch((err) => {
+            console.warn("Products fetch failed (may lack scope):", err.message);
+            return [] as shopify.ShopifyProduct[];
+          }),
+        shopify
+          .listAllCollections(store.shop, store.accessToken)
+          .catch((err) => {
+            console.warn("Collections fetch failed (may lack scope):", err.message);
+            return [] as shopify.ShopifyCollection[];
+          }),
+      ]);
 
     // Aicata DB のページ一覧を取得
     const aicataPages = await prisma.page.findMany({
       orderBy: { updatedAt: "desc" },
     });
 
-    // Shopify側の新しいページをAicata DBに同期
+    // 既存の Shopify ID を追跡
     const existingShopifyIds = new Set(
       aicataPages
         .filter((p) => p.shopifyPageId)
         .map((p) => p.shopifyPageId),
     );
 
+    // ── 1. Shopify Pages (コンテンツページ) を同期 ──
     for (const sp of shopifyPages) {
       const spId = String(sp.id);
+      const pageType = classifyPageType(sp.handle, sp.title);
+
       if (!existingShopifyIds.has(spId)) {
-        // Shopifyにあるが Aicata にないページを追加
         await prisma.page.create({
           data: {
             title: sp.title,
@@ -54,16 +90,79 @@ export async function GET() {
             shopifyPageId: spId,
             shopifyPublished: !!sp.published_at,
             source: "shopify",
+            pageType,
           },
         });
       } else {
-        // 既存ページの情報を更新（Shopify側が新しい場合）
         await prisma.page.updateMany({
           where: { shopifyPageId: spId },
           data: {
             title: sp.title,
             slug: sp.handle,
             shopifyPublished: !!sp.published_at,
+            pageType,
+          },
+        });
+      }
+    }
+
+    // ── 2. Shopify Products (商品) を同期 ──
+    for (const prod of shopifyProducts) {
+      const prodId = `product_${prod.id}`;
+
+      if (!existingShopifyIds.has(prodId)) {
+        await prisma.page.create({
+          data: {
+            title: prod.title,
+            slug: prod.handle,
+            html: prod.body_html || "",
+            css: "",
+            status: prod.published_at ? "synced" : "draft",
+            shopifyPageId: prodId,
+            shopifyPublished: !!prod.published_at,
+            source: "shopify",
+            pageType: "product",
+          },
+        });
+      } else {
+        await prisma.page.updateMany({
+          where: { shopifyPageId: prodId },
+          data: {
+            title: prod.title,
+            slug: prod.handle,
+            shopifyPublished: !!prod.published_at,
+            pageType: "product",
+          },
+        });
+      }
+    }
+
+    // ── 3. Shopify Collections (コレクション) を同期 ──
+    for (const col of shopifyCollections) {
+      const colId = `collection_${col.id}`;
+
+      if (!existingShopifyIds.has(colId)) {
+        await prisma.page.create({
+          data: {
+            title: col.title,
+            slug: col.handle,
+            html: col.body_html || "",
+            css: "",
+            status: col.published_at ? "synced" : "draft",
+            shopifyPageId: colId,
+            shopifyPublished: !!col.published_at,
+            source: "shopify",
+            pageType: "collection",
+          },
+        });
+      } else {
+        await prisma.page.updateMany({
+          where: { shopifyPageId: colId },
+          data: {
+            title: col.title,
+            slug: col.handle,
+            shopifyPublished: !!col.published_at,
+            pageType: "collection",
           },
         });
       }
@@ -87,8 +186,14 @@ export async function GET() {
         updatedAt: p.updatedAt,
         createdAt: p.createdAt,
       })),
-      shopifyPageCount: shopifyPages.length,
+      shopifyPageCount:
+        shopifyPages.length + shopifyProducts.length + shopifyCollections.length,
       totalPageCount: allPages.length,
+      syncDetails: {
+        pages: shopifyPages.length,
+        products: shopifyProducts.length,
+        collections: shopifyCollections.length,
+      },
     });
   } catch (error) {
     if (error instanceof Error && error.message === "NOT_CONNECTED") {
@@ -154,8 +259,8 @@ export async function POST(request: Request) {
 
     let shopifyPage;
 
-    if (page.shopifyPageId) {
-      // 既存ページを更新
+    if (page.shopifyPageId && !page.shopifyPageId.startsWith("product_") && !page.shopifyPageId.startsWith("collection_")) {
+      // 既存ページを更新（Shopify Pages APIのみ）
       shopifyPage = await shopify.updatePage(
         store.shop,
         store.accessToken,
