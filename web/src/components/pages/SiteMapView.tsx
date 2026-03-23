@@ -11,9 +11,12 @@ import {
   Sparkles,
   Loader2,
   AlertCircle,
-  List,
   Map,
   Globe,
+  Search,
+  Table2,
+  ArrowUpDown,
+  X,
 } from "lucide-react";
 import clsx from "clsx";
 import SiteMapColumn from "./SiteMapColumn";
@@ -82,7 +85,13 @@ interface SiteMapViewProps {
 }
 
 // ── View modes ──
-type ViewMode = "board" | "canvas" | "list";
+type ViewMode = "board" | "canvas" | "table";
+
+// ── Filter / Sort ──
+type SortKey = "updatedAt" | "title" | "status" | "pageType";
+type SortDir = "asc" | "desc";
+type FilterSource = "all" | "shopify" | "aicata";
+type FilterStatus = "all" | "published" | "draft";
 
 export default function SiteMapView({
   onNavigateToChat,
@@ -99,6 +108,11 @@ export default function SiteMapView({
   const [shopSlug, setShopSlug] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterSource, setFilterSource] = useState<FilterSource>("all");
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("updatedAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [showRebuildFlow, setShowRebuildFlow] = useState(false);
   // ── Toast notification ──
   const [toast, setToast] = useState<{
@@ -317,6 +331,64 @@ export default function SiteMapView({
     (p) => p.hasHtml && p.source === "aicata",
   ).length;
 
+  // ── Filtered & sorted pages ──
+
+  const filteredPages = useMemo(() => {
+    let result = [...pages];
+
+    // Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          (p.slug && p.slug.toLowerCase().includes(q)),
+      );
+    }
+
+    // Filter by source
+    if (filterSource !== "all") {
+      result = result.filter((p) => p.source === filterSource);
+    }
+
+    // Filter by status
+    if (filterStatus === "published") {
+      result = result.filter(
+        (p) =>
+          p.status === "published" ||
+          (p.status === "synced" && p.shopifyPublished),
+      );
+    } else if (filterStatus === "draft") {
+      result = result.filter(
+        (p) =>
+          p.status === "draft" ||
+          (p.status === "synced" && !p.shopifyPublished),
+      );
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "title":
+          cmp = a.title.localeCompare(b.title, "ja");
+          break;
+        case "status":
+          cmp = (a.status || "").localeCompare(b.status || "");
+          break;
+        case "pageType":
+          cmp = (a.pageType || "").localeCompare(b.pageType || "");
+          break;
+        default:
+          cmp =
+            new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+      }
+      return sortDir === "desc" ? -cmp : cmp;
+    });
+
+    return result;
+  }, [pages, searchQuery, filterSource, filterStatus, sortKey, sortDir]);
+
   // ── Group pages by column ──
 
   const columnPages = useMemo(() => {
@@ -324,7 +396,7 @@ export default function SiteMapView({
     for (const col of COLUMNS) {
       grouped[col.id] = [];
     }
-    for (const page of pages) {
+    for (const page of filteredPages) {
       const pt = page.pageType || "general";
       const col = COLUMNS.find((c) => c.pageTypes.includes(pt));
       if (col) {
@@ -334,7 +406,7 @@ export default function SiteMapView({
       }
     }
     return grouped;
-  }, [pages]);
+  }, [filteredPages]);
 
   // ── Render ──
 
@@ -349,14 +421,17 @@ export default function SiteMapView({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* ── Header ── */}
-      <div className="shrink-0 px-8 pt-14 pb-6">
+      <div className="shrink-0 px-8 pt-14 pb-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-2xl font-bold text-foreground mb-1">
               サイトマップ
             </h1>
             <p className="text-[15px] text-muted-foreground">
-              {pages.length}件のページ — カテゴリごとにサイト構成を俯瞰
+              {filteredPages.length === pages.length
+                ? `${pages.length}件のページ`
+                : `${filteredPages.length} / ${pages.length}件のページ`}
+              {" "}— カテゴリごとにサイト構成を俯瞰
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -370,7 +445,7 @@ export default function SiteMapView({
                     ? "bg-white text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                title="ボードビュー"
+                title="ボード"
               >
                 <Map className="w-3.5 h-3.5" />
               </button>
@@ -382,21 +457,21 @@ export default function SiteMapView({
                     ? "bg-white text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                title="キャンバスビュー"
+                title="キャンバス"
               >
                 <Globe className="w-3.5 h-3.5" />
               </button>
               <button
-                onClick={() => setViewMode("list")}
+                onClick={() => setViewMode("table")}
                 className={clsx(
                   "p-1.5 rounded-md transition-colors",
-                  viewMode === "list"
+                  viewMode === "table"
                     ? "bg-white text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                title="リストビュー"
+                title="テーブル"
               >
-                <List className="w-3.5 h-3.5" />
+                <Table2 className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -441,7 +516,7 @@ export default function SiteMapView({
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[14px] font-medium text-white bg-gradient-to-r from-[#7c5cfc] to-[#5b8def] hover:shadow-md hover:shadow-accent/20 transition-all"
             >
               <Sparkles className="w-4 h-4" />
-              AIでページ作成
+              ページ作成
             </button>
           </div>
         </div>
@@ -454,11 +529,73 @@ export default function SiteMapView({
           </div>
         )}
         {!storeConnected && (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50/60 border border-amber-200/40">
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50/60 border border-amber-200/40 mb-3">
             <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
             <p className="text-[12px] text-amber-700">
               Shopifyストアが未接続です。設定画面から接続するとデプロイや同期が可能になります。
             </p>
+          </div>
+        )}
+
+        {/* ── Search & Filter bar ── */}
+        {pages.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ページを検索..."
+                className="w-full pl-8 pr-8 py-2 text-[13px] rounded-lg border border-border/60 bg-white/60 focus:bg-white focus:border-accent/40 focus:ring-1 focus:ring-accent/20 outline-none transition-all placeholder:text-muted-foreground/40"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground/40 hover:text-foreground transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Source filter */}
+            <select
+              value={filterSource}
+              onChange={(e) => setFilterSource(e.target.value as FilterSource)}
+              className="px-3 py-2 text-[12px] rounded-lg border border-border/60 bg-white/60 text-foreground outline-none focus:border-accent/40 transition-colors cursor-pointer"
+            >
+              <option value="all">すべてのソース</option>
+              <option value="shopify">Shopify</option>
+              <option value="aicata">Aicata</option>
+            </select>
+
+            {/* Status filter */}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as FilterStatus)}
+              className="px-3 py-2 text-[12px] rounded-lg border border-border/60 bg-white/60 text-foreground outline-none focus:border-accent/40 transition-colors cursor-pointer"
+            >
+              <option value="all">すべてのステータス</option>
+              <option value="published">公開中</option>
+              <option value="draft">下書き</option>
+            </select>
+
+            {/* Active filter indicator */}
+            {(searchQuery || filterSource !== "all" || filterStatus !== "all") && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setFilterSource("all");
+                  setFilterStatus("all");
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-accent bg-accent/[0.06] hover:bg-accent/[0.1] rounded-lg transition-colors"
+              >
+                <X className="w-3 h-3" />
+                フィルター解除
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -518,25 +655,69 @@ export default function SiteMapView({
           )}
         </div>
       ) : (
-        /* ── List view (fallback) ── */
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
+        /* ── Table view ── */
+        <div className="flex-1 overflow-auto px-6 pb-6">
           {pages.length === 0 ? (
             <EmptyState onCreatePage={onNavigateToChat} />
           ) : (
-            <div className="max-w-3xl mx-auto space-y-2">
-              {pages.map((page) => (
-                <ListRow
-                  key={page.id}
-                  page={page}
-                  storeConnected={storeConnected}
-                  onPreview={handlePreview}
-                  onEdit={onEditPage}
-                  onDeploy={handleDeploy}
-                  onDelete={handleDelete}
-                  deploying={deploying}
-                  deleting={deleting}
-                />
-              ))}
+            <div className="max-w-5xl mx-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-border/40">
+                    {(
+                      [
+                        ["title", "ページ名"],
+                        ["pageType", "カテゴリ"],
+                        ["status", "ステータス"],
+                        ["updatedAt", "更新日"],
+                      ] as [SortKey, string][]
+                    ).map(([key, label]) => (
+                      <th
+                        key={key}
+                        onClick={() => {
+                          if (sortKey === key) {
+                            setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+                          } else {
+                            setSortKey(key);
+                            setSortDir(key === "title" ? "asc" : "desc");
+                          }
+                        }}
+                        className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors select-none"
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {label}
+                          {sortKey === key && (
+                            <ArrowUpDown className="w-3 h-3 text-accent" />
+                          )}
+                        </span>
+                      </th>
+                    ))}
+                    <th className="w-[100px]" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPages.map((page) => (
+                    <TableRow
+                      key={page.id}
+                      page={page}
+                      storeConnected={storeConnected}
+                      shopSlug={shopSlug}
+                      onPreview={handlePreview}
+                      onEdit={onEditPage}
+                      onEnhance={onEnhancePage}
+                      onDeploy={handleDeploy}
+                      onDelete={handleDelete}
+                      deploying={deploying}
+                      deleting={deleting}
+                    />
+                  ))}
+                </tbody>
+              </table>
+              {filteredPages.length === 0 && pages.length > 0 && (
+                <div className="text-center py-12 text-[13px] text-muted-foreground/60">
+                  フィルター条件に一致するページがありません
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -627,7 +808,7 @@ function EmptyState({ onCreatePage }: { onCreatePage?: () => void }) {
         まだページがありません
       </p>
       <p className="text-[13px] text-muted-foreground/60 mb-4">
-        AIに話しかけて、最初のページを作りましょう
+        最初のページを作りましょう
       </p>
       {onCreatePage && (
         <button
@@ -635,30 +816,45 @@ function EmptyState({ onCreatePage }: { onCreatePage?: () => void }) {
           className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-medium text-white bg-gradient-to-r from-[#7c5cfc] to-[#5b8def] hover:shadow-lg hover:shadow-accent/20 transition-all"
         >
           <Sparkles className="w-4 h-4" />
-          AIでページ作成
+          ページ作成
         </button>
       )}
     </div>
   );
 }
 
-// ── Simple list row (for list view mode) ──
+// ── Table row (for table view mode) ──
 
 import {
   Eye,
   Pencil,
   Upload,
   Trash2,
-  ExternalLink,
   Clock,
 } from "lucide-react";
 import { PAGE_TYPE_LABELS } from "./PageCard";
 
-function ListRow({
+function formatRelativeDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHour = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+  if (diffMin < 1) return "たった今";
+  if (diffMin < 60) return `${diffMin}分前`;
+  if (diffHour < 24) return `${diffHour}時間前`;
+  if (diffDay < 7) return `${diffDay}日前`;
+  return date.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
+}
+
+function TableRow({
   page,
   storeConnected,
+  shopSlug,
   onPreview,
   onEdit,
+  onEnhance,
   onDeploy,
   onDelete,
   deploying,
@@ -666,8 +862,10 @@ function ListRow({
 }: {
   page: PageItem;
   storeConnected: boolean;
+  shopSlug?: string | null;
   onPreview: (id: string) => void;
   onEdit?: (conversationId: string) => void;
+  onEnhance?: (pageId: string) => void;
   onDeploy: (id: string) => void;
   onDelete: (page: PageItem) => void;
   deploying: string | null;
@@ -678,59 +876,85 @@ function ListRow({
     (page.status === "synced" && page.shopifyPublished);
 
   return (
-    <div className="group rounded-2xl border border-border/50 bg-white/60 backdrop-blur-sm hover:bg-white/80 hover:shadow-sm transition-all duration-200">
-      <div className="flex items-center gap-4 px-5 py-3.5">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <h3 className="text-[14px] font-semibold text-foreground truncate">
-              {page.title}
-            </h3>
-            {page.source === "shopify" ? (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium text-emerald-600 bg-emerald-50">
-                <ShoppingBag className="w-2.5 h-2.5" />
-                Shopify
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium text-violet-600 bg-violet-50">
-                <Sparkles className="w-2.5 h-2.5" />
-                Aicata
-              </span>
-            )}
-            {page.pageType && page.pageType !== "general" && (
-              <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-medium">
-                {PAGE_TYPE_LABELS[page.pageType] || page.pageType}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
-            {isPublished ? (
-              <span className="flex items-center gap-1 text-emerald-600">
-                <Globe className="w-3 h-3" /> 公開中
-              </span>
-            ) : (
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" /> 下書き
-              </span>
-            )}
-            {page.slug && <span>/pages/{page.slug}</span>}
-          </div>
+    <tr className="group border-b border-border/30 hover:bg-accent/[0.02] transition-colors">
+      {/* ページ名 */}
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-medium text-foreground truncate max-w-[280px]">
+            {page.title}
+          </span>
+          {page.source === "shopify" ? (
+            <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold text-emerald-600 bg-emerald-50">
+              <ShoppingBag className="w-2.5 h-2.5" />
+              Shopify
+            </span>
+          ) : (
+            <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold text-violet-600 bg-violet-50">
+              <Sparkles className="w-2.5 h-2.5" />
+              Aicata
+            </span>
+          )}
         </div>
+        {page.slug && (
+          <span className="text-[11px] text-muted-foreground/50 mt-0.5 block">
+            /{page.slug}
+          </span>
+        )}
+      </td>
 
-        <div className="flex items-center gap-1 shrink-0">
+      {/* カテゴリ */}
+      <td className="px-3 py-3">
+        <span className="text-[11px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md font-medium">
+          {PAGE_TYPE_LABELS[page.pageType || "general"] || page.pageType || "汎用"}
+        </span>
+      </td>
+
+      {/* ステータス */}
+      <td className="px-3 py-3">
+        {isPublished ? (
+          <span className="flex items-center gap-1 text-[12px] text-emerald-600 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            公開中
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
+            <Clock className="w-3 h-3" />
+            下書き
+          </span>
+        )}
+      </td>
+
+      {/* 更新日 */}
+      <td className="px-3 py-3 text-[12px] text-muted-foreground/70">
+        {formatRelativeDate(page.updatedAt)}
+      </td>
+
+      {/* アクション */}
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {page.hasHtml && (
             <button
               onClick={() => onPreview(page.id)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-black/[0.04] transition-all opacity-0 group-hover:opacity-100"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-black/[0.04] transition-all"
               title="プレビュー"
             >
               <Eye className="w-3.5 h-3.5" />
             </button>
           )}
+          {onEnhance && (
+            <button
+              onClick={() => onEnhance(page.id)}
+              className="p-1.5 rounded-lg text-accent hover:bg-accent/[0.06] transition-all"
+              title="ページ編集"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+            </button>
+          )}
           {page.conversationId && onEdit && (
             <button
               onClick={() => onEdit(page.conversationId!)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-black/[0.04] transition-all opacity-0 group-hover:opacity-100"
-              title="編集"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-black/[0.04] transition-all"
+              title="会話を開く"
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
@@ -739,21 +963,21 @@ function ListRow({
             <button
               onClick={() => onDeploy(page.id)}
               disabled={deploying === page.id}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-foreground bg-black/[0.04] hover:bg-black/[0.07] transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-black/[0.04] transition-all disabled:opacity-50"
+              title={page.shopifyPageId ? "Shopify更新" : "デプロイ"}
             >
               {deploying === page.id ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Upload className="w-3 h-3" />
+                <Upload className="w-3.5 h-3.5" />
               )}
-              {page.shopifyPageId ? "更新" : "デプロイ"}
             </button>
           )}
           {page.source === "aicata" && (
             <button
               onClick={() => onDelete(page)}
               disabled={deleting === page.id}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-50"
               title="削除"
             >
               {deleting === page.id ? (
@@ -764,7 +988,7 @@ function ListRow({
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }

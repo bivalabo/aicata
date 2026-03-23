@@ -210,16 +210,38 @@ export default function PageCard({
               tabIndex={-1}
               title={`${page.title} thumbnail`}
             />
-            {/* Hover overlay */}
-            <div className="absolute inset-0 bg-accent/0 group-hover:bg-accent/5 transition-colors flex items-center justify-center">
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <Eye className="w-5 h-5 text-accent" />
-              </div>
+            {/* Hover overlay with enhance button */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/[0.03] transition-colors flex items-center justify-center">
+              {onEnhance && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEnhance(page.id);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white bg-accent/90 hover:bg-accent shadow-md backdrop-blur-sm"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  ページ編集
+                </button>
+              )}
             </div>
           </div>
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
+          <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground/30">
             <Sparkles className="w-8 h-8" />
+            {/* 未作成ページにはページ作成ボタン */}
+            {onEnhance && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEnhance(page.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white bg-accent/90 hover:bg-accent shadow-md"
+              >
+                <Sparkles className="w-3 h-3" />
+                ページ作成
+              </button>
+            )}
           </div>
         )}
 
