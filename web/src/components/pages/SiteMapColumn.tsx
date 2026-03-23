@@ -14,6 +14,8 @@ interface SiteMapColumnProps {
   pageType?: string;
   pages: PageItem[];
   storeConnected: boolean;
+  /** Shopify管理画面URLのストアスラッグ */
+  shopSlug?: string | null;
   onPreview: (pageId: string) => void;
   onEdit?: (conversationId: string) => void;
   onEnhance?: (pageId: string) => void;
@@ -32,6 +34,7 @@ export default function SiteMapColumn({
   pageType,
   pages,
   storeConnected,
+  shopSlug,
   onPreview,
   onEdit,
   onEnhance,
@@ -105,6 +108,7 @@ export default function SiteMapColumn({
               key={page.id}
               page={page}
               storeConnected={storeConnected}
+              shopSlug={shopSlug}
               onPreview={onPreview}
               onEdit={onEdit}
               onEnhance={onEnhance}

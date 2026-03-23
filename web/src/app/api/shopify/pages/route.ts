@@ -140,6 +140,10 @@ export async function GET() {
     // ── 3. Shopify Collections (コレクション) を同期 ──
     for (const col of shopifyCollections) {
       const colId = `collection_${col.id}`;
+      // "frontpage" / "home" コレクションはトップページ扱い
+      const h = col.handle.toLowerCase();
+      const colPageType =
+        h === "frontpage" || h === "home" ? "landing" : "collection";
 
       if (!existingShopifyIds.has(colId)) {
         await prisma.page.create({
@@ -152,7 +156,7 @@ export async function GET() {
             shopifyPageId: colId,
             shopifyPublished: !!col.published_at,
             source: "shopify",
-            pageType: "collection",
+            pageType: colPageType,
           },
         });
       } else {
@@ -162,7 +166,7 @@ export async function GET() {
             title: col.title,
             slug: col.handle,
             shopifyPublished: !!col.published_at,
-            pageType: "collection",
+            pageType: colPageType,
           },
         });
       }

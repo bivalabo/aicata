@@ -96,6 +96,7 @@ export default function SiteMapView({
   const [deploying, setDeploying] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [storeConnected, setStoreConnected] = useState(false);
+  const [shopSlug, setShopSlug] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [showRebuildFlow, setShowRebuildFlow] = useState(false);
@@ -135,6 +136,10 @@ export default function SiteMapView({
       const res = await fetch("/api/shopify/store");
       const data = await res.json();
       setStoreConnected(data.connected);
+      if (data.connected && data.store?.shop) {
+        // "bivalabo-dev-2.myshopify.com" → "bivalabo-dev-2"
+        setShopSlug(data.store.shop.replace(/\.myshopify\.com$/, ""));
+      }
     } catch {
       setStoreConnected(false);
     }
@@ -474,6 +479,7 @@ export default function SiteMapView({
                   pageType={col.pageTypes[0]}
                   pages={columnPages[col.id]}
                   storeConnected={storeConnected}
+                  shopSlug={shopSlug}
                   onPreview={handlePreview}
                   onEdit={onEditPage}
                   onEnhance={onEnhancePage}

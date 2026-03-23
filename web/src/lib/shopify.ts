@@ -168,6 +168,7 @@ export async function listPages(
   );
   return data.pages;
 }
+
 // --- Products API ---
 
 export interface ShopifyProduct {
@@ -326,6 +327,7 @@ export async function deletePage(
     { method: "DELETE" },
   );
 }
+
 // --- Theme API ---
 
 export interface ShopifyTheme {

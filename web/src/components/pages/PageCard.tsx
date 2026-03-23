@@ -43,6 +43,8 @@ export interface PageItem {
 interface PageCardProps {
   page: PageItem;
   storeConnected: boolean;
+  /** Shopify管理画面URLのストアスラッグ */
+  shopSlug?: string | null;
   onPreview: (pageId: string) => void;
   onEdit?: (conversationId: string) => void;
   /** AIで改善（既存ページをAI会話で編集開始） */
@@ -51,6 +53,22 @@ interface PageCardProps {
   onDelete: (page: PageItem) => void;
   deploying: string | null;
   deleting: string | null;
+}
+
+/** shopifyPageId からShopify管理画面の正しいURLを生成 */
+function getShopifyAdminUrl(
+  shopSlug: string,
+  shopifyPageId: string,
+): string {
+  if (shopifyPageId.startsWith("product_")) {
+    const id = shopifyPageId.replace("product_", "");
+    return `https://admin.shopify.com/store/${shopSlug}/products/${id}`;
+  }
+  if (shopifyPageId.startsWith("collection_")) {
+    const id = shopifyPageId.replace("collection_", "");
+    return `https://admin.shopify.com/store/${shopSlug}/collections/${id}`;
+  }
+  return `https://admin.shopify.com/store/${shopSlug}/pages/${shopifyPageId}`;
 }
 
 /** ページタイプの日本語ラベル */
@@ -119,6 +137,7 @@ function formatRelative(dateStr: string): string {
 export default function PageCard({
   page,
   storeConnected,
+  shopSlug,
   onPreview,
   onEdit,
   onEnhance,
@@ -129,6 +148,24 @@ export default function PageCard({
 }: PageCardProps) {
   const [showActions, setShowActions] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
+
+  // Shopifyソースページの管理画面URL
+  const shopifyAdminUrl = useMemo(() => {
+    if (page.shopifyPageId && shopSlug) {
+      return getShopifyAdminUrl(shopSlug, page.shopifyPageId);
+    }
+    return null;
+  }, [page.shopifyPageId, shopSlug]);
+
+  // Shopifyソースのカードはクリックで管理画面を開く
+  const isShopifySource = page.source === "shopify";
+  const handleCardClick = () => {
+    if (isShopifySource && shopifyAdminUrl) {
+      window.open(shopifyAdminUrl, "_blank");
+    } else if (page.hasHtml) {
+      onPreview(page.id);
+    }
+  };
 
   // Close dropdown on outside click — useEffectでdocumentクリックを監視
   useEffect(() => {
@@ -143,11 +180,22 @@ export default function PageCard({
   }, [showActions]);
 
   return (
-    <div className="group relative rounded-xl border border-border/60 bg-white hover:bg-white hover:shadow-md hover:shadow-black/[0.04] hover:border-border transition-all duration-200 overflow-hidden">
+    <div
+      className={clsx(
+        "group relative rounded-xl border border-border/60 bg-white hover:bg-white hover:shadow-md hover:shadow-black/[0.04] hover:border-border transition-all duration-200 overflow-hidden",
+        isShopifySource && shopifyAdminUrl && "cursor-pointer",
+      )}
+      onClick={isShopifySource ? handleCardClick : undefined}
+    >
       {/* ── Thumbnail area ── */}
       <div
         className="relative h-[120px] bg-gray-50 overflow-hidden cursor-pointer"
-        onClick={() => page.hasHtml && onPreview(page.id)}
+        onClick={(e) => {
+          if (!isShopifySource) {
+            e.stopPropagation();
+            page.hasHtml && onPreview(page.id);
+          }
+        }}
       >
         {page.hasHtml ? (
           <div className="w-full h-full relative">
@@ -211,7 +259,10 @@ export default function PageCard({
           {/* Actions menu */}
           <div className="relative shrink-0" ref={actionsRef}>
             <button
-              onClick={() => setShowActions((v) => !v)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowActions((v) => !v);
+              }}
               className="p-1 rounded-md text-muted-foreground/40 hover:text-foreground hover:bg-black/[0.04] transition-colors"
             >
               <MoreHorizontal className="w-3.5 h-3.5" />
@@ -275,11 +326,12 @@ export default function PageCard({
                     {page.shopifyPageId ? "Shopify更新" : "デプロイ"}
                   </button>
                 )}
-                {page.shopifyPageId && (
+                {shopifyAdminUrl && (
                   <a
-                    href={`https://admin.shopify.com/store/pages/${page.shopifyPageId}`}
+                    href={shopifyAdminUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-foreground hover:bg-black/[0.03] transition-colors"
                   >
                     <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
