@@ -10,21 +10,33 @@
 
 import { prisma } from "@/lib/db";
 
+// ── Helper: ストアが未接続の場合にデフォルトストアを作成 ──
+async function getOrCreateDefaultStore() {
+  let store = await prisma.store.findFirst({
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (!store) {
+    // Shopify未接続でもBrand Memoryを使えるようにデフォルトストアを作成
+    store = await prisma.store.create({
+      data: {
+        shop: "default.myshopify.com",
+        accessToken: "",
+        name: "My Store",
+        isActive: true,
+      },
+    });
+    console.log("[Brand Memory] Created default store for standalone use");
+  }
+
+  return store;
+}
+
 // ── GET: Brand Memory 取得 ──
 
 export async function GET() {
   try {
-    const store = await prisma.store.findFirst({
-      orderBy: { updatedAt: "desc" },
-    });
-
-    if (!store) {
-      return Response.json({
-        exists: false,
-        memory: null,
-        message: "ストアが接続されていません",
-      });
-    }
+    const store = await getOrCreateDefaultStore();
 
     // BrandMemory は Prisma client に反映されていない場合があるため dynamic access
     let memory = null;
@@ -92,16 +104,7 @@ export async function POST(request: Request) {
     const action = url.searchParams.get("action");
     const body = await request.json();
 
-    const store = await prisma.store.findFirst({
-      orderBy: { updatedAt: "desc" },
-    });
-
-    if (!store) {
-      return Response.json(
-        { error: "ストアが接続されていません" },
-        { status: 400 },
-      );
-    }
+    const store = await getOrCreateDefaultStore();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const brandMemoryModel = (prisma as any).brandMemory;
