@@ -6,7 +6,7 @@ application_url = "https://localhost"
 embedded = true
 
 [build]
-automatically_update_urls_on_dev = true
+automatically_update_urls_on_dev = false
 include_config_on_deploy = true
 
 [webhooks]
@@ -17,4 +17,7 @@ api_version = "2026-04"
 scopes = "read_analytics,read_content,read_orders,read_products,read_themes,write_content,write_themes"
 
 [auth]
-redirect_urls = [ "https://localhost/auth/callback" ]
+redirect_urls = [
+  "https://localhost/auth/callback",
+  "http://localhost:3000/api/shopify/callback"
+]

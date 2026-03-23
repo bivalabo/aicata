@@ -11,7 +11,8 @@ export async function GET() {
       orderBy: { updatedAt: "desc" },
     });
 
-    if (!store) {
+    // ストアがない、またはデフォルトストア（accessToken空）は未接続扱い
+    if (!store || !store.accessToken) {
       return Response.json({ connected: false, store: null });
     }
 
