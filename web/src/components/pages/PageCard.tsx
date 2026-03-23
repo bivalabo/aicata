@@ -47,7 +47,7 @@ interface PageCardProps {
   shopSlug?: string | null;
   onPreview: (pageId: string) => void;
   onEdit?: (conversationId: string) => void;
-  /** AIで改善（既存ページをAI会話で編集開始） */
+  /** Aicataで改善（既存ページをAI会話で編集開始） */
   onEnhance?: (pageId: string) => void;
   onDeploy: (pageId: string) => void;
   onDelete: (page: PageItem) => void;
@@ -318,7 +318,7 @@ export default function PageCard({
                     編集
                   </button>
                 )}
-                {/* AIで改善: 会話がないページ（Shopify同期ページ等）でも使える */}
+                {/* Aicataで改善: 会話がないページ（Shopify同期ページ等）でも使える */}
                 {page.hasHtml && onEnhance && !page.conversationId && (
                   <button
                     onClick={() => {
@@ -328,7 +328,7 @@ export default function PageCard({
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-accent hover:bg-accent/[0.04] transition-colors font-medium"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    AIで改善
+                    Aicataで改善
                   </button>
                 )}
                 {storeConnected && page.hasHtml && (

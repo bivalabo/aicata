@@ -235,7 +235,7 @@ function buildEnhanceContextMessage(
   ctx: EnhanceResult["extractedContext"],
 ): string {
   const parts = [
-    `既存ページ「${pageTitle}」をAIで改善したいです。`,
+    `既存ページ「${pageTitle}」をAicataで改善したいです。`,
     "",
     "【現在のページ情報】",
   ];

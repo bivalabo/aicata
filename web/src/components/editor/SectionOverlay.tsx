@@ -150,10 +150,10 @@ export default function SectionOverlay({
                     "hover:opacity-90",
                     "transition-all duration-150",
                   )}
-                  title={`「${highlight.label}」をAIで改善`}
+                  title={`「${highlight.label}」をAicataで改善`}
                 >
                   <Sparkles className="w-3 h-3" />
-                  AIで改善
+                  Aicataで改善
                 </button>
               )}
 
