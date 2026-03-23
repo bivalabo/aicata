@@ -132,10 +132,12 @@ export default function SiteMapCanvas({
 
   const nodes = useMemo(() => layoutNodes(pages), [pages]);
 
-  // Canvas dimensions
+  // Canvas dimensions — must account for all column headers (even empty columns)
   const canvasWidth = useMemo(() => {
-    if (nodes.length === 0) return 800;
-    return Math.max(...nodes.map((n) => n.x + NODE_W)) + 80;
+    const nodeMax = nodes.length === 0 ? 0 : Math.max(...nodes.map((n) => n.x + NODE_W));
+    // All column headers are always rendered, so ensure the last header has room
+    const colHeaderMax = 40 + (COLUMNS.length - 1) * (NODE_W + GAP_X) + NODE_W;
+    return Math.max(nodeMax, colHeaderMax) + 80;
   }, [nodes]);
   const canvasHeight = useMemo(() => {
     if (nodes.length === 0) return 600;
@@ -307,7 +309,7 @@ export default function SiteMapCanvas({
                 >
                   <col.icon className="w-3 h-3 text-white" />
                 </div>
-                <span className="text-[12px] font-semibold text-foreground/60">
+                <span className="text-[12px] font-semibold text-foreground/60 whitespace-nowrap">
                   {col.title}
                 </span>
               </div>

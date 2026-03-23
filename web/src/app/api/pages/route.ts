@@ -10,10 +10,12 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const status = url.searchParams.get("status"); // draft, published, synced
     const source = url.searchParams.get("source"); // aicata, shopify
+    const conversationIdFilter = url.searchParams.get("conversationId");
 
     const where: Record<string, string> = {};
     if (status) where.status = status;
     if (source) where.source = source;
+    if (conversationIdFilter) where.conversationId = conversationIdFilter;
 
     const pages = await prisma.page.findMany({
       where,

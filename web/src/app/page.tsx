@@ -203,7 +203,7 @@ export default function Home() {
     setChatSessionKey((k) => k + 1);
   }, []);
 
-  const handleSelectConversation = useCallback((id: string) => {
+  const handleSelectConversation = useCallback(async (id: string) => {
     setActiveConversationId(id);
     setPageData(null);
     setSavedPageId(null);
@@ -211,6 +211,33 @@ export default function Home() {
     setIsStreaming(false);
     setMobilePanel("chat");
     setChatSessionKey((k) => k + 1);
+
+    // ── 会話に紐づくページをDBから復元 ──
+    // ChatView のメッセージ読み込みと並行して実行し、savedPageId を確実にセット
+    try {
+      const res = await fetch(`/api/pages?conversationId=${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const page = data.pages?.[0];
+        if (page?.hasHtml) {
+          // ページが見つかった場合、savedPageId をセット（保存・自動保存が正しく動作するように）
+          setSavedPageId(page.id);
+          // pageData も復元（ChatView の extractPageData が後から上書きする可能性あり、それでOK）
+          const pageRes = await fetch(`/api/pages/${page.id}`);
+          if (pageRes.ok) {
+            const pageDetail = await pageRes.json();
+            if (pageDetail.page?.html) {
+              setPageData({
+                html: pageDetail.page.html,
+                css: pageDetail.page.css || "",
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-fatal: ChatView のメッセージからページデータは復元される
+    }
   }, []);
 
   const handleConversationCreated = useCallback(
@@ -567,17 +594,11 @@ export default function Home() {
                         return;
                       }
                       // Navigate to chat with the new/existing conversation
+                      // handleSelectConversation が DB からページデータと savedPageId を自動復元する
                       setActiveNav("chat");
-                      handleSelectConversation(data.conversationId);
-                      // Load page data into preview
-                      const pageRes = await fetch(`/api/pages/${pageId}`);
-                      const pageData = await pageRes.json();
-                      if (pageData.page) {
-                        setPageData({
-                          html: pageData.page.html,
-                          css: pageData.page.css,
-                        });
-                      }
+                      await handleSelectConversation(data.conversationId);
+                      // handleSelectConversation が pageData と savedPageId を
+                      // 既にセットしているため、追加のフェッチは不要
                     } catch {
                       alert("ページの改善準備に失敗しました");
                     }
