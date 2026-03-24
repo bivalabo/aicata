@@ -23,7 +23,7 @@ interface UseChatOptions {
   onConversationCreated?: (id: string) => void;
 }
 
-// Client-side timeout: 180s (3min) â Gen-3 full page generation can take 2+ minutes
+// Client-side timeout: 180s (3min) Ã¢ÂÂ Gen-3 full page generation can take 2+ minutes
 const CLIENT_TIMEOUT_MS = 180000;
 
 export function useChat(options: UseChatOptions = {}) {
@@ -55,8 +55,8 @@ export function useChat(options: UseChatOptions = {}) {
   const sendMessage = useCallback(
     async (content: string, attachments?: Attachment[], pageType?: string, urlAnalysis?: unknown) => {
       setError(null);
-      // æ°è¦ã¡ãã»ã¼ã¸éä¿¡æã¯ãªãã©ã¤ã«ã¦ã³ãããªã»ããï¼èªåãªãã©ã¤æã¯é¤ãï¼
-      if (!content.includes("ä¸­æ­ç®æããç¶ããçæ")) {
+      // Ã¦ÂÂ°Ã¨Â¦ÂÃ£ÂÂ¡Ã£ÂÂÃ£ÂÂ»Ã£ÂÂ¼Ã£ÂÂ¸Ã©ÂÂÃ¤Â¿Â¡Ã¦ÂÂÃ£ÂÂ¯Ã£ÂÂªÃ£ÂÂÃ£ÂÂ©Ã£ÂÂ¤Ã£ÂÂ«Ã£ÂÂ¦Ã£ÂÂ³Ã£ÂÂÃ£ÂÂÃ£ÂÂªÃ£ÂÂ»Ã£ÂÂÃ£ÂÂÃ¯Â¼ÂÃ¨ÂÂªÃ¥ÂÂÃ£ÂÂªÃ£ÂÂÃ£ÂÂ©Ã£ÂÂ¤Ã¦ÂÂÃ£ÂÂ¯Ã©ÂÂ¤Ã£ÂÂÃ¯Â¼Â
+      if (!content.includes("Ã¤Â¸Â­Ã¦ÂÂ­Ã§Â®ÂÃ¦ÂÂÃ£ÂÂÃ£ÂÂÃ§Â¶ÂÃ£ÂÂÃ£ÂÂÃ§ÂÂÃ¦ÂÂ")) {
         retryCountRef.current = 0;
       }
 
@@ -74,7 +74,7 @@ export function useChat(options: UseChatOptions = {}) {
           options.onConversationCreated?.(data.id);
         } catch (e) {
           console.error("[useChat] Failed to create conversation:", e);
-          setError("ä¼è©±ã®ä½æã«å¤±æãã¾ãã");
+          setError("Ã¤Â¼ÂÃ¨Â©Â±Ã£ÂÂ®Ã¤Â½ÂÃ¦ÂÂÃ£ÂÂ«Ã¥Â¤Â±Ã¦ÂÂÃ£ÂÂÃ£ÂÂ¾Ã£ÂÂÃ£ÂÂ");
           return;
         }
       }
@@ -187,7 +187,7 @@ export function useChat(options: UseChatOptions = {}) {
                   return updated;
                 });
               } else if (data.type === "error") {
-                // ââ Auto-retry: ãªãã©ã¤å¯è½ãªã¨ã©ã¼ã¯èªååéï¼æå¤§2åï¼ ââ
+                // Ã¢ÂÂÃ¢ÂÂ Auto-retry: Ã£ÂÂªÃ£ÂÂÃ£ÂÂ©Ã£ÂÂ¤Ã¥ÂÂ¯Ã¨ÂÂ½Ã£ÂÂªÃ£ÂÂ¨Ã£ÂÂ©Ã£ÂÂ¼Ã£ÂÂ¯Ã¨ÂÂªÃ¥ÂÂÃ¥ÂÂÃ©ÂÂÃ¯Â¼ÂÃ¦ÂÂÃ¥Â¤Â§2Ã¥ÂÂÃ¯Â¼Â Ã¢ÂÂÃ¢ÂÂ
                 const currentRetry = retryCountRef.current;
                 if (data.retryable && currentRetry < 2) {
                   retryCountRef.current = currentRetry + 1;
@@ -202,7 +202,7 @@ export function useChat(options: UseChatOptions = {}) {
                     }
                     return prev;
                   });
-                  // ææ°ã®ã¦ã¼ã¶ã¼ã¡ãã»ã¼ã¸ãstateããå®å¨ã«åå¾ãã¦ãªãã©ã¤
+                  // Ã¦ÂÂÃ¦ÂÂ°Ã£ÂÂ®Ã£ÂÂ¦Ã£ÂÂ¼Ã£ÂÂ¶Ã£ÂÂ¼Ã£ÂÂ¡Ã£ÂÂÃ£ÂÂ»Ã£ÂÂ¼Ã£ÂÂ¸Ã£ÂÂstateÃ£ÂÂÃ£ÂÂÃ¥Â®ÂÃ¥ÂÂ¨Ã£ÂÂ«Ã¥ÂÂÃ¥Â¾ÂÃ£ÂÂÃ£ÂÂ¦Ã£ÂÂªÃ£ÂÂÃ£ÂÂ©Ã£ÂÂ¤
                   setMessages((prev) => {
                     const lastUser = [...prev].reverse().find((m) => m.role === "user");
                     if (lastUser) {
@@ -214,13 +214,13 @@ export function useChat(options: UseChatOptions = {}) {
                     } else {
                       setError(data.message);
                     }
-                    return prev; // stateå¤æ´ãªã
+                    return prev; // stateÃ¥Â¤ÂÃ¦ÂÂ´Ã£ÂÂªÃ£ÂÂ
                   });
                 } else {
                   setError(data.message);
                 }
               } else if (data.type === "done") {
-                // Server sends final content on done â use it if we have it
+                // Server sends final content on done Ã¢ÂÂ use it if we have it
                 // This ensures we have the complete content even after server-side timeout
                 if (data.content && typeof data.content === "string") {
                   setMessages((prev) => {
@@ -243,7 +243,7 @@ export function useChat(options: UseChatOptions = {}) {
                   incomplete: data.incomplete,
                 });
 
-                // ââ Auto-recovery: ä¸å®å¨ãªçæã®èªåè£å® ââ
+                // Ã¢ÂÂÃ¢ÂÂ Auto-recovery: Ã¤Â¸ÂÃ¥Â®ÂÃ¥ÂÂ¨Ã£ÂÂªÃ§ÂÂÃ¦ÂÂÃ£ÂÂ®Ã¨ÂÂªÃ¥ÂÂÃ¨Â£ÂÃ¥Â®Â Ã¢ÂÂÃ¢ÂÂ
                 if (data.incomplete && data.content) {
                   const pageStartIdx = data.content.indexOf("---PAGE_START---");
                   const partialHtml = pageStartIdx >= 0
@@ -251,18 +251,18 @@ export function useChat(options: UseChatOptions = {}) {
                     : "";
                   const lastChunk = partialHtml.slice(-200).trim();
                   const continuationMsg = lastChunk
-                    ? `前回のページ生成が途中で中断されました。以下が中断直前のコードの末尾です:\
+                    ? `ååã®ãã¼ã¸çæãéä¸­ã§ä¸­æ­ããã¾ãããä»¥ä¸ãä¸­æ­ç´åã®ã³ã¼ãã®æ«å°¾ã§ã:\
 \`\`\`\
 ${lastChunk}\
 \`\`\`\
-この続きからコードを出力してください。前回の途中から再開し、残りのHTML/CSSを出力して最後に ---PAGE_END--- で閉じてください。前置きの説明は不要です。コードだけ出力してください。`
-                    : "前回のページ生成が途中で中断されました。---PAGE_START--- から ---PAGE_END--- まで完全なページを再生成してください。前置きの説明は最小限にして、コードを出力してください。";
-                  sendMessage(continuationMsg, conversationId || undefined);
+ãã®ç¶ãããã³ã¼ããåºåãã¦ãã ãããååã®éä¸­ããåéããæ®ãã®HTML/CSSãåºåãã¦æå¾ã« ---PAGE_END--- ã§éãã¦ãã ãããåç½®ãã®èª¬æã¯ä¸è¦ã§ããã³ã¼ãã ãåºåãã¦ãã ããã`
+                    : "ååã®ãã¼ã¸çæãéä¸­ã§ä¸­æ­ããã¾ããã---PAGE_START--- ãã ---PAGE_END--- ã¾ã§å®å¨ãªãã¼ã¸ãåçæãã¦ãã ãããåç½®ãã®èª¬æã¯æå°éã«ãã¦ãã³ã¼ããåºåãã¦ãã ããã";
+                  sendMessage(continuationMsg);
                   return;
                 }
               }
 
-        // ── 接続切断検出: PAGE_STARTあり + PAGE_ENDなし ──
+        // ââ æ¥ç¶åæ­æ¤åº: PAGE_STARTãã + PAGE_ENDãªã ââ
         if (receivedAnyContent) {
           setMessages((prev) => {
             const lastMsg = prev[prev.length - 1];
@@ -287,7 +287,7 @@ ${lastChunk}\
         if (err instanceof Error && err.name === "AbortError") {
           console.warn("[useChat] Request aborted. Had content:", receivedAnyContent);
           if (!receivedAnyContent) {
-            setError("å¿ç­ãã¿ã¤ã ã¢ã¦ããã¾ãããããä¸åº¦ãè©¦ããã ããã");
+            setError("Ã¥Â¿ÂÃ§Â­ÂÃ£ÂÂÃ£ÂÂ¿Ã£ÂÂ¤Ã£ÂÂ Ã£ÂÂ¢Ã£ÂÂ¦Ã£ÂÂÃ£ÂÂÃ£ÂÂ¾Ã£ÂÂÃ£ÂÂÃ£ÂÂÃ£ÂÂÃ£ÂÂÃ¤Â¸ÂÃ¥ÂºÂ¦Ã£ÂÂÃ¨Â©Â¦Ã£ÂÂÃ£ÂÂÃ£ÂÂ Ã£ÂÂÃ£ÂÂÃ£ÂÂ");
             // Remove empty assistant message
             setMessages((prev) => {
               const last = prev[prev.length - 1];
@@ -300,7 +300,7 @@ ${lastChunk}\
           // If we had partial content, keep it (it's better than nothing)
           return;
 
-        // ── 接続切断検出: PAGE_STARTあり + PAGE_ENDなし ──
+        // ââ æ¥ç¶åæ­æ¤åº: PAGE_STARTãã + PAGE_ENDãªã ââ
         if (receivedAnyContent) {
           setMessages((prev) => {
             const lastMsg = prev[prev.length - 1];
@@ -317,8 +317,8 @@ ${lastChunk}\
         }
 
         console.error("[useChat] Stream error:", err);
-        const errMsg = err instanceof Error ? err.message : "ä¸æãªã¨ã©ã¼";
-        setError(`å¿ç­ã®åå¾ä¸­ã«ã¨ã©ã¼ãçºçãã¾ãã: ${errMsg}`);
+        const errMsg = err instanceof Error ? err.message : "Ã¤Â¸ÂÃ¦ÂÂÃ£ÂÂªÃ£ÂÂ¨Ã£ÂÂ©Ã£ÂÂ¼";
+        setError(`Ã¥Â¿ÂÃ§Â­ÂÃ£ÂÂ®Ã¥ÂÂÃ¥Â¾ÂÃ¤Â¸Â­Ã£ÂÂ«Ã£ÂÂ¨Ã£ÂÂ©Ã£ÂÂ¼Ã£ÂÂÃ§ÂÂºÃ§ÂÂÃ£ÂÂÃ£ÂÂ¾Ã£ÂÂÃ£ÂÂ: ${errMsg}`);
 
         // Remove empty assistant message on error
         setMessages((prev) => {
