@@ -40,7 +40,7 @@ export async function listConversations(): Promise<ConversationSummary[]> {
     },
   });
 
-  return conversations.map((c) => ({
+  return conversations.map((c: any) => ({
     id: c.id,
     title: c.title,
     type: c.type,

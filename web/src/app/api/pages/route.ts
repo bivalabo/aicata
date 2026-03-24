@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     });
 
     return Response.json({
-      pages: pages.map((p) => {
+      pages: pages.map((p: any) => {
         // Gen-3 fields may exist on the model but TypeScript may not see them
         // if Prisma client hasn't been regenerated
         const page = p as typeof p & {

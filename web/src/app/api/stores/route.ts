@@ -17,7 +17,7 @@ export async function GET() {
     });
 
     // isActive フィールドが存在しない場合のフォールバック（最初のストアをアクティブ扱い）
-    const storesWithActive = stores.map((s, i) => ({
+    const storesWithActive = stores.map((s: any, i: number) => ({
       id: s.id,
       shop: s.shop,
       name: s.name,
@@ -28,7 +28,7 @@ export async function GET() {
       updatedAt: s.updatedAt,
     }));
 
-    const activeStore = storesWithActive.find((s) => s.isActive) || storesWithActive[0] || null;
+    const activeStore = storesWithActive.find((s: any) => s.isActive) || storesWithActive[0] || null;
 
     return Response.json({
       stores: storesWithActive,

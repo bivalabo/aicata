@@ -77,10 +77,11 @@ export async function POST(req: NextRequest) {
       ),
     );
 
+    type SectionRecord = { id: string; sectionId: string; sortOrder: number; status: string };
     return NextResponse.json({
       buildId: buildJob.id,
       designSpec,
-      sections: sectionRecords.map((s) => ({
+      sections: sectionRecords.map((s: SectionRecord) => ({
         id: s.id,
         sectionId: s.sectionId,
         sortOrder: s.sortOrder,

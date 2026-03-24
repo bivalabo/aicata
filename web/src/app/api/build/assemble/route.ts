@@ -52,15 +52,27 @@ export async function POST(req: NextRequest) {
     // DesignSpec を復元
     const designSpec: DesignSpec = JSON.parse(buildJob.designSpec);
 
+    // セクション型定義（Prisma Client 未生成環境でも型安全に）
+    type SectionRecord = {
+      id: string;
+      sectionId: string;
+      html: string | null;
+      css: string | null;
+      status: string;
+      error: string | null;
+      sortOrder: number;
+    };
+    const sections: SectionRecord[] = buildJob.sections;
+
     // セクション完了状況をチェック
-    const completedSections = buildJob.sections.filter(
-      (s) => s.status === "complete" && s.html,
+    const completedSections = sections.filter(
+      (s: SectionRecord) => s.status === "complete" && s.html,
     );
-    const failedSections = buildJob.sections.filter(
-      (s) => s.status === "failed",
+    const failedSections = sections.filter(
+      (s: SectionRecord) => s.status === "failed",
     );
-    const pendingSections = buildJob.sections.filter(
-      (s) => s.status === "pending" || s.status === "generating",
+    const pendingSections = sections.filter(
+      (s: SectionRecord) => s.status === "pending" || s.status === "generating",
     );
 
     console.log("[Build/Assemble] Section status:", {
@@ -78,7 +90,7 @@ export async function POST(req: NextRequest) {
     }
 
     // RenderedSection[] に変換
-    const renderedSections: RenderedSection[] = buildJob.sections.map((s) => ({
+    const renderedSections: RenderedSection[] = sections.map((s: SectionRecord) => ({
       id: s.sectionId,
       html: s.html || `<section data-section-id="${s.sectionId}"><p>（セクション未生成）</p></section>`,
       css: s.css || "",
@@ -114,7 +126,7 @@ export async function POST(req: NextRequest) {
       css: result.css,
       validation: result.validation,
       stats: {
-        totalSections: buildJob.sections.length,
+        totalSections: sections.length,
         completedSections: completedSections.length,
         failedSections: failedSections.length,
       },
