@@ -163,7 +163,7 @@ export interface DDPConfig {
 export const DEFAULT_DDP_CONFIG: DDPConfig = {
   specModel: "claude-sonnet-4-20250514",
   sectionModel: "claude-sonnet-4-20250514",
-  specMaxTokens: 4096,
+  specMaxTokens: 8192,
   sectionMaxTokens: 4096,
   sectionConcurrency: 3,
   timeoutMs: 120000,

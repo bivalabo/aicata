@@ -238,7 +238,7 @@ function parseDesignSpec(text: string): DesignSpec {
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const jsonStr = jsonMatch ? jsonMatch[1].trim() : text.trim();
 
-  // If the text starts with { and ends with }, try parsing directly
+  // Try parsing JSON, with truncation recovery
   let parsed: any;
   try {
     parsed = JSON.parse(jsonStr);
@@ -250,9 +250,14 @@ function parseDesignSpec(text: string): DesignSpec {
       try {
         parsed = JSON.parse(jsonStr.slice(firstBrace, lastBrace + 1));
       } catch {
-        throw new Error(
-          `Design Specのパースに失敗しました。AIの出力:\n${text.slice(0, 500)}`,
-        );
+        // max_tokens で切り詰められた可能性 → 不完全JSONの修復を試みる
+        parsed = tryRepairTruncatedJson(jsonStr.slice(firstBrace));
+        if (!parsed) {
+          throw new Error(
+            `Design Specのパースに失敗しました。AIの出力:\n${text.slice(0, 500)}`,
+          );
+        }
+        console.warn("[DDP] Repaired truncated JSON for DesignSpec");
       }
     } else {
       throw new Error(
@@ -319,6 +324,66 @@ function buildEngineContext(input: DDPInput): EngineContext {
     brandName: input.brandName,
     locale: "ja-JP",
   };
+}
+
+/**
+ * max_tokens で切り詰められた不完全なJSONの修復を試みる。
+ * 開き括弧と閉じ括弧のバランスを見て、足りない閉じ括弧を補完する。
+ */
+function tryRepairTruncatedJson(truncated: string): any | null {
+  try {
+    // まず sections 配列の途中で切れていないか確認
+    // "sections": [ {...}, {...}, {... ← ここで切れている
+    // → 不完全な最後のセクションを削除し、配列と親オブジェクトを閉じる
+
+    // sections 配列の開始位置を見つける
+    const sectionsMatch = truncated.match(/"sections"\s*:\s*\[/);
+    if (sectionsMatch && sectionsMatch.index !== undefined) {
+      const sectionsStart = sectionsMatch.index + sectionsMatch[0].length;
+
+      // sections 配列内の完全なオブジェクトを抽出
+      let depth = 0;
+      let lastCompleteEnd = sectionsStart;
+
+      for (let i = sectionsStart; i < truncated.length; i++) {
+        const ch = truncated[i];
+        if (ch === "{") depth++;
+        else if (ch === "}") {
+          depth--;
+          if (depth === 0) {
+            lastCompleteEnd = i + 1;
+          }
+        }
+      }
+
+      // lastCompleteEnd の位置で配列を閉じ、親オブジェクトも閉じる
+      const repaired = truncated.slice(0, lastCompleteEnd) + "],\"responsiveStrategy\":\"モバイルファースト\",\"toneDescription\":\"\"}";
+      return JSON.parse(repaired);
+    }
+
+    // sections がない場合、単純に閉じ括弧を補完
+    let openBraces = 0;
+    let openBrackets = 0;
+    for (const ch of truncated) {
+      if (ch === "{") openBraces++;
+      else if (ch === "}") openBraces--;
+      else if (ch === "[") openBrackets++;
+      else if (ch === "]") openBrackets--;
+    }
+
+    let repaired = truncated;
+    // 文字列が途中で切れている場合、最後の引用符を閉じる
+    const quoteCount = (repaired.match(/"/g) || []).length;
+    if (quoteCount % 2 !== 0) {
+      repaired += '"';
+    }
+    repaired += "]".repeat(Math.max(0, openBrackets));
+    repaired += "}".repeat(Math.max(0, openBraces));
+
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
 }
 
 function pageTypeToJapanese(pageType: string): string {
