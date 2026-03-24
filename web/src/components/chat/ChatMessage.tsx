@@ -2,11 +2,9 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, User, Copy, Check, ChevronRight, Code2 } from "lucide-react";
-import { useState, memo, useMemo, lazy, Suspense } from "react";
+import { useState, memo, useMemo } from "react";
 import clsx from "clsx";
 import type { Attachment } from "@/hooks/useChat";
-
-const DesignDNAVisualizer = lazy(() => import("./DesignDNAVisualizer"));
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -15,57 +13,8 @@ interface ChatMessageProps {
   attachments?: Attachment[];
 }
 
-// ── DNA マーカーの検出と解析 ──
-const DNA_MARKER_REGEX = /---DNA_START---([\s\S]*?)---DNA_END---/g;
-
-function parseDNABlock(json: string): { data: any; confidence?: number; templateId?: string } | null {
-  try {
-    const parsed = JSON.parse(json.trim());
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 function formatContent(content: string) {
-  // まずDNAブロックで分割
-  const DNA_SPLIT = /(---DNA_START---[\s\S]*?---DNA_END---)/g;
-  const dnaSegments = content.split(DNA_SPLIT);
-
-  const elements: React.ReactNode[] = [];
-
-  for (let segIdx = 0; segIdx < dnaSegments.length; segIdx++) {
-    const segment = dnaSegments[segIdx];
-    if (!segment) continue;
-
-    // DNAブロックの場合
-    if (segment.startsWith("---DNA_START---") && segment.endsWith("---DNA_END---")) {
-      const jsonStr = segment.slice("---DNA_START---".length, -"---DNA_END---".length);
-      const dnaData = parseDNABlock(jsonStr);
-      if (dnaData?.data) {
-        elements.push(
-          <Suspense key={`dna-${segIdx}`} fallback={<div className="h-32 animate-pulse bg-accent/5 rounded-2xl my-3" />}>
-            <DesignDNAVisualizer
-              data={dnaData.data}
-              confidence={dnaData.confidence}
-              templateId={dnaData.templateId}
-            />
-          </Suspense>
-        );
-        continue;
-      }
-      // DNAパース失敗 → DNAブロック自体を非表示にする（生テキスト表示しない）
-      continue;
-    }
-
-    // 通常テキスト → コードブロック分割（DNAマーカーの残骸も除去）
-    const cleanSegment = segment.replace(/---DNA_START---[\s\S]*?---DNA_END---/g, "");
-    if (cleanSegment.trim()) {
-      elements.push(formatTextContent(cleanSegment, segIdx));
-    }
-  }
-
-  return elements;
+  return formatTextContent(content, 0);
 }
 
 function formatTextContent(content: string, baseKey: number) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback, useState, useMemo, lazy, Suspense } from "react";
 import ChatMessage from "./ChatMessage";
 import PageCompleteActions from "./PageCompleteActions";
 import ChatInput from "./ChatInput";
@@ -11,9 +11,11 @@ import OnboardingFlow, {
 } from "./OnboardingFlow";
 import { Sparkles, RefreshCw, Store, ExternalLink, X } from "lucide-react";
 import { useChat, type Message, type Attachment } from "@/hooks/useChat";
-import { extractPageData, stripPageMarkers, hasPageData, stripDNAMarkers } from "@/lib/page-parser";
+import { extractPageData, stripPageMarkers, hasPageData } from "@/lib/page-parser";
 import type { PageData } from "@/lib/page-parser";
 import dynamic from "next/dynamic";
+
+const DesignDNAVisualizer = lazy(() => import("./DesignDNAVisualizer"));
 
 // Lazy-load SiteRebuildFlow (heavy component)
 const SiteRebuildFlow = dynamic(
@@ -445,17 +447,31 @@ export default function ChatView({
     setOnboardingType(null);
   }, []);
 
-  // Strip page markers from display (DNA markers are handled by ChatMessage)
+  // ── DNAデータ抽出（メッセージコンテンツからDNAブロックを抽出） ──
+  const DNA_REGEX = /---DNA_START---([\s\S]*?)---DNA_END---/;
+
+  const extractDNAData = useCallback((content: string): { data: any; confidence?: number; templateId?: string } | null => {
+    const match = content.match(DNA_REGEX);
+    if (!match) return null;
+    try {
+      return JSON.parse(match[1].trim());
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Strip page markers AND DNA markers from display
   const displayContent = useCallback((content: string) => {
-    if (hasPageData(content)) {
-      const stripped = stripPageMarkers(content);
+    // DNAマーカーを常に除去（ChatViewがDNAビジュアライザーを別途レンダリング）
+    let cleaned = content.replace(/---DNA_START---[\s\S]*?---DNA_END---/g, "");
+
+    if (hasPageData(cleaned)) {
+      const stripped = stripPageMarkers(cleaned);
       if (stripped.trim()) return stripped;
       return "ページをプレビューに反映しました。右側のプレビューパネルでご確認ください。";
     }
 
-    // DNAマーカーを除外してからコード検出を行う
-    const withoutDNA = content.replace(/---DNA_START---[\s\S]*?---DNA_END---/g, "");
-    const trimmed = withoutDNA.trim();
+    const trimmed = cleaned.trim();
     const codeLines = trimmed.split("\n").filter((line) => {
       const l = line.trim();
       return (
@@ -483,8 +499,7 @@ export default function ChatView({
       return textParts || "ページの生成を続行しています。プレビューパネルで確認できます。";
     }
 
-    // DNAマーカーは含めたまま返す（ChatMessageが処理する）
-    return content;
+    return cleaned;
   }, []);
 
   const lastMessage = messages[messages.length - 1];
@@ -536,6 +551,11 @@ export default function ChatView({
                 msg.content.includes("---PAGE_START---") &&
                 msg.content.includes("---PAGE_END---");
 
+              // DNAデータ抽出（アシスタントメッセージからDNAブロックを検出）
+              const dnaData = msg.role === "assistant"
+                ? extractDNAData(msg.content)
+                : null;
+
               return (
                 <div key={msg.id}>
                   {msg.role === "assistant" && !msg.content && isStreaming ? (
@@ -546,6 +566,18 @@ export default function ChatView({
                       content={msg.role === "assistant" ? displayContent(msg.content) : msg.content}
                       attachments={msg.attachments}
                     />
+                  )}
+                  {/* Design DNA ビジュアライゼーション */}
+                  {dnaData?.data && (
+                    <div className="ml-10 mt-2">
+                      <Suspense fallback={<div className="h-32 animate-pulse bg-accent/5 rounded-2xl" />}>
+                        <DesignDNAVisualizer
+                          data={dnaData.data}
+                          confidence={dnaData.confidence}
+                          templateId={dnaData.templateId}
+                        />
+                      </Suspense>
+                    </div>
                   )}
                   {/* ページ生成完了後のアクションボタン */}
                   {hasCompletedPage && currentPageData && (

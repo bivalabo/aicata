@@ -558,10 +558,11 @@ export default function LivePreview({
                           ...iframeMobileStyle,
                           border: "none",
                         }
-                      : { width: "100%", height: "100%" }
+                      : { width: "100%", height: "100%", overflow: "auto" }
                   }
                   sandbox="allow-scripts allow-same-origin"
                   title="ページプレビュー"
+                  scrolling="auto"
                 />
 
                 {/* セクションエディタオーバーレイ */}

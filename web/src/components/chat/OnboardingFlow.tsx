@@ -141,7 +141,7 @@ const STEPS: StepConfig[] = [
 ];
 
 const TEMPLATE_LABELS: Record<string, string> = {
-  landing: "トップページ",
+  landing: "ランディングページ",
   product: "商品詳細ページ",
   collection: "コレクションページ",
   cart: "カートページ",
