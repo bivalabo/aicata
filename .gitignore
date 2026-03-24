@@ -13,7 +13,7 @@ node_modules/
 !.yarn/versions
 
 # -- ビルド成果物 --
-build/
+/build/
 dist/
 .cache/
 .next/

@@ -323,3 +323,53 @@ model TrendReport {
   @@index([period])
   @@index([createdAt])
 }
+
+// ============================================================
+// インクリメンタルビルド — DDP v2
+// セクション単位で確実に生成・保存し、タイムアウトを防止する
+// ============================================================
+
+/// ビルドジョブ: 1ページ分のビルド状態を管理
+model BuildJob {
+  id              String   @id @default(cuid())
+  conversationId  String?
+  pageId          String?  // 完成後に作成されるPageのID
+  pageType        String   @default("landing")
+  url             String?  // 元サイトURL
+  userInstructions String  @default("")
+  status          String   @default("planning")
+    // planning | building | assembling | reviewing | complete | failed
+  designSpec      String?  // JSON: DesignSpec
+  assembledHtml   String?  // Stage 3の結果HTML
+  assembledCss    String?  // Stage 3の結果CSS
+  fullDocument    String?  // 完成HTML（fonts + style + html）
+  reviewResult    String?  // JSON: ReviewResult
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  sections        BuildSection[]
+
+  @@index([status])
+  @@index([conversationId])
+}
+
+/// ビルドセクション: 各セクションの生成状態
+model BuildSection {
+  id          String   @id @default(cuid())
+  buildId     String
+  build       BuildJob @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  sectionId   String   // "hero", "features", "products" など
+  spec        String   // JSON: SectionSpec
+  html        String?  // 生成されたHTML
+  css         String?  // 生成されたCSS
+  status      String   @default("pending")
+    // pending | generating | complete | failed
+  retryCount  Int      @default(0)
+  error       String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([buildId, sortOrder])
+  @@index([status])
+}
