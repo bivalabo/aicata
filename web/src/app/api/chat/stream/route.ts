@@ -238,7 +238,9 @@ export async function POST(request: Request) {
                 spec = await generateDesignSpec(anthropicClient, ddpInput, ddpConfig);
                 console.log("[DDP v2] Stage 1 complete:", spec.designPhilosophy.slice(0, 60));
               } catch (specErr) {
-                console.error("[DDP v2] Stage 1 failed:", specErr);
+                const errDetail = specErr instanceof Error ? specErr.message : String(specErr);
+                console.error("[DDP v2] Stage 1 failed:", errDetail, specErr);
+                sse.sendText(`\n**エラー (Stage 1)**: ${errDetail}\n`);
                 throw specErr;
               }
 
@@ -415,10 +417,10 @@ export async function POST(request: Request) {
 
               ddpSucceeded = true;
             } catch (innerErr) {
-              console.error("[DDP v2] Pipeline failed:", innerErr);
+              const errMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+              console.error("[DDP v2] Pipeline failed:", errMsg, innerErr);
               // SSEストリームにエラーを送信してcloseする
-              // ddpSucceeded は false のまま → レガシーパスへフォールバックはできない（ストリームが既に開始済み）
-              sse.sendText(`\n\nページ生成中にエラーが発生しました。もう一度お試しください。\n`);
+              sse.sendText(`\n\nページ生成中にエラーが発生しました: ${errMsg}\nもう一度お試しください。\n`);
             }
 
             sse.sendDone({ model: DEFAULT_MODEL || "claude-sonnet-4-20250514" });
