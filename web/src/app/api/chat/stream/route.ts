@@ -558,6 +558,12 @@ function detectPageGenerationRequest(
   text: string,
   explicitPageType?: string,
 ): boolean {
+  // 継続メッセージ（ストリーム中断からの復帰）はDDPスキップ — レガシーパスで高速処理
+  if (text.includes("前回のページ生成が途中で中断") || text.includes("---PAGE_START---") || text.includes("---PAGE_END---")) {
+    console.log("[Stream API] Continuation message detected — skipping DDP");
+    return false;
+  }
+
   // 明示的にpageTypeが指定されている場合は生成リクエスト
   if (explicitPageType) return true;
 
