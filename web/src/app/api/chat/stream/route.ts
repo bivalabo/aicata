@@ -194,11 +194,34 @@ export async function POST(request: Request) {
               sse.sendText("ページをデザインしています...\n\n");
 
               // DDPNextInput 構築
+              // 業種: ユーザーテキストのキーワード → URL分析結果 → "general" の優先順
+              const textIndustry = detectIndustry(latestUserText);
+              const resolvedIndustry = (
+                textIndustry !== "general"
+                  ? textIndustry
+                  : (urlAnalysis as any)?.industry || "general"
+              );
+              // トーン: ユーザーテキスト + URL分析結果をマージ
+              const textTones = detectTones(latestUserText);
+              const urlTones = (urlAnalysis as any)?.tones as string[] | undefined;
+              const mergedTones = textTones.length > 0
+                ? textTones
+                : (urlTones || []);
+
+              console.log("[DDP Next] Industry resolution:", {
+                textIndustry,
+                urlIndustry: (urlAnalysis as any)?.industry,
+                resolved: resolvedIndustry,
+                textTones,
+                urlTones,
+                mergedTones,
+              });
+
               const ddpNextInput: DDPNextInput = {
                 pageType: (pageType || detectPageType(latestUserText)) as any,
-                industry: detectIndustry(latestUserText) as any,
+                industry: resolvedIndustry as any,
                 brandName: detectBrandName(latestUserText),
-                tones: detectTones(latestUserText) as any[],
+                tones: mergedTones as any[],
                 targetAudience: "",
                 userInstructions: latestUserText,
                 referenceUrl: urlAnalysis?.url,

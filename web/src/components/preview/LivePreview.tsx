@@ -534,10 +534,10 @@ export default function LivePreview({
         >
           <div
             className={clsx(
-              "overflow-auto transition-all duration-300 h-full relative",
+              "transition-all duration-300 h-full relative",
               isMobileViewport
-                ? "w-full"
-                : "bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)]",
+                ? "w-full overflow-auto"
+                : "bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden",
             )}
             style={
               isMobileViewport
@@ -558,11 +558,16 @@ export default function LivePreview({
                           ...iframeMobileStyle,
                           border: "none",
                         }
-                      : { width: "100%", height: "100%", overflow: "auto" }
+                      : {
+                          width: "100%",
+                          height: "100%",
+                          border: "none",
+                          display: "block",
+                        }
                   }
                   sandbox="allow-scripts allow-same-origin"
                   title="ページプレビュー"
-                  scrolling="auto"
+                  scrolling="yes"
                 />
 
                 {/* セクションエディタオーバーレイ */}

@@ -158,12 +158,23 @@ function buildContentRequirements(input: DDPNextInput): ContentRequirements {
     brandMemory,
   } = input;
 
-  // ブランドメモリとの統合
+  // ブランドメモリ + URL分析との統合
+  // 優先順: 明示的な入力 > URL分析 > ブランドメモリ > デフォルト
   const resolvedBrandName = brandName || brandMemory?.brandName || "Brand";
-  const resolvedIndustry = industry || (brandMemory?.industry as IndustryType) || "general";
+  const urlIndustry = (urlAnalysis as any)?.industry as string | undefined;
+  const urlTones = (urlAnalysis as any)?.tones as string[] | undefined;
+  const resolvedIndustry = (
+    (industry && industry !== "general" ? industry : null)
+    || urlIndustry
+    || (brandMemory?.industry as IndustryType)
+    || industry  // original fallback (could be "general")
+    || "general"
+  );
   const resolvedTones = tones.length > 0
     ? tones
-    : (brandMemory?.tones as DesignTone[]) || ["modern"];
+    : (urlTones as DesignTone[])
+      ?? (brandMemory?.tones as DesignTone[])
+      ?? ["modern"];
   const resolvedAudience = targetAudience || brandMemory?.targetAudience || "";
 
   // URL分析からの参考情報
@@ -179,7 +190,7 @@ function buildContentRequirements(input: DDPNextInput): ContentRequirements {
 
   return {
     brandName: resolvedBrandName,
-    industry: resolvedIndustry,
+    industry: resolvedIndustry as IndustryType,
     pageType,
     tones: resolvedTones,
     targetAudience: resolvedAudience,
