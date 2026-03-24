@@ -246,6 +246,13 @@ export async function POST(request: Request) {
                 throw new Error("DesignSpec にセクションがありません");
               }
 
+              // コスト制御: DDP_MAX_SECTIONS でセクション数を制限（テスト用）
+              const maxSections = parseInt(process.env.DDP_MAX_SECTIONS || "0", 10);
+              if (maxSections > 0 && spec.sections.length > maxSections) {
+                console.log(`[DDP v2] Limiting sections: ${spec.sections.length} → ${maxSections} (DDP_MAX_SECTIONS)`);
+                spec.sections = spec.sections.slice(0, maxSections);
+              }
+
               sse.sendText(`\n**デザイン方針**: ${spec.designPhilosophy}\n`);
               sse.sendText(`**配色**: ${spec.colors.reasoning}\n`);
               sse.sendText(`**セクション構成**: ${spec.sections.length}セクション\n\n`);
@@ -297,12 +304,17 @@ export async function POST(request: Request) {
 
                 try {
                   const userPrompt = buildSectionPrompt(spec, section);
-                  const response = await anthropicClient.messages.create({
-                    model: ddpConfig.sectionModel,
-                    max_tokens: ddpConfig.sectionMaxTokens,
-                    system: SECTION_ARTISAN_PROMPT,
-                    messages: [{ role: "user", content: userPrompt }],
-                  });
+                  const response = await Promise.race([
+                    anthropicClient.messages.create({
+                      model: ddpConfig.sectionModel,
+                      max_tokens: ddpConfig.sectionMaxTokens,
+                      system: SECTION_ARTISAN_PROMPT,
+                      messages: [{ role: "user", content: userPrompt }],
+                    }),
+                    new Promise<never>((_, reject) =>
+                      setTimeout(() => reject(new Error("セクション生成タイムアウト（45秒）")), 45000),
+                    ),
+                  ]);
 
                   const text = response.content
                     .filter((b) => b.type === "text")
@@ -320,12 +332,14 @@ export async function POST(request: Request) {
                     });
                     sse.sendText(`  ✓ ${section.purpose} 完了\n`);
 
-                    // DB更新（非同期）
+                    // DB更新（非同期、エラーはログのみ）
                     if (buildJobId) {
                       prisma.buildSection.updateMany({
                         where: { buildId: buildJobId, sectionId: section.id },
                         data: { html: parsed.html, css: parsed.css, status: "complete" },
-                      }).catch(() => {});
+                      }).catch((dbErr: unknown) => {
+                        console.warn(`[DDP v2] BuildSection update failed for ${section.id}:`, dbErr);
+                      });
                     }
                   } else {
                     renderedSections.push({
@@ -361,7 +375,7 @@ export async function POST(request: Request) {
                 valid: assembled.validation.isValid,
               });
 
-              // BuildJob を完了に更新
+              // BuildJob を完了に更新（非同期、エラーはログのみ）
               if (buildJobId) {
                 prisma.buildJob.update({
                   where: { id: buildJobId },
@@ -371,18 +385,19 @@ export async function POST(request: Request) {
                     fullDocument: assembled.fullDocument,
                     status: "complete",
                   },
-                }).catch(() => {});
+                }).catch((dbErr: unknown) => {
+                  console.warn("[DDP v2] BuildJob update failed:", dbErr);
+                });
               }
 
               // 完成 HTML を PAGE_START/PAGE_END マーカー付きで送信
               sse.sendText(`---PAGE_START---\n`);
 
               const doc = assembled.fullDocument;
-              const chunkSize = 500;
+              const chunkSize = 2000;
               for (let i = 0; i < doc.length; i += chunkSize) {
                 if (sse.isClosed) break;
                 sse.sendText(doc.slice(i, i + chunkSize));
-                await new Promise((r) => setTimeout(r, 3));
               }
 
               sse.sendText(`\n---PAGE_END---\n`);

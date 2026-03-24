@@ -197,6 +197,11 @@ export function useBuildController(options: UseBuildControllerOptions = {}) {
             signal: abortController.signal,
           });
 
+          if (!sectionRes.ok) {
+            const errData = await sectionRes.json().catch(() => ({ error: "不明なエラー" }));
+            throw new Error(errData.error || `セクション生成失敗 (HTTP ${sectionRes.status})`);
+          }
+
           const sectionData = await sectionRes.json();
 
           if (sectionData.status === "complete") {

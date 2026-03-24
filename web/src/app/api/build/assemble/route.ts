@@ -49,8 +49,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // DesignSpec を復元
-    const designSpec: DesignSpec = JSON.parse(buildJob.designSpec);
+    // DesignSpec を復元（安全にパース）
+    let designSpec: DesignSpec;
+    try {
+      designSpec = JSON.parse(buildJob.designSpec);
+    } catch (parseErr) {
+      return NextResponse.json(
+        { error: "DesignSpec のパースに失敗しました" },
+        { status: 400 },
+      );
+    }
 
     // セクション型定義（Prisma Client 未生成環境でも型安全に）
     type SectionRecord = {

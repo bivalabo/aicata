@@ -20,6 +20,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { url, pageType, userInstructions, urlAnalysis, conversationId } = body;
 
+    if (!url && !userInstructions) {
+      return NextResponse.json(
+        { error: "url または userInstructions は必須です" },
+        { status: 400 },
+      );
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json(
+        { error: "ANTHROPIC_API_KEY が設定されていません" },
+        { status: 500 },
+      );
+    }
+
     // Anthropic クライアント
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -44,6 +58,13 @@ export async function POST(req: NextRequest) {
     // Stage 1: DesignSpec生成
     console.log("[Build/Plan] Starting Stage 1: Design Director");
     const designSpec = await generateDesignSpec(client, ddpInput, config);
+    // コスト制御: DDP_MAX_SECTIONS でセクション数を制限
+    const maxSections = parseInt(process.env.DDP_MAX_SECTIONS || "0", 10);
+    if (maxSections > 0 && designSpec.sections.length > maxSections) {
+      console.log(`[Build/Plan] Limiting sections: ${designSpec.sections.length} → ${maxSections}`);
+      designSpec.sections = designSpec.sections.slice(0, maxSections);
+    }
+
     console.log("[Build/Plan] Stage 1 complete:", {
       sectionsCount: designSpec.sections.length,
       colors: designSpec.colors?.primary,

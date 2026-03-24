@@ -84,9 +84,24 @@ export async function POST(req: NextRequest) {
       data: { status: "generating" },
     });
 
-    // DesignSpec を復元
-    const designSpec: DesignSpec = JSON.parse(buildSection.build.designSpec!);
-    const sectionSpec: SectionSpec = JSON.parse(buildSection.spec);
+    // DesignSpec を復元（安全にパース）
+    if (!buildSection.build.designSpec) {
+      return NextResponse.json(
+        { error: "DesignSpec が見つかりません" },
+        { status: 400 },
+      );
+    }
+    let designSpec: DesignSpec;
+    let sectionSpec: SectionSpec;
+    try {
+      designSpec = JSON.parse(buildSection.build.designSpec);
+      sectionSpec = JSON.parse(buildSection.spec);
+    } catch (parseErr) {
+      return NextResponse.json(
+        { error: "DesignSpec または SectionSpec のパースに失敗しました" },
+        { status: 400 },
+      );
+    }
 
     // Anthropic クライアント
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
