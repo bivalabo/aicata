@@ -45,11 +45,11 @@ const NAV_ITEMS = [
   { id: "site", icon: Store, label: "サイト構築" },
   { id: "pages", icon: FileText, label: "ページ管理" },
   { id: "settings", icon: Settings, label: "設定" },
+  { id: "admin", icon: Brain, label: "Intelligence" },
 ];
 
 const COMING_SOON_ITEMS = [
   { id: "seo", icon: Search, label: "SEO" },
-  { id: "admin", icon: Brain, label: "Intelligence" },
 ];
 
 function formatRelativeDate(dateStr: string): string {
