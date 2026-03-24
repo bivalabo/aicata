@@ -26,6 +26,7 @@ import {
   Globe,
   PenLine,
   Rocket,
+  Loader2,
 } from "lucide-react";
 import clsx from "clsx";
 import TemplatePreviewCard from "./TemplatePreviewCard";
@@ -251,6 +252,7 @@ export default function OnboardingFlow({
   const isFinalStep = step === STEPS.length;
 
   const [showCustomAudience, setShowCustomAudience] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSelect = useCallback(
     (stepId: string, optionId: string) => {
@@ -288,6 +290,7 @@ export default function OnboardingFlow({
   }, [step, onCancel]);
 
   const handleComplete = useCallback(() => {
+    setIsSubmitting(true);
     const industryOption = STEPS[0].options.find((o) => o.id === selections.industry);
     const toneOption = STEPS[1].options.find((o) => o.id === selections.tone);
     const audienceOption = STEPS[2].options.find((o) => o.id === selections.audience);
@@ -351,6 +354,29 @@ export default function OnboardingFlow({
     center: { x: 0, opacity: 1 },
     exit: (d: number) => ({ x: d > 0 ? -80 : 80, opacity: 0 }),
   };
+
+  // 送信中はローディング表示
+  if (isSubmitting) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-lg mx-auto">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] flex items-center justify-center shadow-lg shadow-[#7c5cfc]/15">
+            <Loader2 className="w-6 h-6 text-white animate-spin" />
+          </div>
+          <p className="text-[15px] font-semibold text-foreground">
+            ページを準備しています...
+          </p>
+          <p className="text-[13px] text-muted-foreground">
+            AIがデザインの設計を開始します
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-lg mx-auto">

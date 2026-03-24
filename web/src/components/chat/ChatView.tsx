@@ -244,6 +244,14 @@ export default function ChatView({
     }
   }, [isSending, messages.length, isStreaming]);
 
+  // onboardingType をメッセージ到着後に安全にクリア（WelcomeScreen フラッシュ防止）
+  useEffect(() => {
+    if (pendingOnboardingClearRef.current && messages.length > 0) {
+      pendingOnboardingClearRef.current = false;
+      setOnboardingType(null);
+    }
+  }, [messages.length]);
+
   // ストリーミング状態の変化を親コンポーネントに通知
   useEffect(() => {
     onStreamingChange?.(isStreaming);
@@ -411,11 +419,13 @@ export default function ChatView({
   );
 
   // Onboarding completion
+  // NOTE: onboardingType を null にするのはメッセージが追加されてからにする。
+  // 先に null にすると showWelcome=true の瞬間が発生してフラッシュする。
+  const pendingOnboardingClearRef = useRef(false);
   const handleOnboardingComplete = useCallback(
     async (compiledPrompt: string, pageType: string, selections: OnboardingSelections) => {
-      setIsSending(true); // WelcomeScreen フラッシュ防止
-      setOnboardingType(null);
       setCurrentPageType(pageType === "site-build" ? "landing" : pageType);
+      pendingOnboardingClearRef.current = true;
       handleSend(compiledPrompt);
     },
     [handleSend],
