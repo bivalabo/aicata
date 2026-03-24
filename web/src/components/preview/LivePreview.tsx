@@ -47,6 +47,10 @@ interface LivePreviewProps {
   viewport?: DeviceType;
   /** コンパクトモード（ツールバー非表示でフルプレビュー） */
   compact?: boolean;
+  /** 生成完了時にプレビューパネルを拡大するコールバック */
+  onRequestExpand?: (expanded: boolean) => void;
+  /** 外部からショーケースモードを起動するトリガー（値が変わるたびに発火） */
+  showcaseTrigger?: number;
 }
 
 type ViewMode = "desktop" | "tablet" | "mobile";
@@ -59,6 +63,9 @@ const VIEW_SIZES: Record<
   tablet: { width: "768px", icon: Tablet, label: "タブレット" },
   mobile: { width: "375px", icon: Smartphone, label: "モバイル" },
 };
+
+/** チャット横プレビューのデフォルトはモバイル（375px）— 実サイズで確認できる */
+const DEFAULT_VIEW_MODE: ViewMode = "mobile";
 
 /**
  * AI生成HTMLから <link> タグを抽出して <head> に移動する
@@ -126,12 +133,13 @@ ${sectionDetectionScript ? `<script>${sectionDetectionScript}</script>` : ""}
 }
 
 /**
- * ビューポートデバイス種別からデフォルトのViewModeを返す
+ * ViewMode初期値: チャット横プレビューはモバイルがデフォルト
+ * デスクトップページは幅が足りず品質が分からないため
  */
 function getDefaultViewMode(viewport?: DeviceType): ViewMode {
   if (viewport === "mobile") return "mobile";
   if (viewport === "tablet") return "tablet";
-  return "desktop";
+  return DEFAULT_VIEW_MODE;
 }
 
 export default function LivePreview({
@@ -151,8 +159,10 @@ export default function LivePreview({
   isTemplatePreview = false,
   viewport,
   compact = false,
+  onRequestExpand,
+  showcaseTrigger,
 }: LivePreviewProps) {
-  // デバイスに応じたデフォルトViewMode
+  // デバイスに応じたデフォルトViewMode（プレビューパネルはモバイルがデフォルト）
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     getDefaultViewMode(viewport),
   );
@@ -160,9 +170,12 @@ export default function LivePreview({
   const [showComplete, setShowComplete] = useState(false);
   const [editorEnabled, setEditorEnabled] = useState(enableSectionEditor);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  /** 生成完了ショーケースモード: 一時的にデスクトップ表示 + パネル拡大 */
+  const [isShowcasing, setIsShowcasing] = useState(false);
   const wasGeneratingRef = useRef(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const preViewModeRef = useRef<ViewMode>("mobile");
 
   const isMobileViewport = viewport === "mobile" || viewport === "tablet";
 
@@ -184,14 +197,60 @@ export default function LivePreview({
 
   const { sections } = useIframeSections(iframeRef);
 
+  // ── 生成完了ショーケース: 一時的にデスクトップ表示 + パネル拡大 ──
   useEffect(() => {
     if (wasGeneratingRef.current && !isGenerating && html) {
       setShowComplete(true);
-      const timer = setTimeout(() => setShowComplete(false), 3000);
-      return () => clearTimeout(timer);
+      const timer1 = setTimeout(() => setShowComplete(false), 3000);
+
+      // デスクトップでのみショーケースモード
+      if (!isMobileViewport) {
+        // ショーケース開始: デスクトップビューに切替 + パネル拡大
+        preViewModeRef.current = viewMode;
+        setViewMode("desktop");
+        setIsShowcasing(true);
+        onRequestExpand?.(true);
+
+        // 6秒後にモバイルビューに戻す + パネル縮小
+        const timer2 = setTimeout(() => {
+          setIsShowcasing(false);
+          setViewMode(preViewModeRef.current);
+          onRequestExpand?.(false);
+        }, 6000);
+
+        return () => { clearTimeout(timer1); clearTimeout(timer2); };
+      }
+
+      return () => clearTimeout(timer1);
     }
     wasGeneratingRef.current = isGenerating;
   }, [isGenerating, html]);
+
+  // ── 外部トリガーによるショーケースモード ──
+  const showcaseTriggerRef = useRef(showcaseTrigger);
+  useEffect(() => {
+    if (
+      showcaseTrigger !== undefined &&
+      showcaseTrigger !== showcaseTriggerRef.current &&
+      !isMobileViewport &&
+      html
+    ) {
+      preViewModeRef.current = viewMode;
+      setViewMode("desktop");
+      setIsShowcasing(true);
+      onRequestExpand?.(true);
+
+      const timer = setTimeout(() => {
+        setIsShowcasing(false);
+        setViewMode(preViewModeRef.current);
+        onRequestExpand?.(false);
+      }, 6000);
+
+      showcaseTriggerRef.current = showcaseTrigger;
+      return () => clearTimeout(timer);
+    }
+    showcaseTriggerRef.current = showcaseTrigger;
+  }, [showcaseTrigger]);
 
   const handleOpenInNewTab = useCallback(() => {
     const fullHtml = buildFullHtml(html, css, false);

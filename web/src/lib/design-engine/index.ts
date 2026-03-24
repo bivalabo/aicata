@@ -9,7 +9,7 @@ export { analyzeDesignContext } from "./context-analyzer";
 export { composeDesignPrompt, composeDesignPromptWithCache, composeGen3Prompt, composeGen3PromptWithCache } from "./prompt-composer";
 
 // --- Gen-3: Template Selection ---
-export { selectBestTemplate, selectBestTemplates } from "./template-selector";
+export { selectBestTemplate, selectBestTemplates, getAllTemplates } from "./template-selector";
 
 // --- Gen-3: Page Assembly ---
 export { assemblePage, assembleFullHtml } from "./page-assembler";

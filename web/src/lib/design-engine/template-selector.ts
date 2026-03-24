@@ -109,6 +109,13 @@ const INDUSTRY_AFFINITY: Partial<Record<IndustryType, IndustryType[]>> = {
 // ============================================================
 
 /**
+ * 全ページテンプレートを返す（DDP Next用）
+ */
+export function getAllTemplates(): PageTemplate[] {
+  return [...PAGE_TEMPLATES];
+}
+
+/**
  * DesignContext（+ 任意のURL解析結果）から最適なページテンプレートを選択
  *
  * @returns スコア降順のTemplateMatch配列（limit件まで）

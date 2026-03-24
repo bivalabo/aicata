@@ -9,7 +9,7 @@ import MobilePanelSwitcher, {
   type MobilePanel,
 } from "@/components/layout/MobilePanelSwitcher";
 import ChatView from "@/components/chat/ChatView";
-import LivePreview from "@/components/preview/LivePreview";
+import LivePreview, { buildFullHtml } from "@/components/preview/LivePreview";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { useViewport } from "@/hooks/useViewport";
 import clsx from "clsx";
@@ -338,6 +338,10 @@ export default function Home() {
   }, [pageData, savedPageId, activeConversationId, conversations]);
 
   const [isStreaming, setIsStreaming] = useState(false);
+  /** プレビューパネルのショーケース拡大モード（生成完了時に一時的にtrue） */
+  const [previewExpanded, setPreviewExpanded] = useState(false);
+  /** 外部からLivePreviewのショーケースモードを起動するトリガー */
+  const [showcaseTrigger, setShowcaseTrigger] = useState(0);
   const showPreview = pageData !== null;
 
   // ── フルスクリーンエディタモード ──
@@ -361,6 +365,22 @@ export default function Home() {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
+
+  // ── ChatView → デスクトッププレビュー拡大 ──
+  const handleExpandDesktopPreview = useCallback(() => {
+    setPreviewExpanded(true);
+    setShowcaseTrigger((n) => n + 1);
+  }, []);
+
+  // ── ChatView → 新しいウィンドウでプレビュー ──
+  const handleOpenPreviewNewWindow = useCallback(() => {
+    if (!pageData) return;
+    const fullHtml = buildFullHtml(pageData.html, pageData.css, false);
+    const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, [pageData]);
 
   // ── モバイル: fullPreview では UI 要素を最小化 ──
   const isFullPreview = mobilePanel === "fullPreview";
@@ -448,11 +468,14 @@ export default function Home() {
                 /* ===== デスクトップレイアウト: サイドバイサイド ===== */
                 <>
                   <div
-                    className={
+                    className={clsx(
+                      "overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
                       showPreview
-                        ? "w-[45%] min-w-[360px] overflow-hidden transition-all duration-300"
-                        : "flex-1 overflow-hidden"
-                    }
+                        ? previewExpanded
+                          ? "w-[25%] min-w-[300px]"
+                          : "w-[45%] min-w-[360px]"
+                        : "flex-1",
+                    )}
                   >
                     <ErrorBoundary label="チャット">
                       <ChatView
@@ -466,6 +489,9 @@ export default function Home() {
                         onPendingMessageConsumed={() =>
                           setPendingSectionEdit(null)
                         }
+                        onExpandDesktopPreview={handleExpandDesktopPreview}
+                        onOpenPreviewNewWindow={handleOpenPreviewNewWindow}
+                        currentPageData={pageData}
                       />
                     </ErrorBoundary>
                   </div>
@@ -487,6 +513,8 @@ export default function Home() {
                           onChatEditSection={handleChatEditSection}
                           onOpenEditor={handleOpenEditor}
                           viewport={viewport.device}
+                          onRequestExpand={setPreviewExpanded}
+                          showcaseTrigger={showcaseTrigger}
                         />
                       </ErrorBoundary>
                     </div>
@@ -515,6 +543,8 @@ export default function Home() {
                         onPendingMessageConsumed={() =>
                           setPendingSectionEdit(null)
                         }
+                        onOpenPreviewNewWindow={handleOpenPreviewNewWindow}
+                        currentPageData={pageData}
                       />
                     </ErrorBoundary>
                   </div>

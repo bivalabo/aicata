@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import ChatMessage from "./ChatMessage";
+import PageCompleteActions from "./PageCompleteActions";
 import ChatInput from "./ChatInput";
 import WelcomeScreen from "./WelcomeScreen";
 import OnboardingFlow, {
@@ -165,6 +166,12 @@ interface ChatViewProps {
   onTemplatePreviewChange?: (isTemplate: boolean) => void;
   pendingMessage?: string | null;
   onPendingMessageConsumed?: () => void;
+  /** プレビューをデスクトップ拡大するコールバック */
+  onExpandDesktopPreview?: () => void;
+  /** プレビューを新しいウィンドウで開くコールバック */
+  onOpenPreviewNewWindow?: () => void;
+  /** 現在のページデータ（アクションボタン表示用） */
+  currentPageData?: { html: string; css: string } | null;
 }
 
 export default function ChatView({
@@ -175,6 +182,9 @@ export default function ChatView({
   onTemplatePreviewChange,
   pendingMessage,
   onPendingMessageConsumed,
+  onExpandDesktopPreview,
+  onOpenPreviewNewWindow,
+  currentPageData,
 }: ChatViewProps) {
   const {
     messages,
@@ -513,18 +523,41 @@ export default function ChatView({
                 </div>
               </div>
             )}
-            {messages.map((msg) =>
-              msg.role === "assistant" && !msg.content && isStreaming ? (
-                <ChatMessage key={msg.id} role="assistant" content="" isStreaming />
-              ) : (
-                <ChatMessage
-                  key={msg.id}
-                  role={msg.role}
-                  content={msg.role === "assistant" ? displayContent(msg.content) : msg.content}
-                  attachments={msg.attachments}
-                />
-              ),
-            )}
+            {messages.map((msg, idx) => {
+              const isLastAssistant =
+                msg.role === "assistant" &&
+                idx === messages.length - 1;
+              const hasCompletedPage =
+                isLastAssistant &&
+                !isStreaming &&
+                msg.content.includes("---PAGE_START---") &&
+                msg.content.includes("---PAGE_END---");
+
+              return (
+                <div key={msg.id}>
+                  {msg.role === "assistant" && !msg.content && isStreaming ? (
+                    <ChatMessage role="assistant" content="" isStreaming />
+                  ) : (
+                    <ChatMessage
+                      role={msg.role}
+                      content={msg.role === "assistant" ? displayContent(msg.content) : msg.content}
+                      attachments={msg.attachments}
+                    />
+                  )}
+                  {/* ページ生成完了後のアクションボタン */}
+                  {hasCompletedPage && currentPageData && (
+                    <div className="ml-10 mt-1">
+                      <PageCompleteActions
+                        html={currentPageData.html}
+                        css={currentPageData.css}
+                        onExpandDesktop={onExpandDesktopPreview}
+                        onOpenNewWindow={onOpenPreviewNewWindow}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
         )}

@@ -20,6 +20,8 @@ import {
 } from "@/lib/ddp/stage2-helpers";
 import { prisma } from "@/lib/db";
 import Anthropic from "@anthropic-ai/sdk";
+import { runDDPNextPipeline } from "@/lib/ddp-next";
+import type { DDPNextInput, DDPNextProgressEvent } from "@/lib/ddp-next";
 
 // Next.js Route Segment Config — allow long-running streaming responses
 export const maxDuration = 300; // 5 minutes
@@ -178,8 +180,141 @@ export async function POST(request: Request) {
     const isVercelHobby = process.env.VERCEL === "1" && !process.env.VERCEL_PRO;
     const skipDDP = isVercelHobby || process.env.SKIP_DDP === "1";
 
+    // ── DDP Next パイプライン（USE_DDP_NEXT=1 で有効化） ──
+    const useDDPNext = process.env.USE_DDP_NEXT === "1";
+
+    if (useDDPNext && isPageGenerationRequest && !linkedPage && !skipDDP) {
+      console.log("[Stream API] Using DDP Next pipeline for page generation");
+
+      try {
+        const stream = new ReadableStream({
+          async start(controller) {
+            const sse = new SSEWriter(controller);
+            try {
+              sse.sendText("ページをデザインしています...\n\n");
+
+              // DDPNextInput 構築
+              const ddpNextInput: DDPNextInput = {
+                pageType: (pageType || detectPageType(latestUserText)) as any,
+                industry: detectIndustry(latestUserText) as any,
+                brandName: detectBrandName(latestUserText),
+                tones: detectTones(latestUserText) as any[],
+                targetAudience: "",
+                userInstructions: latestUserText,
+                referenceUrl: urlAnalysis?.url,
+                urlAnalysis: urlAnalysis || undefined,
+              };
+
+              // Brand Memory 統合
+              try {
+                const bm = await getActiveBrandMemory();
+                if (bm) {
+                  ddpNextInput.brandMemory = {
+                    brandName: bm.brandName || undefined,
+                    industry: bm.industry || undefined,
+                    tones: bm.voiceTone ? [bm.voiceTone] : undefined,
+                    colors: {
+                      ...(bm.primaryColor ? { primary: bm.primaryColor } : {}),
+                      ...(bm.secondaryColor ? { secondary: bm.secondaryColor } : {}),
+                      ...(bm.accentColor ? { accent: bm.accentColor } : {}),
+                    },
+                    fonts: [bm.primaryFont, bm.bodyFont].filter(Boolean) as string[],
+                  };
+                }
+              } catch { /* non-fatal */ }
+
+              // Anthropic クライアント（Phase 4 用）
+              const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+              // SSE 進行イベントのコールバック
+              const onProgress = (event: DDPNextProgressEvent) => {
+                if (sse.isClosed) return;
+                switch (event.phase) {
+                  case "intent":
+                    sse.sendText("**Step 1/4**: デザイン意図を解析しています...\n");
+                    break;
+                  case "compose":
+                    sse.sendText(`**Step 2/4**: ${event.message}\n`);
+                    // Phase 2完了時: DNA可視化ブロックを送信
+                    if (event.data?.targetDNA) {
+                      const dnaPayload = JSON.stringify({
+                        data: event.data.targetDNA,
+                        confidence: event.data.confidence,
+                        templateId: event.data.templateId,
+                      });
+                      sse.sendText(`\n---DNA_START---${dnaPayload}---DNA_END---\n\n`);
+                    }
+                    break;
+                  case "assemble":
+                    sse.sendText("**Step 3/4**: ページを組み立てています...\n");
+                    break;
+                  case "personalize":
+                    sse.sendText("**Step 4/4**: コンテンツをカスタマイズしています...\n");
+                    break;
+                  case "done":
+                    // handled below
+                    break;
+                  case "error":
+                    sse.sendText(`\nエラー: ${event.message}\n`);
+                    break;
+                }
+              };
+
+              // パイプライン実行
+              const result = await runDDPNextPipeline(
+                ddpNextInput,
+                onProgress,
+                anthropicClient,
+              );
+
+              // 完成 HTML を PAGE_START/PAGE_END マーカー付きで送信
+              sse.sendText(`\n---PAGE_START---\n`);
+              const doc = result.fullDocument;
+              const chunkSize = 2000;
+              for (let i = 0; i < doc.length; i += chunkSize) {
+                if (sse.isClosed) break;
+                sse.sendText(doc.slice(i, i + chunkSize));
+              }
+              sse.sendText(`\n---PAGE_END---\n`);
+
+              sse.sendText(`\nページが完成しました！（テンプレート: ${result.templateId}, ${Math.round(result.timing.total)}ms）\n`);
+
+              const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
+              if (isSiteBuildRequest) {
+                sse.sendText(`\n続けて他のページも作成できます。\n`);
+              }
+            } catch (innerErr) {
+              const errMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+              console.error("[DDP Next] Pipeline failed:", errMsg, innerErr);
+              sse.sendText(`\n\nページ生成中にエラーが発生しました: ${errMsg}\nもう一度お試しください。\n`);
+            }
+
+            sse.sendDone({ model: DEFAULT_MODEL || "claude-sonnet-4-20250514" });
+            sse.close();
+
+            // DB保存
+            if (conversationId) {
+              try {
+                await saveMessage(conversationId, "assistant", sse.accumulated, {
+                  model: DEFAULT_MODEL || "claude-sonnet-4-20250514",
+                });
+              } catch (e) {
+                console.error("[Stream API] Failed to save DDP Next assistant message:", e);
+              }
+            }
+          },
+          cancel() { /* aborted by client */ },
+        });
+
+        return new Response(stream, { headers: SSE_HEADERS });
+      } catch (err) {
+        console.error("[Stream API] DDP Next stream setup failed, falling through:", err);
+        // フォールスルーして DDP v2 またはレガシーパスへ
+      }
+    }
+
     if (isPageGenerationRequest && !linkedPage && !skipDDP) {
-      console.log("[Stream API] Using DDP pipeline for page generation");
+      console.log("[Stream API] Using DDP v2 pipeline for page generation");
 
       const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
       let ddpSucceeded = false;

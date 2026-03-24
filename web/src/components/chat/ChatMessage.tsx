@@ -2,9 +2,11 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, User, Copy, Check, ChevronRight, Code2 } from "lucide-react";
-import { useState, memo, useMemo } from "react";
+import { useState, memo, useMemo, lazy, Suspense } from "react";
 import clsx from "clsx";
 import type { Attachment } from "@/hooks/useChat";
+
+const DesignDNAVisualizer = lazy(() => import("./DesignDNAVisualizer"));
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -13,7 +15,46 @@ interface ChatMessageProps {
   attachments?: Attachment[];
 }
 
+// ── DNA マーカーの検出と解析 ──
+const DNA_MARKER_REGEX = /---DNA_START---([\s\S]*?)---DNA_END---/g;
+
+function parseDNABlock(json: string): { data: any; confidence?: number; templateId?: string } | null {
+  try {
+    const parsed = JSON.parse(json.trim());
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function formatContent(content: string) {
+  // まずDNAブロックで分割
+  const dnaSegments = content.split(/(---DNA_START---[\s\S]*?---DNA_END---)/g);
+
+  return dnaSegments.map((segment, segIdx) => {
+    // DNAブロックの場合
+    if (segment.startsWith("---DNA_START---")) {
+      const jsonStr = segment.replace("---DNA_START---", "").replace("---DNA_END---", "");
+      const dnaData = parseDNABlock(jsonStr);
+      if (dnaData) {
+        return (
+          <Suspense key={`dna-${segIdx}`} fallback={<div className="h-32 animate-pulse bg-accent/5 rounded-2xl my-3" />}>
+            <DesignDNAVisualizer
+              data={dnaData.data}
+              confidence={dnaData.confidence}
+              templateId={dnaData.templateId}
+            />
+          </Suspense>
+        );
+      }
+    }
+
+    // 通常テキスト → コードブロック分割
+    return formatTextContent(segment, segIdx);
+  });
+}
+
+function formatTextContent(content: string, baseKey: number) {
   const parts = content.split(/(```[\s\S]*?```)/g);
 
   return parts.map((part, i) => {
@@ -21,11 +62,11 @@ function formatContent(content: string) {
       const match = part.match(/```(\w*)\n?([\s\S]*?)```/);
       const lang = match?.[1] || "";
       const code = match?.[2]?.trim() || "";
-      return <CodeBlock key={i} language={lang} code={code} />;
+      return <CodeBlock key={`${baseKey}-${i}`} language={lang} code={code} />;
     }
 
     return (
-      <div key={i} className="space-y-1.5">
+      <div key={`${baseKey}-${i}`} className="space-y-1.5">
         {part.split("\n").map((line, j) => {
           if (line.startsWith("### ")) {
             return (
