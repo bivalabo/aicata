@@ -80,14 +80,14 @@ export function assembleAndValidate(
     );
   }
 
-  // 完成HTML
+  // 完成HTML — CSSを先に出力（ストリーム中断時でもスタイル適用済みにするため）
   const fullDocument = `${fontsLink}
-
-${fixedHtml}
 
 <style>
 ${fixedCss}
-</style>`;
+</style>
+
+${fixedHtml}`;
 
   return {
     html: fixedHtml,
