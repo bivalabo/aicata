@@ -234,6 +234,15 @@ export default function ChatView({
 
   const [currentPageType, setCurrentPageType] = useState<string | null>(null);
   const [isAnalyzingUrl, setIsAnalyzingUrl] = useState(false);
+  // ── 送信準備中フラグ（WelcomeScreen のフラッシュ防止） ──
+  const [isSending, setIsSending] = useState(false);
+
+  // isSending を解除: メッセージが追加されたら送信準備完了
+  useEffect(() => {
+    if (isSending && (messages.length > 0 || isStreaming)) {
+      setIsSending(false);
+    }
+  }, [isSending, messages.length, isStreaming]);
 
   // ストリーミング状態の変化を親コンポーネントに通知
   useEffect(() => {
@@ -324,6 +333,10 @@ export default function ChatView({
 
   const handleSend = useCallback(
     async (content: string, attachments?: Attachment[]) => {
+      // WelcomeScreen フラッシュ防止: 初回送信時は即座にフラグを立てる
+      if (messages.length === 0) {
+        setIsSending(true);
+      }
       let urlAnalysis: unknown;
 
       if (containsUrl(content)) {
@@ -350,7 +363,7 @@ export default function ChatView({
 
       sendMessage(content, attachments, currentPageType || undefined, urlAnalysis);
     },
-    [sendMessage, currentPageType],
+    [sendMessage, currentPageType, messages.length],
   );
 
   // WelcomeScreen: template selection
@@ -400,6 +413,7 @@ export default function ChatView({
   // Onboarding completion
   const handleOnboardingComplete = useCallback(
     async (compiledPrompt: string, pageType: string, selections: OnboardingSelections) => {
+      setIsSending(true); // WelcomeScreen フラッシュ防止
       setOnboardingType(null);
       setCurrentPageType(pageType === "site-build" ? "landing" : pageType);
       handleSend(compiledPrompt);
@@ -457,7 +471,7 @@ export default function ChatView({
     isStreaming && lastMessage?.role === "assistant" &&
     lastMessage.content.includes("---PAGE_START---");
 
-  const showWelcome = messages.length === 0 && !isStreaming && !onboardingType;
+  const showWelcome = messages.length === 0 && !isStreaming && !onboardingType && !isSending;
   const showOnboarding = onboardingType !== null && messages.length === 0;
 
   return (
@@ -480,6 +494,15 @@ export default function ChatView({
           />
         ) : (
           <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+            {/* 送信準備中のローディング表示 */}
+            {isSending && messages.length === 0 && (
+              <div className="flex items-center justify-center py-20">
+                <div className="flex items-center gap-3 text-base-content/50">
+                  <Sparkles className="w-5 h-5 animate-pulse" />
+                  <span className="text-sm">準備しています...</span>
+                </div>
+              </div>
+            )}
             {messages.map((msg) =>
               msg.role === "assistant" && !msg.content && isStreaming ? (
                 <ChatMessage key={msg.id} role="assistant" content="" isStreaming />
