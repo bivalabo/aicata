@@ -14,7 +14,7 @@ export { analyzeIntent } from "./intent-analyzer";
 export { composePagePlan, assembleComposedPage } from "./composer";
 
 // Phase 4: Personalization
-export { personalizeContent, personalizeContentFallback } from "./personalizer";
+export { personalizeContent, personalizeContentFallback, cleanupRemainingPlaceholders } from "./personalizer";
 
 // Section Metadata (HQS + DNA)
 export { getSectionMeta, getAllSectionMeta, getSectionMetaByCategory } from "./section-meta";

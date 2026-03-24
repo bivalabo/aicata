@@ -117,3 +117,10 @@ export function stripPageMarkers(text: string): string {
 export function hasPageData(text: string): boolean {
   return text.includes(PAGE_START);
 }
+
+/**
+ * DNA可視化マーカーを除去（フォールバック用）
+ */
+export function stripDNAMarkers(text: string): string {
+  return text.replace(/---DNA_START---[\s\S]*?---DNA_END---/g, "").trim();
+}

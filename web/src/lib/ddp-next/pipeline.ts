@@ -21,6 +21,7 @@ import { composePagePlan, assembleComposedPage } from "./composer";
 import {
   personalizeContent,
   personalizeContentFallback,
+  cleanupRemainingPlaceholders,
 } from "./personalizer";
 
 // ============================================================
@@ -205,6 +206,9 @@ export async function runDDPNextPipeline(
     );
     timing.personalization = performance.now() - t4;
   }
+
+  // ── 残留プレースホルダーのクリーンアップ ──
+  personalized.fullDocument = cleanupRemainingPlaceholders(personalized.fullDocument);
 
   // ── 完了 ──
   timing.total = performance.now() - totalStart;

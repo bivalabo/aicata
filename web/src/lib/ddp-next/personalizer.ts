@@ -19,14 +19,19 @@ import type {
 
 /** プレースホルダーの種別を推定 */
 function classifyPlaceholder(name: string): {
-  type: "heading" | "body" | "cta" | "tagline" | "meta" | "image" | "url";
+  type: "heading" | "body" | "cta" | "tagline" | "meta" | "image" | "url" | "alt";
   maxLength: number;
   description: string;
 } {
   const n = name.toUpperCase();
 
-  // 画像系
-  if (n.includes("IMAGE") || n.includes("IMG") || n.includes("SRC") || n.includes("PHOTO")) {
+  // ALT テキスト系（画像のalt属性 — テキストとして扱う）
+  if (n.includes("ALT")) {
+    return { type: "alt", maxLength: 60, description: "画像の代替テキスト" };
+  }
+
+  // 画像系（URL/パスとして使われるもの）
+  if (n.includes("IMAGE") || n.includes("IMG") || n.includes("SRC") || n.includes("PHOTO") || n.includes("BACKGROUND_IMAGE")) {
     return { type: "image", maxLength: 200, description: "画像URL" };
   }
 
@@ -73,7 +78,7 @@ function buildPersonalizationPrompt(
     return { placeholder: p, name: clean, ...info };
   });
 
-  // 画像・URLはAIに生成させない（プレースホルダーのまま残す）
+  // 画像URL・リンクURLはAIに生成させない（プレースホルダーのまま残すか、デフォルト画像を使う）
   const textPlaceholders = classified.filter(
     (c) => c.type !== "image" && c.type !== "url",
   );
@@ -259,6 +264,30 @@ export async function personalizeContent(
     replacedCount,
     generatedContent,
   };
+}
+
+/**
+ * 残留プレースホルダーをすべてクリーンアップ
+ * 画像URL → Unsplashプレースホルダー画像
+ * テキスト → 空文字列 or デフォルト値
+ */
+export function cleanupRemainingPlaceholders(html: string): string {
+  // 画像系プレースホルダー → Unsplash のプレースホルダー画像
+  html = html.replace(
+    /\{\{(?:IMAGE_URL|IMAGE|IMG|BACKGROUND_IMAGE|HERO_IMAGE|PRODUCT_\d+_IMAGE|FEATURE_\d+_IMAGE|SRC)[^}]*\}\}/gi,
+    "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&h=600&fit=crop",
+  );
+
+  // ALT テキスト → 適切なデフォルト値
+  html = html.replace(/\{\{[^}]*ALT[^}]*\}\}/gi, "");
+
+  // URL系 → #
+  html = html.replace(/\{\{(?:URL|LINK|HREF)[^}]*\}\}/gi, "#");
+
+  // 残りのテキスト系プレースホルダー → 空文字
+  html = html.replace(/\{\{[A-Z][A-Z0-9_]*\}\}/g, "");
+
+  return html;
 }
 
 /**

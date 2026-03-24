@@ -11,7 +11,7 @@ import OnboardingFlow, {
 } from "./OnboardingFlow";
 import { Sparkles, RefreshCw, Store, ExternalLink, X } from "lucide-react";
 import { useChat, type Message, type Attachment } from "@/hooks/useChat";
-import { extractPageData, stripPageMarkers, hasPageData } from "@/lib/page-parser";
+import { extractPageData, stripPageMarkers, hasPageData, stripDNAMarkers } from "@/lib/page-parser";
 import type { PageData } from "@/lib/page-parser";
 import dynamic from "next/dynamic";
 
@@ -445,7 +445,7 @@ export default function ChatView({
     setOnboardingType(null);
   }, []);
 
-  // Strip page markers from display
+  // Strip page markers from display (DNA markers are handled by ChatMessage)
   const displayContent = useCallback((content: string) => {
     if (hasPageData(content)) {
       const stripped = stripPageMarkers(content);
@@ -453,7 +453,9 @@ export default function ChatView({
       return "ページをプレビューに反映しました。右側のプレビューパネルでご確認ください。";
     }
 
-    const trimmed = content.trim();
+    // DNAマーカーを除外してからコード検出を行う
+    const withoutDNA = content.replace(/---DNA_START---[\s\S]*?---DNA_END---/g, "");
+    const trimmed = withoutDNA.trim();
     const codeLines = trimmed.split("\n").filter((line) => {
       const l = line.trim();
       return (
@@ -481,6 +483,7 @@ export default function ChatView({
       return textParts || "ページの生成を続行しています。プレビューパネルで確認できます。";
     }
 
+    // DNAマーカーは含めたまま返す（ChatMessageが処理する）
     return content;
   }, []);
 

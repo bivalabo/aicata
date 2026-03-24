@@ -29,15 +29,21 @@ function parseDNABlock(json: string): { data: any; confidence?: number; template
 
 function formatContent(content: string) {
   // まずDNAブロックで分割
-  const dnaSegments = content.split(/(---DNA_START---[\s\S]*?---DNA_END---)/g);
+  const DNA_SPLIT = /(---DNA_START---[\s\S]*?---DNA_END---)/g;
+  const dnaSegments = content.split(DNA_SPLIT);
 
-  return dnaSegments.map((segment, segIdx) => {
+  const elements: React.ReactNode[] = [];
+
+  for (let segIdx = 0; segIdx < dnaSegments.length; segIdx++) {
+    const segment = dnaSegments[segIdx];
+    if (!segment) continue;
+
     // DNAブロックの場合
-    if (segment.startsWith("---DNA_START---")) {
-      const jsonStr = segment.replace("---DNA_START---", "").replace("---DNA_END---", "");
+    if (segment.startsWith("---DNA_START---") && segment.endsWith("---DNA_END---")) {
+      const jsonStr = segment.slice("---DNA_START---".length, -"---DNA_END---".length);
       const dnaData = parseDNABlock(jsonStr);
-      if (dnaData) {
-        return (
+      if (dnaData?.data) {
+        elements.push(
           <Suspense key={`dna-${segIdx}`} fallback={<div className="h-32 animate-pulse bg-accent/5 rounded-2xl my-3" />}>
             <DesignDNAVisualizer
               data={dnaData.data}
@@ -46,12 +52,20 @@ function formatContent(content: string) {
             />
           </Suspense>
         );
+        continue;
       }
+      // DNAパース失敗 → DNAブロック自体を非表示にする（生テキスト表示しない）
+      continue;
     }
 
-    // 通常テキスト → コードブロック分割
-    return formatTextContent(segment, segIdx);
-  });
+    // 通常テキスト → コードブロック分割（DNAマーカーの残骸も除去）
+    const cleanSegment = segment.replace(/---DNA_START---[\s\S]*?---DNA_END---/g, "");
+    if (cleanSegment.trim()) {
+      elements.push(formatTextContent(cleanSegment, segIdx));
+    }
+  }
+
+  return elements;
 }
 
 function formatTextContent(content: string, baseKey: number) {
