@@ -22,6 +22,7 @@ import {
   personalizeContent,
   personalizeContentFallback,
   cleanupRemainingPlaceholders,
+  setCleanupIndustry,
 } from "./personalizer";
 
 // ============================================================
@@ -207,7 +208,8 @@ export async function runDDPNextPipeline(
     timing.personalization = performance.now() - t4;
   }
 
-  // ── 残留プレースホルダーのクリーンアップ ──
+  // ── 残留プレースホルダーのクリーンアップ（業種別画像を使用）──
+  setCleanupIndustry(intent.contentRequirements.industry || input.industry || "general");
   personalized.fullDocument = cleanupRemainingPlaceholders(personalized.fullDocument);
 
   // ── 完了 ──

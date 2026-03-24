@@ -463,7 +463,12 @@ export default function ChatView({
   // Strip page markers AND DNA markers from display
   const displayContent = useCallback((content: string) => {
     // DNAマーカーを常に除去（ChatViewがDNAビジュアライザーを別途レンダリング）
+    // 完全なマーカーペア（START...END）を除去
     let cleaned = content.replace(/---DNA_START---[\s\S]*?---DNA_END---/g, "");
+    // ストリーミング中: まだENDが届いていない不完全なDNAブロックも除去
+    cleaned = cleaned.replace(/---DNA_START---[\s\S]*$/g, "");
+    // 万が一の孤立マーカーも除去
+    cleaned = cleaned.replace(/---DNA_(?:START|END)---/g, "");
 
     if (hasPageData(cleaned)) {
       const stripped = stripPageMarkers(cleaned);
