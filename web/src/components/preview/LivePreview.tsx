@@ -98,7 +98,7 @@ ${links ? `  ${links}` : ""}
   <style>
 /* === Aicata Base Reset === */
 *, *::before, *::after { box-sizing: border-box; }
-body {
+html, body {
   margin: 0;
   min-height: 100vh;
   background-color: #ffffff;
@@ -106,6 +106,8 @@ body {
   font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  overflow-y: auto !important;
 }
 img { max-width: 100%; height: auto; display: block; }
 a { text-decoration: none; color: inherit; }
@@ -473,7 +475,7 @@ export default function LivePreview({
         >
           <div
             className={clsx(
-              "overflow-hidden transition-all duration-300 h-full relative",
+              "overflow-auto transition-all duration-300 h-full relative",
               isMobileViewport
                 ? "w-full"
                 : "bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)]",

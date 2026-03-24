@@ -14,7 +14,7 @@ import { runDDP } from "@/lib/ddp";
 import type { DDPInput } from "@/lib/ddp";
 import { prisma } from "@/lib/db";
 
-// Next.js Route Segment Config â allow long-running streaming responses
+// Next.js Route Segment Config — allow long-running streaming responses
 export const maxDuration = 300; // 5 minutes
 
 type TextContent = { type: "text"; text: string };
@@ -42,8 +42,8 @@ function extractText(content: string | ContentBlock[]): string {
     .join("\n");
 }
 
-// ââ SSE (Server-Sent Events) ãã«ãã¼ ââ
-// ãã­ã³ãã¨ã³ãã® useChat ã¯ data: JSON\n\n å½¢å¼ãæå¾ãã
+// ── SSE (Server-Sent Events) ヘルパー ──
+// フロントエンドの useChat は data: JSON\n\n 形式を期待する
 
 const SSE_HEADERS = {
   "Content-Type": "text/event-stream; charset=utf-8",
@@ -55,7 +55,7 @@ class SSEWriter {
   private encoder = new TextEncoder();
   private controller: ReadableStreamDefaultController;
   private closed = false;
-  /** ã¹ããªã¼ã ä¸­ã«éã£ãå¨ãã­ã¹ããèç© */
+  /** ストリーム中に送った全テキストを蓄積 */
   public accumulated = "";
 
   constructor(controller: ReadableStreamDefaultController) {
@@ -66,20 +66,20 @@ class SSEWriter {
     return this.closed;
   }
 
-  /** ãã­ã¹ããã£ã³ã¯ã content_delta ã¤ãã³ãã¨ãã¦éä¿¡ */
+  /** テキストチャンクを content_delta イベントとして送信 */
   sendText(text: string) {
     if (this.closed) return;
     this.accumulated += text;
     this._write(`data: ${JSON.stringify({ type: "content_delta", text })}\n\n`);
   }
 
-  /** ã¨ã©ã¼ã¤ãã³ãéä¿¡ */
+  /** エラーイベント送信 */
   sendError(message: string, retryable = false) {
     if (this.closed) return;
     this._write(`data: ${JSON.stringify({ type: "error", message, retryable })}\n\n`);
   }
 
-  /** å®äºã¤ãã³ãéä¿¡ */
+  /** 完了イベント送信 */
   sendDone(extra?: { model?: string; usage?: unknown; incomplete?: boolean }) {
     if (this.closed) return;
     this._write(
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(
-        JSON.stringify({ error: "ã¡ãã»ã¼ã¸ãå¿è¦ã§ã" }),
+        JSON.stringify({ error: "メッセージが必要です" }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
         content: extractText(m.content),
       }));
 
-    // ââ Enhance ã¢ã¼ã: æ¢å­ãã¼ã¸ã«ç´ã¥ãä¼è©±ãå¤å® ââ
+    // ── Enhance モード: 既存ページに紐づく会話か判定 ──
     let linkedPage: { id: string; title: string; html: string; css: string; pageType: string } | null = null;
     if (conversationId) {
       try {
@@ -160,13 +160,13 @@ export async function POST(request: Request) {
       }
     }
 
-    // ââ ãã¼ã¸çæãªã¯ã¨ã¹ããã©ããå¤å® ââ
-    // Enhance ã¢ã¼ãã®å ´åã¯å¸¸ã«ãã¼ã¸çæã¨ãã¦æ±ã
+    // ── ページ生成リクエストかどうか判定 ──
+    // Enhance モードの場合は常にページ生成として扱う
     const isPageGenerationRequest = linkedPage
       ? true
       : detectPageGenerationRequest(latestUserText, pageType);
 
-    // ââ DDP ãã¤ãã©ã¤ã³ï¼æ°è¦ãã¼ã¸çææã®ã¿ãEnhanceã¢ã¼ãã¯ã¬ã¬ã·ã¼ãã¹ã¸ï¼ ââ
+    // ── DDP パイプライン（新規ページ生成時のみ。Enhanceモードはレガシーパスへ） ──
     // ── Vercel Hobby プラン検出 ──
     const isVercelHobby = process.env.VERCEL === "1" && !process.env.VERCEL_PRO;
     const skipDDP = isVercelHobby || process.env.SKIP_DDP === "1";
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
       const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
       let ddpSucceeded = false;
 
-      // Brand Memory åå¾
+      // Brand Memory 取得
       let brandMemoryData;
       try {
         const bm = await getActiveBrandMemory();
@@ -195,15 +195,15 @@ export async function POST(request: Request) {
         }
       } catch { /* non-fatal */ }
 
-      // DDPInput æ§ç¯
+      // DDPInput 構築
       const ddpInput = buildDDPInput(latestUserText, pageType, urlAnalysis, brandMemoryData);
       if (isSiteBuildRequest) ddpInput.pageType = "landing";
 
-      // ââ DDP ãã¾ãåæçã«å®è¡ããå®äºå¾ã« SSE ã¹ããªã¼ã ã§çµæãè¿ã ââ
-      // ãããããã¨ã§ãDDP å¤±ææã«ã¬ã¬ã·ã¼ãã¹ã¸ãã©ã¼ã«ããã¯ã§ããï¼C-2ä¿®æ­£ï¼
+      // ── DDP をまず同期的に実行し、完了後に SSE ストリームで結果を返す ──
+      // こうすることで、DDP 失敗時にレガシーパスへフォールバックできる（C-2修正）
       try {
         const ddpResult = await runDDP(ddpInput, undefined, (event) => {
-          // Progress ã¯ console.log ã®ã¿ï¼DDPã¯åæå®è¡ï¼
+          // Progress は console.log のみ（DDPは同期実行）
           if (event.stage === "spec" && event.status === "complete") {
             const spec = "spec" in event ? event.spec : null;
             if (spec) console.log("[DDP] Spec complete:", spec.designPhilosophy.slice(0, 60));
@@ -216,24 +216,24 @@ export async function POST(request: Request) {
         ddpSucceeded = true;
         console.log("[DDP] Pipeline success. Streaming result via SSE...");
 
-        // SSE ã¹ããªã¼ã ã§çµæãè¿ã
+        // SSE ストリームで結果を返す
         const stream = new ReadableStream({
           async start(controller) {
             const sse = new SSEWriter(controller);
 
-            // é²æãµããªã¼ãã­ã¹ã
+            // 進捗サマリーテキスト
             if (isSiteBuildRequest) {
-              sse.sendText("æ¿ç¥ãã¾ããï¼ãµã¤ãå¨ä½ãæ§ç¯ãã¦ããã¾ãã­ã\n\n");
-              sse.sendText("ã¾ãã¯ããããã¼ã¸ããä½æãã¦ããã¾ãã\n\n");
+              sse.sendText("承知しました！サイト全体を構築していきますね。\n\n");
+              sse.sendText("まずはトップページから作成していきます。\n\n");
             } else {
-              sse.sendText("ãã¼ã¸ããã¶ã¤ã³ãã¾ããã\n\n");
+              sse.sendText("ページをデザインしました。\n\n");
             }
 
-            sse.sendText(`**ãã¶ã¤ã³æ¹é**: ${ddpResult.spec?.designPhilosophy || ""}\n`);
-            sse.sendText(`**éè²**: ${ddpResult.spec?.colors?.reasoning || ""}\n`);
-            sse.sendText(`**ã»ã¯ã·ã§ã³æ§æ**: ${ddpResult.spec?.sections?.length || 0}ã»ã¯ã·ã§ã³\n\n`);
+            sse.sendText(`**デザイン方針**: ${ddpResult.spec?.designPhilosophy || ""}\n`);
+            sse.sendText(`**配色**: ${ddpResult.spec?.colors?.reasoning || ""}\n`);
+            sse.sendText(`**セクション構成**: ${ddpResult.spec?.sections?.length || 0}セクション\n\n`);
 
-            // å®æ HTML ã PAGE_START/PAGE_END ãã¼ã«ã¼ä»ãã§éä¿¡
+            // 完成 HTML を PAGE_START/PAGE_END マーカー付きで送信
             sse.sendText(`---PAGE_START---\n`);
 
             const doc = ddpResult.fullDocument;
@@ -247,18 +247,18 @@ export async function POST(request: Request) {
             sse.sendText(`\n---PAGE_END---\n`);
 
             if (isSiteBuildRequest) {
-              sse.sendText(`\nããããã¼ã¸ãå®æãã¾ããï¼ãã¬ãã¥ã¼ã§ãç¢ºèªãã ããã\n\n`);
-              sse.sendText(`ç¶ãã¦ä»ã®ãã¼ã¸ãä½æã§ãã¾ããä¾ãã°ï¼\n`);
-              sse.sendText(`ã»ãã³ã¬ã¯ã·ã§ã³ãã¼ã¸ãä½æãã¦ãã ããã\n`);
-              sse.sendText(`ã»ãååè©³ç´°ãã¼ã¸ãä½æãã¦ãã ããã\n`);
-              sse.sendText(`ã»ããã©ã³ãã¹ãã¼ãªã¼ãã¼ã¸ãä½æãã¦ãã ããã\n\n`);
-              sse.sendText(`ã©ã®ãã¼ã¸ãæ¬¡ã«ä½æãã¾ããããï¼`);
+              sse.sendText(`\nトップページが完成しました！プレビューでご確認ください。\n\n`);
+              sse.sendText(`続けて他のページも作成できます。例えば：\n`);
+              sse.sendText(`・「コレクションページを作成してください」\n`);
+              sse.sendText(`・「商品詳細ページを作成してください」\n`);
+              sse.sendText(`・「ブランドストーリーページを作成してください」\n\n`);
+              sse.sendText(`どのページを次に作成しましょうか？`);
             }
 
             sse.sendDone({ model: DEFAULT_MODEL || "claude-sonnet-4-20250514" });
             sse.close();
 
-            // DBä¿å­ï¼ã¹ããªã¼ã å¤ã§éåæï¼
+            // DB保存（ストリーム外で非同期）
             if (conversationId) {
               try {
                 await saveMessage(conversationId, "assistant", sse.accumulated, {
@@ -275,10 +275,10 @@ export async function POST(request: Request) {
         return new Response(stream, { headers: SSE_HEADERS });
       } catch (err) {
         console.error("[Stream API] DDP pipeline failed, falling back to legacy:", err);
-        // ddpSucceeded remains false â fall through to legacy streaming
+        // ddpSucceeded remains false → fall through to legacy streaming
       }
 
-      // DDP ãå¤±æããå ´åã®ã¿ã¬ã¬ã·ã¼ãã¹ã¸ãã©ã¼ã«ããã¯
+      // DDP が失敗した場合のみレガシーパスへフォールバック
       if (ddpSucceeded) {
         // Should not reach here (returned above), but just in case
         return new Response("DDP completed", { status: 200 });
@@ -289,12 +289,12 @@ export async function POST(request: Request) {
           console.log("[Stream API] DDP skipped (Vercel Hobby/SKIP_DDP) — using legacy streaming for page generation");
         }
 
-    // ââ ã¬ã¬ã·ã¼: Vercel AI SDK ã¹ããªã¼ãã³ã° ââ
+    // ── レガシー: Vercel AI SDK ストリーミング ──
     let systemPrompt: string;
     let designContext;
     let isGen3 = false;
 
-    // ââ Enhance ã¢ã¼ã: æ¢å­HTMLãå«ãç¹å¥ãªãã­ã³ãã ââ
+    // ── Enhance モード: 既存HTMLを含む特別なプロンプト ──
     if (linkedPage) {
       console.log("[Stream API] Building enhance system prompt for page:", linkedPage.id);
       systemPrompt = buildEnhanceSystemPrompt(linkedPage);
@@ -323,12 +323,12 @@ export async function POST(request: Request) {
       } catch (e) {
         console.error("[Design Engine] Prompt composition failed:", e);
         systemPrompt =
-          "ããªãã¯Aicata â Shopifyã¹ãã¢ã®AIãã¼ã¸ãã«ãã¼ã§ããã¦ã¼ã¶ã¼ã®è¦æã«å¿ãã¦HTML+CSSã§ãã¼ã¸ãçæãã¦ãã ãããçæã³ã¼ãã¯ ---PAGE_START--- ã¨ ---PAGE_END--- ã§å²ãã§ãã ãããHTMLãåã«ãæå¾ã«<style>ã¿ã°ã§CSSãã¾ã¨ãã¦ãã ããã";
+          "あなたはAicata — ShopifyストアのAIページビルダーです。ユーザーの要望に応じてHTML+CSSでページを生成してください。生成コードは ---PAGE_START--- と ---PAGE_END--- で囲んでください。HTMLを先に、最後に<style>タグでCSSをまとめてください。";
         designContext = null;
       }
     }
 
-    // ââ Brand Memory æ³¨å¥ ââ
+    // ── Brand Memory 注入 ──
     try {
       const brandMemory = await getActiveBrandMemory();
       if (brandMemory) {
@@ -348,7 +348,7 @@ export async function POST(request: Request) {
       console.warn("[Brand Memory] Failed to inject:", e);
     }
 
-    // Build AI SDK messages â convert multi-modal content
+    // Build AI SDK messages — convert multi-modal content
     const aiMessages = (messages as IncomingMessage[]).map(
       (msg): ModelMessage => {
         if (typeof msg.content === "string") {
@@ -378,7 +378,7 @@ export async function POST(request: Request) {
     // Resolve the model identifier for @ai-sdk/anthropic
     const modelId = DEFAULT_MODEL || "claude-sonnet-4-20250514";
 
-    // Enhance ã¢ã¼ãã§ã¯æ¢å­HTMLå¨ä½ãååºåããããããã¼ã¯ã³ä¸éãå¼ãä¸ã
+    // Enhance モードでは既存HTML全体を再出力するため、トークン上限を引き上げ
     const maxTokens = linkedPage
       ? Math.max(DEFAULT_MAX_TOKENS, 32768)
       : DEFAULT_MAX_TOKENS;
@@ -391,7 +391,7 @@ export async function POST(request: Request) {
       enhanceMode: !!linkedPage,
     });
 
-    // === Vercel AI SDK streamText â SSE ã¹ããªã¼ã å¤æ ===
+    // === Vercel AI SDK streamText → SSE ストリーム変換 ===
     const aiResult = streamText({
       model: anthropic(modelId),
       system: systemPrompt,
@@ -404,13 +404,13 @@ export async function POST(request: Request) {
         const sse = new SSEWriter(controller);
 
         try {
-          // textStream ã SSE content_delta ã¤ãã³ãã«å¤æ
+          // textStream を SSE content_delta イベントに変換
           for await (const chunk of aiResult.textStream) {
             if (sse.isClosed) break;
             sse.sendText(chunk);
           }
 
-          // usageæå ±ãåå¾
+          // usage情報を取得
           const usage = await aiResult.usage;
           const hasPageMarker = sse.accumulated.includes("---PAGE_START---");
           const isIncomplete = hasPageMarker && !sse.accumulated.includes("---PAGE_END---");
@@ -423,14 +423,14 @@ export async function POST(request: Request) {
         } catch (err) {
           console.error("[Stream API] Stream error:", err);
           sse.sendError(
-            err instanceof Error ? err.message : "ã¹ããªã¼ãã³ã°ã¨ã©ã¼",
+            err instanceof Error ? err.message : "ストリーミングエラー",
             true,
           );
         } finally {
           sse.close();
         }
 
-        // ââ Post-stream: DBä¿å­ & å¾å¦ç ââ
+        // ── Post-stream: DB保存 & 後処理 ──
         const fullText = sse.accumulated;
         console.log("[Stream API] Stream completed:", { contentLength: fullText.length });
 
@@ -445,7 +445,7 @@ export async function POST(request: Request) {
           }
         }
 
-        // ââ Enhance ã¢ã¼ã: çæãããHTMLããã¼ã¸ã«èªåä¿å­ ââ
+        // ── Enhance モード: 生成されたHTMLをページに自動保存 ──
         if (linkedPage && fullText.includes("---PAGE_START---")) {
           try {
             const startMarker = "---PAGE_START---";
@@ -454,11 +454,11 @@ export async function POST(request: Request) {
             const endIdx = fullText.indexOf(endMarker);
             if (endIdx > startIdx) {
               const generatedBlock = fullText.slice(startIdx, endIdx).trim();
-              // HTML ã¨ CSS ãåé¢ï¼W-2ä¿®æ­£: /gi ã§å¨ style ã¿ã°ã matchAllï¼
+              // HTML と CSS を分離（W-2修正: /gi で全 style タグを matchAll）
               const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
               const styleMatches = [...generatedBlock.matchAll(styleRegex)];
               const css = styleMatches.map((m) => m[1].trim()).join("\n");
-              // W-1ä¿®æ­£: html ãã£ã¼ã«ãã«ã¯ style é¤å»å¾ã®HTMLãä¿å­ãéè¤ãé²ã
+              // W-1修正: html フィールドには style 除去後のHTMLを保存し重複を防ぐ
               const htmlOnly = generatedBlock.replace(styleRegex, "").trim();
 
               await prisma.page.update({
@@ -515,7 +515,7 @@ export async function POST(request: Request) {
           }
         }
 
-        // ââ Brand Memory: ãã¼ã¸çæããå­¦ç¿ ââ
+        // ── Brand Memory: ページ生成から学習 ──
         if (designContext && fullText.includes("---PAGE_START---")) {
           try {
             await fetch(
@@ -541,40 +541,40 @@ export async function POST(request: Request) {
     console.error("[Stream API] Top-level error:", error);
     return new Response(
       JSON.stringify({
-        error: `AIã®å¿ç­ã§ã¨ã©ã¼ãçºçãã¾ãã: ${error instanceof Error ? error.message : "ä¸æãªã¨ã©ã¼"}`,
+        error: `AIの応答でエラーが発生しました: ${error instanceof Error ? error.message : "不明なエラー"}`,
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 }
 
-// ââ Helper Functions ââ
+// ── Helper Functions ──
 
 /**
- * ãã¼ã¸çæãªã¯ã¨ã¹ããã©ãããå¤å®
- * ä¼è©±çãªè³ªåï¼SEOã¢ããã¤ã¹ç­ï¼ã¯falseããã¼ã¸çæã¯true
+ * ページ生成リクエストかどうかを判定
+ * 会話的な質問（SEOアドバイス等）はfalse、ページ生成はtrue
  */
 function detectPageGenerationRequest(
   text: string,
   explicitPageType?: string,
 ): boolean {
-  // æç¤ºçã«pageTypeãæå®ããã¦ããå ´åã¯çæãªã¯ã¨ã¹ã
+  // 明示的にpageTypeが指定されている場合は生成リクエスト
   if (explicitPageType) return true;
 
-  // ãµã¤ãå¨ä½æ§ç¯ãªã¯ã¨ã¹ããçæãªã¯ã¨ã¹ã
+  // サイト全体構築リクエストも生成リクエスト
   if (detectSiteBuildRequest(text)) return true;
 
-  // ãã¼ã¸çæãç¤ºãã­ã¼ã¯ã¼ã
+  // ページ生成を示すキーワード
   const generationKeywords = [
-    "ãã¼ã¸ãä½", "ãã¼ã¸ä½æ", "ãã¼ã¸çæ",
-    "ããããã¼ã¸", "ã©ã³ãã£ã³ã°ãã¼ã¸", "LP",
-    "ååãã¼ã¸", "ååè©³ç´°",
-    "ã³ã¬ã¯ã·ã§ã³", "ã«ãã´ãªã¼",
-    "ãã­ã°", "è¨äº",
-    "ãåãåãã", "ã³ã³ã¿ã¯ã",
-    "ä½ã£ã¦", "ä½æãã¦", "çæãã¦", "ãã¶ã¤ã³ãã¦",
-    "ãªãã«ã", "rebuild",
-    "ä½ãç´ã", "ãªãã¥ã¼ã¢ã«",
+    "ページを作", "ページ作成", "ページ生成",
+    "トップページ", "ランディングページ", "LP",
+    "商品ページ", "商品詳細",
+    "コレクション", "カテゴリー",
+    "ブログ", "記事",
+    "お問い合わせ", "コンタクト",
+    "作って", "作成して", "生成して", "デザインして",
+    "リビルド", "rebuild",
+    "作り直し", "リニューアル",
   ];
 
   const lowerText = text.toLowerCase();
@@ -582,27 +582,27 @@ function detectPageGenerationRequest(
 }
 
 /**
- * ãµã¤ãå¨ä½æ§ç¯ãªã¯ã¨ã¹ããã©ãããå¤å®
- * ããµã¤ãå¨ä½ãããµã¤ããä½æãããªãã«ããã¦ããªã©ã®èªç¶ãªè¡¨ç¾ãæ¤åº
+ * サイト全体構築リクエストかどうかを判定
+ * 「サイト全体」「サイトを作成」「リビルドして」などの自然な表現を検出
  */
 function detectSiteBuildRequest(text: string): boolean {
   const siteBuildKeywords = [
-    "ãµã¤ãå¨ä½",
-    "ãµã¤ããä½æ",
-    "ãµã¤ããä½ã£ã¦",
-    "ãµã¤ãæ§ç¯",
-    "ãµã¤ãããªãã«ã",
-    "ãªãã«ããã¦",
-    "å¨ãã¼ã¸",
-    "ã¾ãããããã¼ã¸ãã",
-    "Shopifyãµã¤ãå¨ä½",
+    "サイト全体",
+    "サイトを作成",
+    "サイトを作って",
+    "サイト構築",
+    "サイトをリビルド",
+    "リビルドして",
+    "全ページ",
+    "まずトップページから",
+    "Shopifyサイト全体",
   ];
 
   return siteBuildKeywords.some((kw) => text.includes(kw));
 }
 
 /**
- * ã¦ã¼ã¶ã¼ã®å¥åããDDPInput ãæ§ç¯
+ * ユーザーの入力からDDPInput を構築
  */
 function buildDDPInput(
   userText: string,
@@ -610,16 +610,16 @@ function buildDDPInput(
   urlAnalysis?: any,
   brandMemory?: any,
 ): DDPInput {
-  // ãã¼ã¸ç¨®å¥ã®æ¨å®
+  // ページ種別の推定
   const detectedPageType = pageType || detectPageType(userText);
 
-  // æ¥­ç¨®ã®æ¨å®
+  // 業種の推定
   const industry = detectIndustry(userText);
 
-  // ãã¼ã³ã®æ¨å®
+  // トーンの推定
   const tones = detectTones(userText);
 
-  // ãã©ã³ãåã®æ¨å®
+  // ブランド名の推定
   const brandName = detectBrandName(userText);
 
   const input: DDPInput = {
@@ -631,7 +631,7 @@ function buildDDPInput(
     userInstructions: userText,
   };
 
-  // URLè§£æçµæ
+  // URL解析結果
   if (urlAnalysis) {
     input.urlAnalysis = {
       url: urlAnalysis.url || "",
@@ -658,64 +658,64 @@ function buildDDPInput(
 
 function detectPageType(text: string): string {
   const lower = text.toLowerCase();
-  if (lower.includes("ããã") || lower.includes("ã©ã³ãã£ã³ã°") || lower.includes("lp") || lower.includes("ãã¼ã ")) return "landing";
-  if (lower.includes("åå") || lower.includes("ãã­ãã¯ã") || lower.includes("product")) return "product";
-  if (lower.includes("ã³ã¬ã¯ã·ã§ã³") || lower.includes("ã«ãã´ãª") || lower.includes("collection")) return "collection";
-  if (lower.includes("ãã­ã°") || lower.includes("è¨äº") || lower.includes("blog")) return "blog";
-  if (lower.includes("ãåãåãã") || lower.includes("ã³ã³ã¿ã¯ã") || lower.includes("contact")) return "contact";
-  if (lower.includes("about") || lower.includes("ä¼ç¤¾æ¦è¦") || lower.includes("ãã©ã³ãã¹ãã¼ãªã¼")) return "about";
-  if (lower.includes("ã«ã¼ã") || lower.includes("cart")) return "cart";
-  if (lower.includes("æ¤ç´¢") || lower.includes("search")) return "search";
+  if (lower.includes("トップ") || lower.includes("ランディング") || lower.includes("lp") || lower.includes("ホーム")) return "landing";
+  if (lower.includes("商品") || lower.includes("プロダクト") || lower.includes("product")) return "product";
+  if (lower.includes("コレクション") || lower.includes("カテゴリ") || lower.includes("collection")) return "collection";
+  if (lower.includes("ブログ") || lower.includes("記事") || lower.includes("blog")) return "blog";
+  if (lower.includes("お問い合わせ") || lower.includes("コンタクト") || lower.includes("contact")) return "contact";
+  if (lower.includes("about") || lower.includes("会社概要") || lower.includes("ブランドストーリー")) return "about";
+  if (lower.includes("カート") || lower.includes("cart")) return "cart";
+  if (lower.includes("検索") || lower.includes("search")) return "search";
   if (lower.includes("404")) return "404";
-  return "landing"; // ããã©ã«ã
+  return "landing"; // デフォルト
 }
 
 function detectIndustry(text: string): string {
   const lower = text.toLowerCase();
-  if (lower.includes("ç¾å®¹") || lower.includes("ã³ã¹ã¡") || lower.includes("åç²§å") || lower.includes("ã¹ã­ã³ã±ã¢") || lower.includes("beauty")) return "beauty";
-  if (lower.includes("ãã¡ãã·ã§ã³") || lower.includes("ã¢ãã¬ã«") || lower.includes("æ") || lower.includes("fashion")) return "fashion";
-  if (lower.includes("é£å") || lower.includes("ã°ã«ã¡") || lower.includes("ãã¼ã") || lower.includes("food")) return "food";
-  if (lower.includes("ããã¯") || lower.includes("ã¬ã¸ã§ãã") || lower.includes("tech")) return "tech";
-  if (lower.includes("å¥åº·") || lower.includes("ãã«ã¹") || lower.includes("ãµããª") || lower.includes("health")) return "health";
-  if (lower.includes("ã¤ã³ããªã¢") || lower.includes("å®¶å·") || lower.includes("ã©ã¤ãã¹ã¿ã¤ã«") || lower.includes("lifestyle")) return "lifestyle";
+  if (lower.includes("美容") || lower.includes("コスメ") || lower.includes("化粧品") || lower.includes("スキンケア") || lower.includes("beauty")) return "beauty";
+  if (lower.includes("ファッション") || lower.includes("アパレル") || lower.includes("服") || lower.includes("fashion")) return "fashion";
+  if (lower.includes("食品") || lower.includes("グルメ") || lower.includes("フード") || lower.includes("food")) return "food";
+  if (lower.includes("テック") || lower.includes("ガジェット") || lower.includes("tech")) return "tech";
+  if (lower.includes("健康") || lower.includes("ヘルス") || lower.includes("サプリ") || lower.includes("health")) return "health";
+  if (lower.includes("インテリア") || lower.includes("家具") || lower.includes("ライフスタイル") || lower.includes("lifestyle")) return "lifestyle";
   return "general";
 }
 
 function detectTones(text: string): string[] {
   const tones: string[] = [];
   const lower = text.toLowerCase();
-  if (lower.includes("é«ç´") || lower.includes("ã©ã°ã¸ã¥ã¢ãªã¼") || lower.includes("luxury")) tones.push("luxury");
-  if (lower.includes("ããã¥ã©ã«") || lower.includes("èªç¶") || lower.includes("ãªã¼ã¬ããã¯")) tones.push("natural");
-  if (lower.includes("ã¢ãã³") || lower.includes("modern")) tones.push("modern");
-  if (lower.includes("ããã") || lower.includes("ã«ã¯ã¤ã¤") || lower.includes("æ¥½ãã")) tones.push("playful");
-  if (lower.includes("ãããã«") || lower.includes("ã·ã³ãã«") || lower.includes("minimal")) tones.push("minimal");
-  if (lower.includes("å¤§è") || lower.includes("ã¤ã³ãã¯ã") || lower.includes("bold")) tones.push("bold");
-  if (lower.includes("ã¨ã¬ã¬ã³ã") || lower.includes("elegant")) tones.push("elegant");
-  if (lower.includes("ãããã") || lower.includes("warm")) tones.push("warm");
-  if (lower.includes("ã¯ã¼ã«") || lower.includes("cool")) tones.push("cool");
-  if (lower.includes("åé¢¨") || lower.includes("ä¼çµ±")) tones.push("traditional");
-  return tones.length > 0 ? tones : ["modern"]; // ããã©ã«ã
+  if (lower.includes("高級") || lower.includes("ラグジュアリー") || lower.includes("luxury")) tones.push("luxury");
+  if (lower.includes("ナチュラル") || lower.includes("自然") || lower.includes("オーガニック")) tones.push("natural");
+  if (lower.includes("モダン") || lower.includes("modern")) tones.push("modern");
+  if (lower.includes("ポップ") || lower.includes("カワイイ") || lower.includes("楽しい")) tones.push("playful");
+  if (lower.includes("ミニマル") || lower.includes("シンプル") || lower.includes("minimal")) tones.push("minimal");
+  if (lower.includes("大胆") || lower.includes("インパクト") || lower.includes("bold")) tones.push("bold");
+  if (lower.includes("エレガント") || lower.includes("elegant")) tones.push("elegant");
+  if (lower.includes("あたたか") || lower.includes("warm")) tones.push("warm");
+  if (lower.includes("クール") || lower.includes("cool")) tones.push("cool");
+  if (lower.includes("和風") || lower.includes("伝統")) tones.push("traditional");
+  return tones.length > 0 ? tones : ["modern"]; // デフォルト
 }
 
 function detectBrandName(text: string): string | undefined {
-  // ããã©ã³ãåãããã¹ãã¢åãã®å¾ã«ç¶ããã­ã¹ããæ½åº
-  const brandMatch = text.match(/(?:ãã©ã³ãå|ã¹ãã¢å|ãã©ã³ã)[ï¼:ã]?([^ã\sãã]+)/);
+  // 「ブランド名」や「ストア名」の後に続くテキストを抽出
+  const brandMatch = text.match(/(?:ブランド名|ストア名|ブランド)[：:「]?([^」\s、。]+)/);
   if (brandMatch) return brandMatch[1];
   return undefined;
 }
 
 function extractKeywords(text: string): string[] {
-  // ããåã®ã­ã¼ã¯ã¼ããæ½åº
-  const bracketMatches = text.match(/ã([^ã]+)ã/g);
+  // 【】内のキーワードを抽出
+  const bracketMatches = text.match(/【([^】]+)】/g);
   if (bracketMatches) {
-    return bracketMatches.map((m) => m.replace(/[ãã]/g, ""));
+    return bracketMatches.map((m) => m.replace(/[【】]/g, ""));
   }
   return [];
 }
 
 /**
- * Enhance ã¢ã¼ãç¨ã·ã¹ãã ãã­ã³ãã
- * æ¢å­ãã¼ã¸ã®HTML/CSSãå«ããã¦ã¼ã¶ã¼ã®æ¹åè¦æã«åºã¥ãã¦ä¿®æ­£ããã
+ * Enhance モード用システムプロンプト
+ * 既存ページのHTML/CSSを含め、ユーザーの改善要望に基づいて修正させる
  */
 function buildEnhanceSystemPrompt(page: {
   id: string;
@@ -725,39 +725,39 @@ function buildEnhanceSystemPrompt(page: {
   pageType: string;
 }): string {
   const parts = [
-    "ããªãã¯Aicata â Shopifyã¹ãã¢ã®AIãã¼ã¸ãã«ãã¼ã§ãã",
+    "あなたはAicata — ShopifyストアのAIページビルダーです。",
     "",
-    "## ç¾å¨ã®ã¢ã¼ã: æ¢å­ãã¼ã¸æ¹åã¢ã¼ã",
+    "## 現在のモード: 既存ページ改善モード",
     "",
-    `ã¦ã¼ã¶ã¼ã¯æ¢å­ãã¼ã¸ã${page.title}ãï¼ã¿ã¤ã: ${page.pageType}ï¼ãæ¹åãããã¨ãã¦ãã¾ãã`,
-    "ä»¥ä¸ãç¾å¨ã®ãã¼ã¸ã®HTML/CSSã§ããã¦ã¼ã¶ã¼ã®è¦æã«åºã¥ãã¦ãã®ãã¼ã¸ãæ¹åãã¦ãã ããã",
+    `ユーザーは既存ページ「${page.title}」（タイプ: ${page.pageType}）を改善しようとしています。`,
+    "以下が現在のページのHTML/CSSです。ユーザーの要望に基づいてこのページを改善してください。",
     "",
-    "## éè¦ãªã«ã¼ã«",
+    "## 重要なルール",
     "",
-    "1. **å¿ãæ¹åå¾ã®å®å¨ãªHTML+CSSãåºåãã¦ãã ããã** é¨åçãªã³ã¼ããèª¬æã ãã§ã¯ãªãããã¼ã¸å¨ä½ãåºåãã¾ãã",
-    "2. **åºåã³ã¼ãã¯å¿ã `---PAGE_START---` ã¨ `---PAGE_END---` ã§å²ãã§ãã ããã** ããããªãã¨ãã¬ãã¥ã¼ã«åæ ããã¾ããã",
-    "3. **æ¢å­ã®ã³ã³ãã³ãï¼ãã­ã¹ããç»åURLç­ï¼ã¯ã§ããã ãæ´»ããã¦ãã ããã** ãã¶ã¤ã³ãã¬ã¤ã¢ã¦ããæ¹åãã¤ã¤ãã³ã³ãã³ãã¯ä¿æãã¾ãã",
-    "4. HTMLãåã«åºåããæå¾ã« `<style>` ã¿ã°ã§CSSãã¾ã¨ãã¦ãã ããã",
-    "5. ã¬ã¹ãã³ã·ããã¶ã¤ã³ãå¿ããã¦ãã ããã",
-    "6. ã¢ãã³ãªCSSæ©è½ï¼Grid, Flexbox, CSSå¤æ°, ã¢ãã¡ã¼ã·ã§ã³ç­ï¼ãæ´»ç¨ãã¦ãã ããã",
-    "7. ã¾ãç°¡æ½ã«æ¹ååå®¹ãèª¬æãï¼2-3è¡ç¨åº¦ï¼ããã®å¾ã«ã³ã¼ããåºåãã¦ãã ããã",
+    "1. **必ず改善後の完全なHTML+CSSを出力してください。** 部分的なコードや説明だけではなく、ページ全体を出力します。",
+    "2. **出力コードは必ず `---PAGE_START---` と `---PAGE_END---` で囲んでください。** これがないとプレビューに反映されません。",
+    "3. **既存のコンテンツ（テキスト、画像URL等）はできるだけ活かしてください。** デザインやレイアウトを改善しつつ、コンテンツは保持します。",
+    "4. HTMLを先に出力し、最後に `<style>` タグでCSSをまとめてください。",
+    "5. レスポンシブデザインを心がけてください。",
+    "6. モダンなCSS機能（Grid, Flexbox, CSS変数, アニメーション等）を活用してください。",
+    "7. まず簡潔に改善内容を説明し（2-3行程度、**必ず現在進行形**で「〜を改善しています」のように書くこと。「改善しました」のような完了形は禁止）、その後にコードを出力してください。",
     "",
-    "## åºåãã©ã¼ãããä¾",
+    "## 出力フォーマット例",
     "",
     "```",
-    "æ¹ååå®¹ã®èª¬æï¼2-3è¡ï¼",
+    "改善内容の説明（2-3行、進行形で）",
     "",
     "---PAGE_START---",
     "<div class=\"page-container\">",
-    "  <!-- æ¹åå¾ã®HTML -->",
+    "  <!-- 改善後のHTML -->",
     "</div>",
     "<style>",
-    "  /* æ¹åå¾ã®CSS */",
+    "  /* 改善後のCSS */",
     "</style>",
     "---PAGE_END---",
     "```",
     "",
-    "## ç¾å¨ã®ãã¼ã¸HTML",
+    "## 現在のページHTML",
     "",
     "```html",
     page.html,
@@ -766,7 +766,7 @@ function buildEnhanceSystemPrompt(page: {
 
   if (page.css && page.css.trim()) {
     parts.push("");
-    parts.push("## ç¾å¨ã®ãã¼ã¸CSS");
+    parts.push("## 現在のページCSS");
     parts.push("");
     parts.push("```css");
     parts.push(page.css);

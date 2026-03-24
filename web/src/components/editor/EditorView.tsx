@@ -390,7 +390,7 @@ export default function EditorView({
             }}
           >
             {/* Page frame with shadow */}
-            <div className="bg-white rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.35)] overflow-hidden relative">
+            <div className="bg-white rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.35)] overflow-auto relative">
               {html ? (
                 <>
                   <iframe
