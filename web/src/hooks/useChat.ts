@@ -32,6 +32,7 @@ export function useChat(options: UseChatOptions = {}) {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userStoppedRef = useRef(false);
   const retryCountRef = useRef(0);
   const conversationIdRef = useRef<string | null>(
     options.conversationId || null,
@@ -98,6 +99,7 @@ export function useChat(options: UseChatOptions = {}) {
       // Abort any existing request + timers
       abortRef.current?.abort();
       clearTimers();
+      userStoppedRef.current = false;
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -285,9 +287,14 @@ ${lastChunk}\
         console.log("[useChat] Stream completed. Content received:", receivedAnyContent);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
-          console.warn("[useChat] Request aborted. Had content:", receivedAnyContent);
+          const wasStopped = userStoppedRef.current;
+          console.warn("[useChat] Request aborted.", wasStopped ? "User stopped." : "Timeout.", "Had content:", receivedAnyContent);
           if (!receivedAnyContent) {
-            setError("応答がタイムアウトしました。もう一度お試しください。");
+            setError(
+              wasStopped
+                ? "応答を停止しました。"
+                : "応答がタイムアウトしました。もう一度お試しください。",
+            );
             // Remove empty assistant message
             setMessages((prev) => {
               const last = prev[prev.length - 1];
@@ -338,6 +345,7 @@ ${lastChunk}\
 
   const stopStreaming = useCallback(() => {
     clearTimers();
+    userStoppedRef.current = true;
     abortRef.current?.abort();
     setIsStreaming(false);
   }, [clearTimers]);
