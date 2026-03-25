@@ -82,6 +82,8 @@ export async function GET() {
         copyKeywords: safeParseJson(memory.copyKeywords, []),
         avoidKeywords: safeParseJson(memory.avoidKeywords, []),
         favoriteTemplates: safeParseJson(memory.favoriteTemplates, []),
+        emotionalDna: safeParseJson(memory.emotionalDna, null),
+        hearingStatus: memory.hearingStatus || "none",
         pageCount: memory.pageCount,
         lastLearnedAt: memory.lastLearnedAt,
         source: memory.source,

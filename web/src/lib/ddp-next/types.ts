@@ -15,6 +15,7 @@ import type {
   DesignTokenSet,
   UrlAnalysisResult,
 } from "@/lib/design-engine/types";
+import type { EmotionalDNA } from "@/lib/emotional-dna/types";
 
 // ============================================================
 // Human Quality Score (HQS)
@@ -104,6 +105,8 @@ export interface DDPNextInput {
   };
   /** ユーザーのDesign DNA（学習済みの場合） */
   userDNA?: DesignDNAPreferences;
+  /** 感情の地層（Emotional DNA） — Brand Memoryのヒアリングから導出 */
+  emotionalDna?: EmotionalDNA;
   /** ストアID（ThemeLayout取得用） */
   storeId?: string;
 }

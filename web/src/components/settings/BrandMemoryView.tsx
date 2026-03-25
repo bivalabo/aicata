@@ -13,6 +13,7 @@ import {
   Brain,
 } from "lucide-react";
 import clsx from "clsx";
+import EmotionalHearingFlow from "./EmotionalHearingFlow";
 
 interface BrandMemoryData {
   brandName: string;
@@ -288,6 +289,9 @@ export default function BrandMemoryView() {
           <p className="text-[14px] text-red-700">{error}</p>
         </div>
       )}
+
+      {/* ── Emotional DNA Hearing ── */}
+      <EmotionalHearingFlow />
 
       {/* ── Brand Basics ── */}
       <Section title="ブランド基本情報" icon={Sparkles}>

@@ -56,6 +56,11 @@ model BrandMemory {
   copyKeywords     String   @default("[]") // JSON: ブランドが好む表現 string[]
   avoidKeywords    String   @default("[]") // JSON: 避けたい表現 string[]
 
+  // ── 感情の地層 (Emotional DNA) ──
+  emotionalDna     String   @default("") // JSON: EmotionalDNA — オーナーの感情・思想・原体験
+  hearingSession   String   @default("") // JSON: HearingSession — ヒアリング対話の履歴
+  hearingStatus    String   @default("none") // none, in_progress, completed
+
   // ── 学習データ ──
   favoriteTemplates String  @default("[]") // JSON: 過去に選ばれたテンプレートID string[]
   pageCount        Int      @default(0) // 生成ページ数（学習量の指標）

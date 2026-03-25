@@ -12,6 +12,8 @@ import type {
   AssembledPage,
   PersonalizedPage,
 } from "./types";
+import type { EmotionalDNA } from "@/lib/emotional-dna/types";
+import { emotionalDnaToPromptContext } from "@/lib/emotional-dna/hearing-engine";
 
 // ============================================================
 // プレースホルダー → コンテキスト情報マッピング
@@ -71,6 +73,7 @@ function classifyPlaceholder(name: string): {
 function buildPersonalizationPrompt(
   placeholders: string[],
   requirements: ContentRequirements,
+  emotionalDna?: EmotionalDNA,
 ): string {
   const classified = placeholders.map((p) => {
     const clean = p.replace(/\{\{|\}\}/g, "");
@@ -94,6 +97,11 @@ function buildPersonalizationPrompt(
   const toneDesc = tones.join("・");
   const audienceDesc = targetAudience || "一般消費者";
 
+  // EmotionalDNAがある場合、感情の地層をプロンプトに注入
+  const emotionalContext = emotionalDna
+    ? emotionalDnaToPromptContext(emotionalDna)
+    : "";
+
   let prompt = `あなたは一流のEC/ブランドサイトのコピーライターです。
 以下のブランド情報に基づいて、各プレースホルダーに対して魅力的で洗練された日本語コピーを生成してください。
 
@@ -103,6 +111,7 @@ function buildPersonalizationPrompt(
 - トーン: ${toneDesc}
 - ターゲット: ${audienceDesc}
 ${additionalNotes ? `- 補足: ${additionalNotes}` : ""}
+${emotionalContext ? `\n${emotionalContext}\n` : ""}
 
 ## ルール（厳守）
 1. **文字数制限**: 各コピーは指定文字数以内に収めてください（特にCTAは短く）
@@ -192,6 +201,7 @@ export async function personalizeContent(
   requirements: ContentRequirements,
   anthropicClient: Anthropic,
   model?: string,
+  emotionalDna?: EmotionalDNA,
 ): Promise<PersonalizedPage> {
   const { fullDocument, placeholders } = assembled;
 
@@ -212,7 +222,7 @@ export async function personalizeContent(
   }
 
   // ── AI呼び出し: コピーライティング ──
-  const prompt = buildPersonalizationPrompt(placeholders, requirements);
+  const prompt = buildPersonalizationPrompt(placeholders, requirements, emotionalDna);
 
   if (!prompt) {
     return {

@@ -6,6 +6,7 @@
 // ============================================================
 
 import { prisma } from "./db";
+import type { EmotionalDNA } from "./emotional-dna/types";
 
 export interface BrandMemoryData {
   brandName: string;
@@ -23,6 +24,7 @@ export interface BrandMemoryData {
   copyKeywords: string[];
   avoidKeywords: string[];
   pageCount: number;
+  emotionalDna: EmotionalDNA | null;
 }
 
 /**
@@ -61,6 +63,7 @@ export async function getActiveBrandMemory(): Promise<BrandMemoryData | null> {
       copyKeywords: safeParseJson(memory.copyKeywords, []),
       avoidKeywords: safeParseJson(memory.avoidKeywords, []),
       pageCount: memory.pageCount || 0,
+      emotionalDna: safeParseJson(memory.emotionalDna, null),
     };
   } catch {
     return null;
@@ -159,6 +162,17 @@ export function buildBrandMemoryPrompt(
       );
     }
     hasContent = true;
+  }
+
+  // ── Emotional DNA（感情の地層）──
+  if (memory.emotionalDna) {
+    const { emotionalDnaToPromptContext } = require("./emotional-dna/hearing-engine");
+    const emotionalContext = emotionalDnaToPromptContext(memory.emotionalDna);
+    if (emotionalContext) {
+      parts.push("");
+      parts.push(emotionalContext);
+      hasContent = true;
+    }
   }
 
   // ── Experience level ──

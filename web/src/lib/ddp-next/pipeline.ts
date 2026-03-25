@@ -211,6 +211,8 @@ export async function runDDPNextPipeline(
         assembled,
         intent.contentRequirements,
         anthropicClient,
+        undefined, // model
+        input.emotionalDna,
       );
       // トークン推定（入力文字数/3 + 出力文字数/3）
       const inputChars = JSON.stringify(intent.contentRequirements).length;
