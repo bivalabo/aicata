@@ -16,13 +16,16 @@ import { prisma } from "./db";
 import { getActiveBrandMemory, buildBrandMemoryPrompt } from "./brand-memory";
 import { runDDP } from "./ddp";
 import type { DDPInput } from "./ddp";
+import {
+  MAX_RETRIES,
+  INITIAL_BACKOFF_MS,
+  MAX_BACKOFF_MS,
+  CLIENT_TIMEOUT_MS,
+} from "@/lib/constants";
 
 // ── Configuration ──
 
-const MAX_RETRIES = 3;
-const INITIAL_BACKOFF_MS = 2000;
-const MAX_BACKOFF_MS = 30000;
-const GENERATION_TIMEOUT_MS = 180000; // 3 minutes per page
+const GENERATION_TIMEOUT_MS = CLIENT_TIMEOUT_MS; // AI応答待ちと同じタイムアウト
 
 // ── Types ──
 

@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       userInstructions || `${url} のサイトをリビルドしてください`,
       pageType || "landing",
       urlAnalysis || undefined,
-      undefined, // brandMemory - TODO: fetch from DB
+      undefined, // brandMemory — Phase 2: BrandMemory APIから取得して注入
     );
 
     // Stage 1: DesignSpec生成

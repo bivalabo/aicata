@@ -207,8 +207,7 @@ export async function POST(request: Request) {
       avoidKeywords,
     } = body;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data: Record<string, any> = {};
+    const data: Record<string, string | number | Date | null> = {};
     if (brandName !== undefined) data.brandName = brandName;
     if (brandStory !== undefined) data.brandStory = brandStory;
     if (industry !== undefined) data.industry = industry;
@@ -240,7 +239,7 @@ export async function POST(request: Request) {
   }
 }
 
-function safeParseJson(str: string | null | undefined, fallback: any): any {
+function safeParseJson<T>(str: string | null | undefined, fallback: T): T {
   if (!str) return fallback;
   try {
     return JSON.parse(str);

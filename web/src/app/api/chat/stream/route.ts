@@ -16,6 +16,9 @@ import { prisma } from "@/lib/db";
 import { ChatStreamInputSchema, parseBody } from "@/lib/api-validators";
 import { checkRateLimit, AI_RATE_LIMIT, rateLimitResponse } from "@/lib/rate-limiter";
 import { apiErrorResponse } from "@/lib/api-error";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Stream API");
 
 // Next.js Route Segment Config — allow long-running streaming responses
 export const maxDuration = 300; // 5 minutes
@@ -128,7 +131,7 @@ export async function POST(request: Request) {
           extractText(lastUserMsg.content),
         );
       } catch (e) {
-        console.error("[Stream API] Failed to save user message:", e);
+        log.error("[Stream API] Failed to save user message:", e);
       }
     }
 
@@ -151,7 +154,7 @@ export async function POST(request: Request) {
         });
         if (page && page.html) {
           linkedPage = page;
-          console.log("[Stream API] Enhance mode: linked page found", {
+          log.info("[Stream API] Enhance mode: linked page found", {
             pageId: page.id,
             title: page.title,
             pageType: page.pageType,
@@ -159,7 +162,7 @@ export async function POST(request: Request) {
           });
         }
       } catch (e) {
-        console.error("[Stream API] Failed to lookup linked page:", e);
+        log.error("[Stream API] Failed to lookup linked page:", e);
       }
     }
 
@@ -178,7 +181,7 @@ export async function POST(request: Request) {
 
     // ── DDP パイプライン（新規ページ生成時のみ。Enhanceモードはレガシーパスへ） ──
     if (isPageGenerationRequest && !linkedPage && !skipDDP) {
-      console.log("[Stream API] Using DDP pipeline for page generation");
+      log.info("[Stream API] Using DDP pipeline for page generation");
 
       const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
 
@@ -280,7 +283,7 @@ export async function POST(request: Request) {
               try {
                 await saveMessage(conversationId, "assistant", sse.accumulated, { model: modelId });
               } catch (e) {
-                console.error("[Stream API] Failed to save DDP assistant message:", e);
+                log.error("[Stream API] Failed to save DDP assistant message:", e);
               }
 
               // ── DDP 生成ページを Page テーブルに保存 ──
@@ -299,19 +302,19 @@ export async function POST(request: Request) {
                     pageType: ddpInput.pageType || "landing",
                   },
                 });
-                console.log("[Stream API] DDP page saved to DB", {
+                log.info("[Stream API] DDP page saved to DB", {
                   conversationId,
                   pageType: ddpInput.pageType,
                   htmlLength: ddpResult.html.length,
                   cssLength: ddpResult.css.length,
                 });
               } catch (e) {
-                console.error("[Stream API] Failed to save DDP page to DB:", e);
+                log.error("[Stream API] Failed to save DDP page to DB:", e);
               }
             }
           } catch (ddpError) {
             // ── DDP 失敗: ストリーム内でレガシーパスにフォールバック ──
-            console.error("[Stream API] DDP failed, falling back to legacy within stream:", ddpError);
+            log.error("[Stream API] DDP failed, falling back to legacy within stream:", ddpError);
 
             // 既に送信した進捗テキストをリセットはできないが、
             // ユーザーにフォールバックを通知してからレガシー生成を続行
@@ -368,7 +371,7 @@ export async function POST(request: Request) {
               const isIncomplete = hasPageMarker && !sse.accumulated.includes("---PAGE_END---");
               sse.sendDone({ model: modelId, usage, incomplete: isIncomplete });
             } catch (legacyError) {
-              console.error("[Stream API] Legacy fallback also failed:", legacyError);
+              log.error("[Stream API] Legacy fallback also failed:", legacyError);
               sse.sendError(
                 legacyError instanceof Error ? legacyError.message : "ページ生成に失敗しました",
                 true,
@@ -382,7 +385,7 @@ export async function POST(request: Request) {
               try {
                 await saveMessage(conversationId, "assistant", sse.accumulated, { model: modelId });
               } catch (e) {
-                console.error("[Stream API] Failed to save fallback assistant message:", e);
+                log.error("[Stream API] Failed to save fallback assistant message:", e);
               }
             }
           }
@@ -395,7 +398,7 @@ export async function POST(request: Request) {
 
     // ── レガシー: Vercel AI SDK ストリーミング ──
     if (skipDDP && isPageGenerationRequest && !linkedPage) {
-      console.log("[Stream API] DDP skipped (Vercel Hobby/SKIP_DDP) — using legacy streaming for page generation");
+      log.info("[Stream API] DDP skipped (Vercel Hobby/SKIP_DDP) — using legacy streaming for page generation");
     }
 
     let systemPrompt: string;
@@ -404,7 +407,7 @@ export async function POST(request: Request) {
 
     // ── Enhance モード: 既存HTMLを含む特別なプロンプト ──
     if (linkedPage) {
-      console.log("[Stream API] Building enhance system prompt for page:", linkedPage.id);
+      log.info("[Stream API] Building enhance system prompt for page:", linkedPage.id);
       systemPrompt = buildEnhanceSystemPrompt(linkedPage);
       designContext = null;
       isGen3 = false;
@@ -419,7 +422,7 @@ export async function POST(request: Request) {
         systemPrompt = result.prompt;
         designContext = result.context;
         isGen3 = result.gen3;
-        console.log(`[Design Engine ${isGen3 ? "Gen-3" : "Gen-2"}]`, {
+        log.info(`[Design Engine ${isGen3 ? "Gen-3" : "Gen-2"}]`, {
           industry: designContext.industry,
           pageType: designContext.pageType,
           tones: designContext.tones,
@@ -429,7 +432,7 @@ export async function POST(request: Request) {
           promptLength: systemPrompt.length,
         });
       } catch (e) {
-        console.error("[Design Engine] Prompt composition failed:", e);
+        log.error("[Design Engine] Prompt composition failed:", e);
         systemPrompt =
           "あなたはAicata — ShopifyストアのAIページビルダーです。ユーザーの要望に応じてHTML+CSSでページを生成してください。生成コードは ---PAGE_START--- と ---PAGE_END--- で囲んでください。HTMLを先に、最後に<style>タグでCSSをまとめてください。";
         designContext = null;
@@ -443,7 +446,7 @@ export async function POST(request: Request) {
         const brandPrompt = buildBrandMemoryPrompt(brandMemory);
         if (brandPrompt) {
           systemPrompt = `${systemPrompt}\n\n${brandPrompt}`;
-          console.log("[Brand Memory] Injected into prompt:", {
+          log.debug("[Brand Memory] Injected into prompt:", {
             brandName: brandMemory.brandName,
             industry: brandMemory.industry,
             hasColors: !!brandMemory.primaryColor,
@@ -453,7 +456,7 @@ export async function POST(request: Request) {
         }
       }
     } catch (e) {
-      console.warn("[Brand Memory] Failed to inject:", e);
+      log.warn("[Brand Memory] Failed to inject:", e);
     }
 
     // Build AI SDK messages — convert multi-modal content
@@ -491,7 +494,7 @@ export async function POST(request: Request) {
       ? Math.max(DEFAULT_MAX_TOKENS, 32768)
       : DEFAULT_MAX_TOKENS;
 
-    console.log("[Stream API] Calling Claude via Vercel AI SDK...", {
+    log.info("[Stream API] Calling Claude via Vercel AI SDK...", {
       model: modelId,
       maxOutputTokens: maxTokens,
       messageCount: aiMessages.length,
@@ -529,7 +532,7 @@ export async function POST(request: Request) {
             incomplete: isIncomplete,
           });
         } catch (err) {
-          console.error("[Stream API] Stream error:", err);
+          log.error("[Stream API] Stream error:", err);
           sse.sendError(
             err instanceof Error ? err.message : "ストリーミングエラー",
             true,
@@ -540,7 +543,7 @@ export async function POST(request: Request) {
 
         // ── Post-stream: DB保存 & 後処理 ──
         const fullText = sse.accumulated;
-        console.log("[Stream API] Stream completed:", { contentLength: fullText.length });
+        log.info("[Stream API] Stream completed:", { contentLength: fullText.length });
 
         // Save assistant message to DB
         if (conversationId && fullText) {
@@ -549,7 +552,7 @@ export async function POST(request: Request) {
               model: modelId,
             });
           } catch (e) {
-            console.error("[Stream API] Failed to save assistant message:", e);
+            log.error("[Stream API] Failed to save assistant message:", e);
           }
         }
 
@@ -577,14 +580,14 @@ export async function POST(request: Request) {
                   updatedAt: new Date(),
                 },
               });
-              console.log("[Stream API] Enhanced page HTML auto-saved", {
+              log.info("[Stream API] Enhanced page HTML auto-saved", {
                 pageId: linkedPage.id,
                 htmlLength: htmlOnly.length,
                 cssLength: css.length,
               });
             }
           } catch (e) {
-            console.error("[Stream API] Failed to auto-save enhanced page:", e);
+            log.error("[Stream API] Failed to auto-save enhanced page:", e);
           }
         }
 
@@ -625,7 +628,7 @@ export async function POST(request: Request) {
                     updatedAt: new Date(),
                   },
                 });
-                console.log("[Stream API] Continuation merged and saved", {
+                log.info("[Stream API] Continuation merged and saved", {
                   pageId: linkedPage.id,
                   htmlLength: htmlOnly.length,
                   cssLength: css.length,
@@ -633,7 +636,7 @@ export async function POST(request: Request) {
               }
             }
           } catch (e) {
-            console.error("[Stream API] Failed to merge continuation:", e);
+            log.error("[Stream API] Failed to merge continuation:", e);
           }
         }
 

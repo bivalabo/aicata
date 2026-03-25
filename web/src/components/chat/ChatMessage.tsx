@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, User, Copy, Check, ChevronRight, Code2 } from "lucide-react";
 import { useState, memo, useMemo } from "react";
+import { COPY_FEEDBACK_DURATION_MS } from "@/lib/constants";
 import clsx from "clsx";
 import type { Attachment } from "@/hooks/useChat";
 
@@ -120,7 +121,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
     e.stopPropagation();
     navigator.clipboard.writeText(code);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), COPY_FEEDBACK_DURATION_MS);
   };
 
   return (
@@ -199,7 +200,7 @@ export default memo(function ChatMessage({
     if (!content) return;
     navigator.clipboard.writeText(content);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), COPY_FEEDBACK_DURATION_MS);
   };
 
   const formattedContent = useMemo(

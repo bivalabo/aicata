@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     // Engine context (ecommerce knowledge injection)
     const engineCtx: EngineContext = {
       pageType: buildSection.build.pageType,
-      industry: "general", // TODO: detect from userInstructions
+      industry: "general", // Phase 2: userInstructionsからAI推定 or BrandMemory参照
       tones: ["modern"],
       locale: "ja-JP",
     };

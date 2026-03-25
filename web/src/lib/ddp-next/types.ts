@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { DesignDNAPreferences } from "@/lib/ace-adis/types";
+import { HQS_WEIGHTS } from "@/lib/constants";
 import type {
   IndustryType,
   PageType,
@@ -36,19 +37,12 @@ export interface HumanQualityScore {
 /** HQS加重平均を計算 */
 export function computeHQSComposite(hqs: HumanQualityScore): number {
   // Visual と Rhythm を重視（デザイン品質の核心）
-  const weights = {
-    visual: 0.30,
-    rhythm: 0.25,
-    conversion: 0.20,
-    mobile: 0.15,
-    brand: 0.10,
-  };
   return (
-    hqs.visual * weights.visual +
-    hqs.rhythm * weights.rhythm +
-    hqs.conversion * weights.conversion +
-    hqs.mobile * weights.mobile +
-    hqs.brand * weights.brand
+    hqs.visual * HQS_WEIGHTS.visual +
+    hqs.rhythm * HQS_WEIGHTS.rhythm +
+    hqs.conversion * HQS_WEIGHTS.conversion +
+    hqs.mobile * HQS_WEIGHTS.mobile +
+    hqs.brand * HQS_WEIGHTS.brand
   );
 }
 

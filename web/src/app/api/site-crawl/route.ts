@@ -8,6 +8,9 @@ import type { PageType } from "@/lib/design-engine/types";
 import { validateExternalUrl } from "@/lib/url-validator";
 import { checkRateLimit, ANALYSIS_RATE_LIMIT, rateLimitResponse } from "@/lib/rate-limiter";
 import { apiErrorResponse } from "@/lib/api-error";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Site Crawl");
 
 export const maxDuration = 60; // 最大60秒
 
@@ -87,7 +90,7 @@ async function fetchSitemap(
     const urls = extractUrlsFromSitemap(xml);
     return { urls, method: "sitemap" };
   } catch {
-    console.log("[Site Crawl] Sitemap unavailable, falling back to HTML scan");
+    log.info("[Site Crawl] Sitemap unavailable, falling back to HTML scan");
     return { urls: [], method: "html-scan" };
   }
 }
@@ -266,7 +269,7 @@ export async function POST(request: Request) {
     }
 
     const baseUrl = parsedUrl.origin;
-    console.log("[Site Crawl] Starting crawl for:", baseUrl);
+    log.info("[Site Crawl] Starting crawl for:", baseUrl);
 
     // 1. Try sitemap.xml
     let { urls, method } = await fetchSitemap(baseUrl) as { urls: string[]; method: string };

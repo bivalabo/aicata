@@ -71,6 +71,7 @@ const SiteBuilderView = dynamic(
 );
 import type { PageData } from "@/lib/page-parser";
 import { buildSectionEditPrompt } from "@/lib/section-labels";
+import { SAVE_FEEDBACK_DURATION_MS, AUTO_SAVE_DEBOUNCE_MS } from "@/lib/constants";
 
 interface ConversationItem {
   id: string;
@@ -312,7 +313,7 @@ export default function Home() {
       if (savedPageIdRef.current) {
         handleSaveInternalRef.current();
       }
-    }, 3000);
+    }, AUTO_SAVE_DEBOUNCE_MS);
     // handleSavePageInternal は ref 経由で安定化しているため依存不要
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -380,7 +381,7 @@ export default function Home() {
       }
       setSaveState("saved");
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => setSaveState("idle"), 3000);
+      saveTimerRef.current = setTimeout(() => setSaveState("idle"), SAVE_FEEDBACK_DURATION_MS);
     } catch (error) {
       console.error("Page save error:", error);
       setSaveState("idle");
@@ -460,25 +461,27 @@ export default function Home() {
       {/* ── フルスクリーンエディタ ── */}
       <AnimatePresence>
         {editorMode && pageData && (
-          <EditorView
-            html={pageData.html}
-            css={pageData.css}
-            pageTitle={
-              conversations.find((c) => c.id === activeConversationId)
-                ?.title || "無題のページ"
-            }
-            savedPageId={savedPageId}
-            onSave={handleSavePage}
-            saveState={saveState}
-            isGenerating={isStreaming}
-            onHtmlChange={handleHtmlChange}
-            onBack={handleCloseEditor}
-            onSendAIMessage={handleEditorAIMessage}
-            pendingAIMessage={editorAIPending}
-            onPendingAIMessageConsumed={() => setEditorAIPending(null)}
-            onUndo={canUndo ? handleUndo : undefined}
-            onRedo={canRedo ? handleRedo : undefined}
-          />
+          <ErrorBoundary label="エディタ">
+            <EditorView
+              html={pageData.html}
+              css={pageData.css}
+              pageTitle={
+                conversations.find((c) => c.id === activeConversationId)
+                  ?.title || "無題のページ"
+              }
+              savedPageId={savedPageId}
+              onSave={handleSavePage}
+              saveState={saveState}
+              isGenerating={isStreaming}
+              onHtmlChange={handleHtmlChange}
+              onBack={handleCloseEditor}
+              onSendAIMessage={handleEditorAIMessage}
+              pendingAIMessage={editorAIPending}
+              onPendingAIMessageConsumed={() => setEditorAIPending(null)}
+              onUndo={canUndo ? handleUndo : undefined}
+              onRedo={canRedo ? handleRedo : undefined}
+            />
+          </ErrorBoundary>
         )}
       </AnimatePresence>
 

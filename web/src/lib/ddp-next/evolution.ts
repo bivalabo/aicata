@@ -10,6 +10,7 @@ import type { HumanQualityScore, SectionMeta } from "./types";
 import { computeHQSComposite } from "./types";
 import { getSectionMeta, updateSectionMeta, getAllSectionMeta } from "./section-meta";
 import type { DesignDNAPreferences } from "@/lib/ace-adis/types";
+import { EMA_ALPHA_HQS, EMA_ALPHA_DNA, HQS_MIN, HQS_MAX } from "@/lib/constants";
 
 // ============================================================
 // Types
@@ -44,11 +45,11 @@ export interface UserDNAUpdate {
 // Constants
 // ============================================================
 
-/** HQS更新のEMA係数（大きいほど新しい評価が重視される） */
-const HQS_EMA_ALPHA = 0.15;
+/** HQS更新のEMA係数 — @/lib/constants から参照 */
+const HQS_EMA_ALPHA = EMA_ALPHA_HQS;
 
-/** DNA更新のEMA係数（小さめにして急激な変化を防ぐ） */
-const DNA_EMA_ALPHA = 0.10;
+/** DNA更新のEMA係数 — @/lib/constants から参照 */
+const DNA_EMA_ALPHA = EMA_ALPHA_DNA;
 
 /** like時のHQSブースト量 */
 const LIKE_BOOST = 0.3;
@@ -248,5 +249,5 @@ function uniformBoostHQS(
 }
 
 function clampHQS(value: number): number {
-  return Math.max(1.0, Math.min(5.0, value));
+  return Math.max(HQS_MIN, Math.min(HQS_MAX, value));
 }

@@ -7,6 +7,7 @@
 // ============================================================
 
 import type { DesignDNAPreferences } from "@/lib/ace-adis/types";
+import { SWAP_WEIGHT_HQS, SWAP_WEIGHT_DNA, HQS_MAX } from "@/lib/constants";
 import type { SectionCategory, SectionTemplate } from "@/lib/design-engine/types";
 import type { ResolvedSection, AssembledPage } from "./types";
 import { computeHQSComposite } from "./types";
@@ -78,8 +79,8 @@ export function getSwapCandidates(
         dnaDistance = 1 - similarity;
       }
 
-      // スコア: HQS重視 (0.6) + DNA近さ (0.4)
-      const score = 0.6 * (hqsComposite / 5.0) + 0.4 * (1 - dnaDistance);
+      // スコア: HQS重視 + DNA近さ（重みは constants.ts で定義）
+      const score = SWAP_WEIGHT_HQS * (hqsComposite / HQS_MAX) + SWAP_WEIGHT_DNA * (1 - dnaDistance);
 
       return {
         section,

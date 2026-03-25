@@ -8,9 +8,9 @@ const industryMap: Record<IndustryType, IndustryKnowledge> = {
   beauty: beautyKnowledge,
   food: foodKnowledge,
   fashion: fashionKnowledge,
-  lifestyle: generalKnowledge, // TODO: 専用ナレッジ追加
-  tech: generalKnowledge,      // TODO: 専用ナレッジ追加
-  health: generalKnowledge,    // TODO: 専用ナレッジ追加
+  lifestyle: generalKnowledge, // Phase 2: lifestyle専用ナレッジ（暮らし・インテリア系）
+  tech: generalKnowledge,      // Phase 2: tech専用ナレッジ（ガジェット・SaaS系）
+  health: generalKnowledge,    // Phase 2: health専用ナレッジ（ヘルスケア・サプリ系）
   general: generalKnowledge,
 };
 
