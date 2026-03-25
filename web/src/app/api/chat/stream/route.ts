@@ -596,7 +596,7 @@ export async function POST(request: Request) {
               take: 5,
             });
             const prevAssistant = prevMessages.find(
-              (m) => m.role === "assistant" && m.content.includes("---PAGE_START---") && !m.content.includes("---PAGE_END---"),
+              (m: { role: string; content: string }) => m.role === "assistant" && m.content.includes("---PAGE_START---") && !m.content.includes("---PAGE_END---"),
             );
             if (prevAssistant) {
               const startMarker = "---PAGE_START---";

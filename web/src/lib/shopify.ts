@@ -253,6 +253,20 @@ export async function listAllCollections(
   return [...custom, ...smart];
 }
 
+/** コレクション内の商品一覧を取得 */
+export async function listCollectionProducts(
+  shop: string,
+  accessToken: string,
+  collectionId: number,
+): Promise<ShopifyProduct[]> {
+  const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
+    shop,
+    accessToken,
+    `collections/${collectionId}/products.json?limit=250`,
+  );
+  return data.products || [];
+}
+
 /** ページ詳細を取得 */
 export async function getPage(
   shop: string,
@@ -464,6 +478,7 @@ export async function deployToTheme(
     sectionFiles: Array<{ key: string; value: string }>;
     templateJson: string;
     cssContent?: string;
+    globalCssContent?: string;
   },
 ): Promise<string[]> {
   const deployedFiles: string[] = [];
@@ -482,6 +497,16 @@ export async function deployToTheme(
       value: deployment.cssContent,
     });
     deployedFiles.push(cssKey);
+  }
+
+  // 2b. グローバルCSSアセットがあればアップロード
+  if (deployment.globalCssContent) {
+    const globalCssKey = `assets/aicata-global.css`;
+    await putAsset(shop, accessToken, themeId, {
+      key: globalCssKey,
+      value: deployment.globalCssContent,
+    });
+    deployedFiles.push(globalCssKey);
   }
 
   // 3. JSONテンプレートをアップロード
