@@ -19,6 +19,9 @@ import {
   Palette,
   Type,
   Zap,
+  Shield,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import clsx from "clsx";
 import { PAGE_TYPE_LABELS } from "./PageCard";
@@ -55,7 +58,7 @@ interface UnifiedDesignContext {
   industryKeywords: string[];
 }
 
-type FlowStep = "input" | "crawling" | "select" | "analyzing" | "review" | "generating" | "complete";
+type FlowStep = "welcome" | "input" | "crawling" | "select" | "analyzing" | "review" | "generating" | "preview" | "complete";
 
 const TYPE_ICONS: Record<string, typeof Home> = {
   landing: Home,
@@ -83,7 +86,7 @@ export default function SiteRebuildFlow({
   onClose,
   onComplete,
 }: SiteRebuildFlowProps) {
-  const [step, setStep] = useState<FlowStep>("input");
+  const [step, setStep] = useState<FlowStep>("welcome");
   const [siteUrl, setSiteUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -117,6 +120,10 @@ export default function SiteRebuildFlow({
     Array<{ pageId: string; title: string; pageType: string; path: string; status: string }>
   >([]);
   const [generateTotal, setGenerateTotal] = useState(0);
+
+  // Preview state — track which pages the user wants to keep
+  const [previewSelections, setPreviewSelections] = useState<Record<string, boolean>>({});
+  const [previewExpanded, setPreviewExpanded] = useState<string | null>(null);
 
   // ── Step 1: Crawl ──
   const handleCrawl = useCallback(async () => {
@@ -356,9 +363,8 @@ export default function SiteRebuildFlow({
               ]);
             } else if (data.type === "done") {
               setGenerateProgress(100);
-              setStep("complete");
-              // Notify parent
-              onComplete?.(analyzedPages, unifiedContext);
+              // Go to preview step instead of complete
+              setStep("preview");
             }
           } catch {
             // Skip malformed SSE lines
@@ -389,17 +395,19 @@ export default function SiteRebuildFlow({
             </div>
             <div>
               <h2 className="text-[16px] font-bold text-foreground">
-                サイト一括リビルド
+                サイトリデザイン提案
               </h2>
               <p className="text-[12px] text-muted-foreground">
+                {step === "welcome" && "はじめにお読みください"}
                 {step === "input" && "サイトURLを入力してください"}
                 {step === "crawling" && "ページを検出中..."}
                 {step === "select" &&
                   `${discoveredPages.length}ページを検出しました`}
                 {step === "analyzing" && "ページを解析中..."}
                 {step === "review" && "解析結果を確認してください"}
-                {step === "generating" && "ページを生成中..."}
-                {step === "complete" && "リビルド完了！"}
+                {step === "generating" && "デザイン案を生成中..."}
+                {step === "preview" && "生成されたデザイン案を確認してください"}
+                {step === "complete" && "リデザイン完了！"}
               </p>
             </div>
           </div>
@@ -413,6 +421,86 @@ export default function SiteRebuildFlow({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* ── STEP: Welcome ── */}
+          {step === "welcome" && (
+            <div className="space-y-5">
+              {/* Safety banner */}
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-200/50">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
+                  <Shield className="w-4.5 h-4.5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-emerald-800 mb-1">
+                    既存のサイトには一切影響しません
+                  </p>
+                  <p className="text-[13px] text-emerald-700 leading-relaxed">
+                    この機能は、AIが新しいデザイン案を「ドラフト」として作成するものです。
+                    今のShopifyサイトが変更・上書きされることはありません。
+                  </p>
+                </div>
+              </div>
+
+              {/* Flow overview */}
+              <div className="bg-accent/[0.03] rounded-xl p-5">
+                <h3 className="text-[14px] font-semibold text-foreground mb-4">
+                  リデザイン提案の流れ
+                </h3>
+                <div className="space-y-4">
+                  {/* Step 1 */}
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-full bg-accent/10 flex items-center justify-center shrink-0 text-[12px] font-bold text-accent">
+                      1
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-medium text-foreground">
+                        サイトを分析
+                      </p>
+                      <p className="text-[12px] text-muted-foreground">
+                        URLを入力すると、AIがサイト構造・デザイン・コンテンツを読み取ります
+                      </p>
+                    </div>
+                  </div>
+                  {/* Step 2 */}
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-full bg-accent/10 flex items-center justify-center shrink-0 text-[12px] font-bold text-accent">
+                      2
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-medium text-foreground">
+                        デザイン案を生成
+                      </p>
+                      <p className="text-[12px] text-muted-foreground">
+                        AIが各ページの新しいデザインを提案します（ドラフトとして保存）
+                      </p>
+                    </div>
+                  </div>
+                  {/* Step 3 */}
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-full bg-accent/10 flex items-center justify-center shrink-0 text-[12px] font-bold text-accent">
+                      3
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-medium text-foreground">
+                        プレビューして選ぶ
+                      </p>
+                      <p className="text-[12px] text-muted-foreground">
+                        生成結果をページごとにプレビューし、気に入ったものだけ採用できます
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Extra reassurance */}
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-50/70 border border-amber-200/40">
+                <Eye className="w-4 h-4 text-amber-600 shrink-0" />
+                <p className="text-[12px] text-amber-800">
+                  生成されたデザイン案はすべて「ドラフト」状態です。ご自身で確認・承認するまで公開されることはありません。
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* ── STEP: Input ── */}
           {step === "input" && (
             <div className="space-y-4">
@@ -449,13 +537,15 @@ export default function SiteRebuildFlow({
               )}
 
               <div className="bg-accent/[0.03] rounded-xl p-4">
-                <h3 className="text-[13px] font-semibold text-foreground mb-2">
-                  サイト一括リビルドとは？
-                </h3>
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-[12px] text-emerald-700 font-medium">
+                    既存サイトへの影響はありません
+                  </span>
+                </div>
                 <p className="text-[12px] text-muted-foreground leading-relaxed">
-                  現在のShopifyストアのURLを入力すると、Aicataがサイト構造を自動で検出します。
-                  トップページ、コレクション、商品ページ、Aboutページなど、サイト全体を
-                  一貫したAicataデザインで一括リニューアルできます。
+                  URLを入力すると、AIがサイト構造を読み取りデザイン案を作成します。
+                  生成結果はすべてドラフト保存され、気に入ったページだけを採用できます。
                 </p>
               </div>
             </div>
@@ -656,7 +746,7 @@ export default function SiteRebuildFlow({
                 <div className="w-full max-w-sm mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[13px] font-medium text-foreground">
-                      ページ生成中...
+                      デザイン案を生成中...
                     </span>
                     <span className="text-[13px] text-muted-foreground">
                       {Math.round(generateProgress)}%
@@ -704,6 +794,94 @@ export default function SiteRebuildFlow({
             </div>
           )}
 
+          {/* ── STEP: Preview & Adopt ── */}
+          {step === "preview" && (
+            <div className="space-y-4">
+              {/* Reassurance */}
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200/40">
+                <Shield className="w-4 h-4 text-emerald-600 shrink-0" />
+                <p className="text-[12px] text-emerald-700">
+                  以下はすべて<span className="font-semibold">ドラフト状態</span>です。採用しないページは削除できます。
+                </p>
+              </div>
+
+              {/* Page cards */}
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {generatedPages.map((gp) => {
+                  const isSelected = previewSelections[gp.pageId] !== false; // default true
+                  const isExpanded = previewExpanded === gp.pageId;
+                  return (
+                    <div
+                      key={gp.pageId}
+                      className={clsx(
+                        "rounded-xl border transition-all",
+                        isSelected
+                          ? "border-accent/30 bg-white"
+                          : "border-border/30 bg-gray-50 opacity-60",
+                      )}
+                    >
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        {/* Checkbox */}
+                        <button
+                          onClick={() =>
+                            setPreviewSelections((prev) => ({
+                              ...prev,
+                              [gp.pageId]: prev[gp.pageId] === false ? true : false,
+                            }))
+                          }
+                          className={clsx(
+                            "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors",
+                            isSelected
+                              ? "border-accent bg-accent text-white"
+                              : "border-gray-300 bg-white",
+                          )}
+                        >
+                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        </button>
+
+                        {/* Page info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium text-foreground truncate">
+                            {gp.title || gp.path}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {PAGE_TYPE_LABELS[gp.pageType] || gp.pageType}
+                            <span className="ml-2 text-emerald-600">ドラフト</span>
+                          </p>
+                        </div>
+
+                        {/* Preview toggle */}
+                        <button
+                          onClick={() =>
+                            setPreviewExpanded(isExpanded ? null : gp.pageId)
+                          }
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-accent hover:bg-accent/5 transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          {isExpanded ? "閉じる" : "プレビュー"}
+                        </button>
+                      </div>
+
+                      {/* Expanded preview iframe */}
+                      {isExpanded && (
+                        <div className="px-4 pb-4">
+                          <div className="rounded-lg overflow-hidden border border-border/50 bg-white">
+                            <iframe
+                              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:system-ui,sans-serif;}</style></head><body><p style="padding:2rem;color:#888;text-align:center;">プレビューはサイトマップから確認できます</p></body></html>`}
+                              className="w-full h-[300px] border-0"
+                              sandbox="allow-same-origin"
+                              title={`Preview: ${gp.title}`}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* ── STEP: Complete ── */}
           {step === "complete" && (
             <div className="flex flex-col items-center py-8">
@@ -711,14 +889,15 @@ export default function SiteRebuildFlow({
                 <CheckCircle2 className="w-8 h-8 text-emerald-600" />
               </div>
               <h3 className="text-[18px] font-bold text-foreground mb-2">
-                サイトリビルド完了！
+                リデザイン提案が完了しました
               </h3>
               <p className="text-[14px] text-muted-foreground mb-1">
-                {generatedPages.filter((p) => p.status === "ok").length}/
-                {generatedPages.length} ページを生成しました
+                {Object.values(previewSelections).filter((v) => v !== false).length > 0
+                  ? `${generatedPages.filter((p) => previewSelections[p.pageId] !== false).length}ページのデザイン案を採用しました`
+                  : `${generatedPages.filter((p) => p.status === "ok").length}ページのデザイン案ができました`}
               </p>
               <p className="text-[12px] text-muted-foreground">
-                サイトマップで確認・編集・Shopifyへデプロイできます
+                サイトマップでプレビュー・編集・Shopifyへデプロイできます
               </p>
             </div>
           )}
@@ -726,6 +905,18 @@ export default function SiteRebuildFlow({
 
         {/* Footer */}
         <div className="shrink-0 flex items-center justify-between px-6 py-4 border-t border-border bg-gray-50/50">
+          {step === "welcome" && (
+            <div className="flex-1 flex justify-end">
+              <button
+                onClick={() => setStep("input")}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-gradient-to-r from-accent to-[#5b8def] hover:shadow-lg hover:shadow-accent/20 transition-all"
+              >
+                はじめる
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {step === "input" && (
             <div className="flex-1" />
           )}
@@ -767,7 +958,7 @@ export default function SiteRebuildFlow({
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-gradient-to-r from-accent to-[#5b8def] hover:shadow-lg hover:shadow-accent/20 transition-all"
               >
                 <Sparkles className="w-4 h-4" />
-                リビルドを開始する
+                デザイン案を生成する
               </button>
             </>
           )}
@@ -775,9 +966,29 @@ export default function SiteRebuildFlow({
           {step === "generating" && (
             <div className="flex-1 text-center">
               <span className="text-[13px] text-muted-foreground">
-                AIがページを生成中です — このまましばらくお待ちください
+                AIがデザイン案を生成中です — このまましばらくお待ちください
               </span>
             </div>
+          )}
+
+          {step === "preview" && (
+            <>
+              <span className="text-[12px] text-muted-foreground">
+                {generatedPages.filter((p) => previewSelections[p.pageId] !== false).length}
+                /{generatedPages.length} ページを採用
+              </span>
+              <button
+                onClick={() => {
+                  // TODO: Delete unselected pages from DB if needed
+                  onComplete?.(analyzedPages, unifiedContext!);
+                  setStep("complete");
+                }}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-lg hover:shadow-emerald-500/20 transition-all"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                選択したデザイン案を採用する
+              </button>
+            </>
           )}
 
           {step === "complete" && (

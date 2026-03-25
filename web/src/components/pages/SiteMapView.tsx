@@ -509,7 +509,7 @@ export default function SiteMapView({
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[14px] font-medium text-foreground border border-accent/30 bg-accent/[0.04] hover:bg-accent/[0.08] transition-all"
             >
               <Globe className="w-4 h-4 text-accent" />
-              サイト一括リビルド
+              サイトリデザイン提案
             </button>
             <button
               onClick={onNavigateToChat}
