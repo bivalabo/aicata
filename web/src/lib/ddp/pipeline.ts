@@ -57,18 +57,27 @@ export async function runDDP(
     finalConfig.sectionModel = process.env.CLAUDE_MODEL_DEFAULT;
   }
 
-  // W-4修正: パイプライン全体のタイムアウトを実装
+  // W-4修正改善: AbortController でタイムアウト時にAPIコールもキャンセル
+  const abortController = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(
-      () => reject(new Error(`DDP pipeline timed out after ${finalConfig.timeoutMs}ms`)),
-      finalConfig.timeoutMs,
-    );
+    timeoutId = setTimeout(() => {
+      abortController.abort();
+      reject(new Error(`DDP pipeline timed out after ${finalConfig.timeoutMs}ms`));
+    }, finalConfig.timeoutMs);
   });
 
-  return Promise.race([
-    _runDDPInternal(input, finalConfig, onProgress),
-    timeoutPromise,
-  ]);
+  try {
+    const result = await Promise.race([
+      _runDDPInternal(input, finalConfig, onProgress, abortController.signal),
+      timeoutPromise,
+    ]);
+    return result;
+  } finally {
+    // タイムアウトタイマーを確実にクリア（リソースリーク防止）
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 /** 内部実装 — タイムアウトは runDDP で制御 */
@@ -76,10 +85,18 @@ async function _runDDPInternal(
   input: DDPInput,
   finalConfig: DDPConfig,
   onProgress?: (event: DDPProgressEvent) => void,
+  abortSignal?: AbortSignal,
 ): Promise<AssembledPageResult> {
   const client = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
   });
+
+  // AbortSignal チェック — 各ステージ間でキャンセルを検出
+  const checkAbort = () => {
+    if (abortSignal?.aborted) {
+      throw new Error("DDP pipeline was aborted");
+    }
+  };
 
   console.log("[DDP] Pipeline starting", {
     pageType: input.pageType,
@@ -88,6 +105,7 @@ async function _runDDPInternal(
   });
 
   // ── Stage 1: Design Director ──
+  checkAbort();
   onProgress?.({ stage: "spec", status: "start" });
 
   let spec;
@@ -113,6 +131,7 @@ async function _runDDPInternal(
   }
 
   // ── Stage 2: Section Artisan ──
+  checkAbort();
   const sections = await renderAllSections(
     client,
     spec,
@@ -137,6 +156,7 @@ async function _runDDPInternal(
   });
 
   // ── Stage 3: Harmony Assembler ──
+  checkAbort();
   onProgress?.({ stage: "assembly", status: "start" });
 
   // W-6修正: mediaStrategy を型安全に計算（input への as any 書き込みを廃止）
@@ -156,6 +176,7 @@ async function _runDDPInternal(
   onProgress?.({ stage: "assembly", status: "complete", validation: result.validation });
 
   // ── Stage 4: Quality Reviewer ──
+  checkAbort();
   try {
     console.log("[DDP] Stage 4: Quality Review starting...");
     const review = await reviewPage(client, result.fullDocument, finalConfig, input);
@@ -174,6 +195,64 @@ async function _runDDPInternal(
       // fullDocument を再構築
       const fontsLink = result.fullDocument.match(/<link[^>]*fonts[^>]*>/gi)?.join("\n") || "";
       result.fullDocument = `${fontsLink}\n\n${result.html}\n\n<style>\n${result.css}\n</style>`;
+    }
+
+    // ── デザイン・クリティック・ループ: スコアが低いセクションだけ再生成 ──
+    // 条件: スコア60未満 + critical な suggestion が存在 + まだリトライしていない
+    if (review.overallScore < 60) {
+      checkAbort();
+      const criticalSuggestions = review.suggestions.filter((s) => s.severity === "critical");
+      // critical suggestion から対象セクション ID を推定
+      const sectionIdsToRegen = identifySectionsToRegenerate(criticalSuggestions, spec);
+
+      if (sectionIdsToRegen.length > 0 && sectionIdsToRegen.length <= 3) {
+        console.log("[DDP] Critic Loop: regenerating", sectionIdsToRegen, "due to score", review.overallScore);
+        onProgress?.({ stage: "assembly", status: "start" }); // UI上では「再組み立て」として表示
+
+        // 対象セクションだけ再生成（レビューコメントをヒントとして注入）
+        const regenSpecs = spec.sections.filter((s) => sectionIdsToRegen.includes(s.id));
+        const feedbackHint = criticalSuggestions.map((s) => s.description).join("\n");
+
+        // セクションのcontentBriefにフィードバックを注入
+        for (const regenSpec of regenSpecs) {
+          regenSpec.contentBrief.additionalNotes =
+            `${regenSpec.contentBrief.additionalNotes || ""}\n\n【レビューフィードバック】\n${feedbackHint}`;
+        }
+
+        const regenSections = await renderAllSections(
+          client,
+          { ...spec, sections: regenSpecs },
+          finalConfig,
+          (sectionId, index, total, status) => {
+            if (status === "complete") {
+              console.log("[DDP] Critic regen complete:", sectionId);
+            }
+          },
+          input,
+        );
+
+        // 成功した再生成セクションで元のセクションを置き換え
+        const updatedSections = [...sections];
+        for (const regen of regenSections) {
+          if (regen.status === "success") {
+            const idx = updatedSections.findIndex((s) => s.id === regen.id);
+            if (idx !== -1) {
+              updatedSections[idx] = regen;
+              console.log("[DDP] Critic Loop: replaced section", regen.id);
+            }
+          }
+        }
+
+        // 再組み立て
+        const reResult = assembleAndValidate(spec, updatedSections, mediaStrategy);
+        result.html = reResult.html;
+        result.css = reResult.css;
+        result.fullDocument = reResult.fullDocument;
+        result.validation = reResult.validation;
+
+        onProgress?.({ stage: "assembly", status: "complete", validation: reResult.validation });
+        console.log("[DDP] Critic Loop complete. Re-assembled page.");
+      }
     }
 
     // レビュー結果をAssembledPageResultに付加
@@ -452,4 +531,46 @@ function getFallbackSections(pageType: string, brandName: string): import("./typ
       contentBrief: { heading: brandName },
     },
   ];
+}
+
+/**
+ * レビューの critical suggestion からどのセクションを再生成すべきか特定
+ */
+function identifySectionsToRegenerate(
+  criticalSuggestions: Array<{ description: string; category: string }>,
+  spec: import("./types").DesignSpec,
+): string[] {
+  const sectionIds = new Set<string>();
+  const sectionCategories = spec.sections.map((s) => ({
+    id: s.id,
+    category: s.category,
+  }));
+
+  for (const suggestion of criticalSuggestions) {
+    const desc = suggestion.description.toLowerCase();
+
+    // suggestion のテキストからセクション ID を直接マッチ
+    for (const sec of sectionCategories) {
+      if (desc.includes(sec.id) || desc.includes(sec.category)) {
+        sectionIds.add(sec.id);
+      }
+    }
+
+    // キーワードベースの推定
+    if (desc.includes("ヒーロー") || desc.includes("hero") || desc.includes("ファーストビュー")) {
+      const heroSec = sectionCategories.find((s) => s.category === "hero");
+      if (heroSec) sectionIds.add(heroSec.id);
+    }
+    if (desc.includes("cta") || desc.includes("ボタン") || desc.includes("コンバージョン")) {
+      const ctaSec = sectionCategories.find((s) => s.category === "cta");
+      if (ctaSec) sectionIds.add(ctaSec.id);
+    }
+    if (desc.includes("レスポンシブ") || desc.includes("モバイル")) {
+      // レスポンシブ問題はヒーローとフッターに多い
+      const heroSec = sectionCategories.find((s) => s.category === "hero");
+      if (heroSec) sectionIds.add(heroSec.id);
+    }
+  }
+
+  return [...sectionIds];
 }

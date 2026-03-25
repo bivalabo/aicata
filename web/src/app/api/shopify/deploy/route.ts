@@ -31,6 +31,7 @@ import {
 } from "@/lib/design-engine/template-selector";
 import { analyzeDesignContext } from "@/lib/design-engine/context-analyzer";
 import type { PageType } from "@/lib/design-engine/types";
+import { preparePageForDeploy, migrateExternalImages } from "@/lib/media-assets";
 
 export async function POST(req: NextRequest) {
   try {
@@ -132,7 +133,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Liquid変換
+    // 5a. 画像アセットをShopify CDNにアップロード
+    //     1) クロール元の画像 → CDN （preparePageForDeploy）
+    //     2) Unsplash等の外部画像 → CDN （migrateExternalImages）
+    try {
+      if (page.html) {
+        let html = page.html;
+
+        // Step 1: クロール元画像のCDN移行
+        html = await preparePageForDeploy(
+          store.shop,
+          store.accessToken,
+          pageId,
+          html,
+        );
+
+        // Step 2: Unsplash等の外部画像のCDN移行
+        html = await migrateExternalImages(
+          store.shop,
+          store.accessToken,
+          html,
+          pageId,
+        );
+
+        if (html !== page.html) {
+          await prisma.page.update({
+            where: { id: pageId },
+            data: { html },
+          });
+          console.log("[Deploy] Image URLs rewritten for Shopify CDN");
+        }
+      }
+    } catch (err) {
+      // 画像アップロードは非致命的 — 外部URLのままでもデプロイは続行
+      console.warn("[Deploy] Image upload step failed (non-fatal):", err);
+    }
+
+    // 5b. Liquid変換
     const suffix =
       templateSuffix || generateTemplateSuffix(pageTemplate.id);
     const conversion = convertToLiquid(pageTemplate, suffix);

@@ -1,10 +1,11 @@
 /**
  * Shopify Media Asset Management API
  *
- * GET    /api/shopify/media                — メディア一覧取得（フィルタ付き）
- * POST   /api/shopify/media                — 画像をShopify CDNにアップロード
- * PUT    /api/shopify/media                — メディアのalt/context情報を更新
- * DELETE /api/shopify/media?id=xxx         — メディアレコードを削除
+ * GET    /api/shopify/media                        — メディア一覧取得（フィルタ付き）
+ * GET    /api/shopify/media?source=shopify          — Shopify CDN上の全ファイル一覧
+ * POST   /api/shopify/media                        — 画像をShopify CDNにアップロード
+ * PUT    /api/shopify/media                        — メディアのalt/context情報を更新
+ * DELETE /api/shopify/media?id=xxx                 — メディアレコードを削除
  *
  * MediaAsset テーブルはページに紐づく画像を管理し、
  * Shopify Files API を使ってCDNにアップロードする。
@@ -15,6 +16,7 @@ import { prisma } from "@/lib/db";
 import {
   uploadFileFromUrl,
   checkFileStatus,
+  listShopifyFiles,
 } from "@/lib/media-assets";
 
 async function getStore() {
@@ -36,6 +38,36 @@ async function getStore() {
 export async function GET(req: NextRequest) {
   try {
     const params = req.nextUrl.searchParams;
+    const source = params.get("source");
+
+    // ── Shopify CDN上の全ファイル一覧 ──
+    if (source === "shopify") {
+      const store = await getStore();
+      if (!store) {
+        return NextResponse.json({ error: "ストアが接続されていません" }, { status: 400 });
+      }
+
+      const limit = Math.min(parseInt(params.get("limit") || "50"), 250);
+      const after = params.get("after") || undefined;
+      const query = params.get("query") || "media_type:IMAGE status:READY";
+
+      const result = await listShopifyFiles(
+        store.shop,
+        store.accessToken,
+        limit,
+        after,
+        query,
+      );
+
+      return NextResponse.json({
+        source: "shopify",
+        files: result.files,
+        hasNextPage: result.hasNextPage,
+        endCursor: result.endCursor,
+      });
+    }
+
+    // ── Aicata DB上のメディアアセット一覧 ──
     const pageId = params.get("pageId");
     const status = params.get("status");
     const context = params.get("context");
@@ -79,6 +111,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({
+      source: "aicata",
       assets,
       total,
       limit,

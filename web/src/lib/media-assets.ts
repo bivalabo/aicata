@@ -442,6 +442,227 @@ export async function getExistingUrlMap(
 }
 
 // ============================================================
+// 5. Shopify Files API: 既存ファイル一覧取得
+// ============================================================
+
+export interface ShopifyFile {
+  id: string;
+  alt: string;
+  url: string | null;
+  mimeType: string;
+  fileStatus: string;
+  createdAt: string;
+}
+
+/**
+ * Shopifyストアの既存ファイル一覧を取得（Files API query）
+ * ストアにアップロード済みの画像/動画をページネーション付きで取得
+ *
+ * @param first 取得件数（最大250）
+ * @param after カーソル（次ページ取得用）
+ * @param query 検索クエリ（例: "status:READY", "media_type:IMAGE"）
+ */
+export async function listShopifyFiles(
+  shop: string,
+  accessToken: string,
+  first = 50,
+  after?: string,
+  query?: string,
+): Promise<{
+  files: ShopifyFile[];
+  hasNextPage: boolean;
+  endCursor: string | null;
+}> {
+  const gqlQuery = `
+    query listFiles($first: Int!, $after: String, $query: String) {
+      files(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {
+        edges {
+          node {
+            id
+            alt
+            createdAt
+            ... on MediaImage {
+              image {
+                url
+              }
+              mimeType
+              fileStatus
+            }
+            ... on Video {
+              sources {
+                url
+                mimeType
+              }
+              fileStatus
+            }
+            ... on GenericFile {
+              url
+              mimeType
+              fileStatus
+            }
+          }
+          cursor
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  `;
+
+  const data = await shopifyGraphQL<{
+    files: {
+      edges: Array<{
+        node: {
+          id: string;
+          alt: string;
+          createdAt: string;
+          image?: { url: string };
+          sources?: Array<{ url: string; mimeType: string }>;
+          url?: string;
+          mimeType?: string;
+          fileStatus?: string;
+        };
+        cursor: string;
+      }>;
+      pageInfo: {
+        hasNextPage: boolean;
+        endCursor: string | null;
+      };
+    };
+  }>(shop, accessToken, gqlQuery, {
+    first: Math.min(first, 250),
+    after: after || null,
+    query: query || null,
+  });
+
+  const files: ShopifyFile[] = data.files.edges.map((edge) => {
+    const node = edge.node;
+    // 画像: image.url, 動画: sources[0].url, 汎用: url
+    const url = node.image?.url || node.sources?.[0]?.url || node.url || null;
+    const mimeType = node.mimeType || node.sources?.[0]?.mimeType || "unknown";
+    return {
+      id: node.id,
+      alt: node.alt || "",
+      url,
+      mimeType,
+      fileStatus: node.fileStatus || "UNKNOWN",
+      createdAt: node.createdAt,
+    };
+  });
+
+  return {
+    files,
+    hasNextPage: data.files.pageInfo.hasNextPage,
+    endCursor: data.files.pageInfo.endCursor,
+  };
+}
+
+// ============================================================
+// 6. Unsplash外部画像 → Shopify CDN 自動移行
+// ============================================================
+
+/**
+ * HTML内のUnsplash外部画像URLをShopify CDNに移行する
+ *
+ * DDP Personalizer が生成した Unsplash プレースホルダー画像は
+ * 外部URLのままになっている。デプロイ前にこれらをShopify CDNに
+ * アップロードし、URLを書き換える。
+ *
+ * @returns 書き換え済みHTML
+ */
+export async function migrateExternalImages(
+  shop: string,
+  accessToken: string,
+  html: string,
+  pageId?: string,
+): Promise<string> {
+  // 外部画像URLを抽出（Unsplash + その他の外部ドメイン）
+  const externalUrlRegex = /https?:\/\/images\.unsplash\.com\/[^\s"'<>]+/g;
+  const externalUrls = [...new Set(html.match(externalUrlRegex) || [])];
+
+  if (externalUrls.length === 0) return html;
+
+  console.log(`[MediaAssets] Migrating ${externalUrls.length} external images to Shopify CDN`);
+
+  const urlMap: Record<string, string> = {};
+
+  for (const sourceUrl of externalUrls) {
+    try {
+      // まずDBに既存のCDN URLがあるか確認
+      const existing = await prisma.mediaAsset.findFirst({
+        where: { sourceUrl, status: "uploaded", shopifyCdnUrl: { not: null } },
+        select: { shopifyCdnUrl: true },
+      });
+
+      if (existing?.shopifyCdnUrl) {
+        urlMap[sourceUrl] = existing.shopifyCdnUrl;
+        continue;
+      }
+
+      // Shopifyにアップロード
+      const result = await uploadFileFromUrl(shop, accessToken, sourceUrl, "");
+      if (!result) continue;
+
+      // ポーリングでCDN URLを取得
+      let cdnUrl = result.cdnUrl;
+      if (!cdnUrl && result.fileId) {
+        for (let i = 0; i < 5; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const status = await checkFileStatus(shop, accessToken, result.fileId);
+          if (status.url) {
+            cdnUrl = status.url;
+            break;
+          }
+          if (status.status === "FAILED") break;
+        }
+      }
+
+      if (cdnUrl) {
+        urlMap[sourceUrl] = cdnUrl;
+
+        // DBに記録
+        await prisma.mediaAsset.upsert({
+          where: {
+            sourceUrl_sourceDomain: {
+              sourceUrl,
+              sourceDomain: "images.unsplash.com",
+            },
+          },
+          create: {
+            sourceUrl,
+            sourceDomain: "images.unsplash.com",
+            shopifyFileId: result.fileId,
+            shopifyCdnUrl: cdnUrl,
+            status: "uploaded",
+            context: "content",
+            alt: "",
+            pageId: pageId || null,
+          },
+          update: {
+            shopifyFileId: result.fileId,
+            shopifyCdnUrl: cdnUrl,
+            status: "uploaded",
+          },
+        });
+      }
+    } catch (err) {
+      console.warn(`[MediaAssets] Failed to migrate: ${sourceUrl}`, err);
+    }
+  }
+
+  // URL書き換え
+  let rewrittenHtml = html;
+  for (const [source, cdn] of Object.entries(urlMap)) {
+    rewrittenHtml = rewrittenHtml.replaceAll(source, cdn);
+  }
+
+  console.log(`[MediaAssets] Migrated ${Object.keys(urlMap).length}/${externalUrls.length} external images`);
+  return rewrittenHtml;
+}
+
+// ============================================================
 // ユーティリティ
 // ============================================================
 

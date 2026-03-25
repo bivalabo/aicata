@@ -32,7 +32,6 @@ export function useChat(options: UseChatOptions = {}) {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const userStoppedRef = useRef(false);
   const retryCountRef = useRef(0);
   const conversationIdRef = useRef<string | null>(
     options.conversationId || null,
@@ -56,8 +55,8 @@ export function useChat(options: UseChatOptions = {}) {
   const sendMessage = useCallback(
     async (content: string, attachments?: Attachment[], pageType?: string, urlAnalysis?: unknown) => {
       setError(null);
-      // 新規メッセージ送信時はリトライカウンターをリセット（自動リトライは除く）
-      if (!content.includes("中断されたので続きを生成")) {
+      // 新規メッセージ送信時はリトライカウントをリセット（自動リトライ時は除く）
+      if (!content.includes("中断箇所から続きを生成")) {
         retryCountRef.current = 0;
       }
 
@@ -99,7 +98,6 @@ export function useChat(options: UseChatOptions = {}) {
       // Abort any existing request + timers
       abortRef.current?.abort();
       clearTimers();
-      userStoppedRef.current = false;
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -189,7 +187,7 @@ export function useChat(options: UseChatOptions = {}) {
                   return updated;
                 });
               } else if (data.type === "error") {
-                // ── Auto-retry: リトライ可能なエラーは自動再試行（最大2回） ──
+                // ── Auto-retry: リトライ可能なエラーは自動再送（最大2回） ──
                 const currentRetry = retryCountRef.current;
                 if (data.retryable && currentRetry < 2) {
                   retryCountRef.current = currentRetry + 1;
@@ -204,7 +202,7 @@ export function useChat(options: UseChatOptions = {}) {
                     }
                     return prev;
                   });
-                  // 最新のユーザーメッセージがstateから完全に反映されてからリトライ
+                  // 最新のユーザーメッセージをstateから安全に取得してリトライ
                   setMessages((prev) => {
                     const lastUser = [...prev].reverse().find((m) => m.role === "user");
                     if (lastUser) {
@@ -247,36 +245,22 @@ export function useChat(options: UseChatOptions = {}) {
 
                 // ── Auto-recovery: 不完全な生成の自動補完 ──
                 if (data.incomplete && data.content) {
+                  console.log("[useChat] Incomplete generation detected — auto-requesting continuation");
+                  // 中断箇所の最後の200文字を取得して続きから生成させる
                   const pageStartIdx = data.content.indexOf("---PAGE_START---");
                   const partialHtml = pageStartIdx >= 0
                     ? data.content.slice(pageStartIdx + "---PAGE_START---".length)
                     : "";
                   const lastChunk = partialHtml.slice(-200).trim();
                   const continuationMsg = lastChunk
-                    ? `前回のページ生成が途中で中断されました。以下が中断直前のコードの末尾です:\
-\`\`\`\
-${lastChunk}\
-\`\`\`\
-この続きからコードを出力してください。前回の途中から再開し、残りのHTML/CSSを出力して最後に ---PAGE_END--- で閉じてください。前置きの説明は不要です。コードだけ出力してください。`
+                    ? `前回のページ生成が途中で中断されました。以下が中断直前のコードの末尾です:\n\`\`\`\n${lastChunk}\n\`\`\`\nこの続きからコードを出力してください。前回の途中から再開し、残りのHTML/CSSを出力して最後に ---PAGE_END--- で閉じてください。前置きの説明は不要です。コードだけ出力してください。`
                     : "前回のページ生成が途中で中断されました。---PAGE_START--- から ---PAGE_END--- まで完全なページを再生成してください。前置きの説明は最小限にして、コードを出力してください。";
-                  sendMessage(continuationMsg);
-                  return;
+                  setTimeout(() => {
+                    sendMessage(continuationMsg).catch((e) => {
+                      console.error("[useChat] Auto-recovery failed:", e);
+                    });
+                  }, 2000);
                 }
-              }
-
-              // ── 接続切断検出: PAGE_STARTあり + PAGE_ENDなし ──
-              if (receivedAnyContent) {
-                setMessages((prev) => {
-                  const lastMsg = prev[prev.length - 1];
-                  if (lastMsg?.role === "assistant" && lastMsg.content) {
-                    const hasPageStart = lastMsg.content.includes("---PAGE_START---");
-                    const hasPageEnd = lastMsg.content.includes("---PAGE_END---");
-                    if (hasPageStart && !hasPageEnd) {
-                      console.log("[useChat] Connection dropped with incomplete page generation");
-                    }
-                  }
-                  return prev;
-                });
               }
             } catch {
               // Skip malformed SSE lines
@@ -285,16 +269,30 @@ ${lastChunk}\
         }
 
         console.log("[useChat] Stream completed. Content received:", receivedAnyContent);
+
+        // ── 接続切断検出: done イベントなしでストリームが終了した場合 ──
+        // Vercel Hobby プランの60秒タイムアウトなどで接続が切れると、
+        // server から done イベントが送信されずにストリームが終了する。
+        // この場合、PAGE_START があるが PAGE_END がない = 不完全な生成として扱う。
+        if (receivedAnyContent) {
+          setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg?.role === "assistant" && lastMsg.content) {
+              const hasPageStart = lastMsg.content.includes("---PAGE_START---");
+              const hasPageEnd = lastMsg.content.includes("---PAGE_END---");
+              if (hasPageStart && !hasPageEnd) {
+                console.log("[useChat] Connection dropped with incomplete page generation — will show continuation button");
+                // Content is kept as-is; ChatView will show the "続きを生成" button
+              }
+            }
+            return prev;
+          });
+        }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
-          const wasStopped = userStoppedRef.current;
-          console.warn("[useChat] Request aborted.", wasStopped ? "User stopped." : "Timeout.", "Had content:", receivedAnyContent);
+          console.warn("[useChat] Request aborted. Had content:", receivedAnyContent);
           if (!receivedAnyContent) {
-            setError(
-              wasStopped
-                ? "応答を停止しました。"
-                : "応答がタイムアウトしました。もう一度お試しください。",
-            );
+            setError("応答がタイムアウトしました。もう一度お試しください。");
             // Remove empty assistant message
             setMessages((prev) => {
               const last = prev[prev.length - 1];
@@ -304,9 +302,7 @@ ${lastChunk}\
               return prev;
             });
           }
-          // If we had partial content, keep it (it's better than nothing)
-
-          // ── 接続切断検出: PAGE_STARTあり + PAGE_ENDなし ──
+          // If we had partial content, keep it and check for incomplete page generation
           if (receivedAnyContent) {
             setMessages((prev) => {
               const lastMsg = prev[prev.length - 1];
@@ -314,7 +310,7 @@ ${lastChunk}\
                 const hasPageStart = lastMsg.content.includes("---PAGE_START---");
                 const hasPageEnd = lastMsg.content.includes("---PAGE_END---");
                 if (hasPageStart && !hasPageEnd) {
-                  console.log("[useChat] Connection dropped with incomplete page generation");
+                  console.log("[useChat] Abort with incomplete page — continuation button will appear");
                 }
               }
               return prev;
@@ -345,7 +341,6 @@ ${lastChunk}\
 
   const stopStreaming = useCallback(() => {
     clearTimers();
-    userStoppedRef.current = true;
     abortRef.current?.abort();
     setIsStreaming(false);
   }, [clearTimers]);

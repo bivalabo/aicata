@@ -47,10 +47,6 @@ interface LivePreviewProps {
   viewport?: DeviceType;
   /** コンパクトモード（ツールバー非表示でフルプレビュー） */
   compact?: boolean;
-  /** 生成完了時にプレビューパネルを拡大するコールバック */
-  onRequestExpand?: (expanded: boolean) => void;
-  /** 外部からショーケースモードを起動するトリガー（値が変わるたびに発火） */
-  showcaseTrigger?: number;
 }
 
 type ViewMode = "desktop" | "tablet" | "mobile";
@@ -63,9 +59,6 @@ const VIEW_SIZES: Record<
   tablet: { width: "768px", icon: Tablet, label: "タブレット" },
   mobile: { width: "375px", icon: Smartphone, label: "モバイル" },
 };
-
-/** チャット横プレビューのデフォルトはモバイル（375px）— 実サイズで確認できる */
-const DEFAULT_VIEW_MODE: ViewMode = "mobile";
 
 /**
  * AI生成HTMLから <link> タグを抽出して <head> に移動する
@@ -82,6 +75,9 @@ function extractLinkTags(html: string): { links: string; body: string } {
 
 /**
  * AI生成コンテンツを完全なHTMLドキュメントに組み立てる
+ *
+ * DDP パイプライン出力の CSS は :root 変数 + リセット + セクションCSS を含むため、
+ * DDP 由来の場合はベースリセットを注入しない（二重リセット回避）。
  */
 export function buildFullHtml(html: string, css: string, enableSectionEditor: boolean = false): string {
   const { links, body } = extractLinkTags(html);
@@ -94,6 +90,29 @@ export function buildFullHtml(html: string, css: string, enableSectionEditor: bo
 
   const hasContent = body.trim().length > 0;
 
+  // DDP 出力は :root CSS 変数と独自リセットを含む — 二重リセットを回避
+  // マーカーコメント `@aicata-ddp-generated` で確実に検出、フォールバックとして変数名チェック
+  const hasDDPRootVars = css.includes("@aicata-ddp-generated") ||
+    (css.includes("--color-primary:") && css.includes("--font-heading:"));
+  const baseResetCss = hasDDPRootVars
+    ? `/* DDP CSS detected — using DDP's own reset */
+*, *::before, *::after { box-sizing: border-box; }
+section, header, footer, main, nav { display: block; }`
+    : `/* === Aicata Base Reset === */
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: #ffffff;
+  color: #333333;
+  font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { text-decoration: none; color: inherit; }
+section, header, footer, main, nav { display: block; }`;
+
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -103,24 +122,9 @@ ${needsGoogleFonts ? `  <link rel="preconnect" href="https://fonts.googleapis.co
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` : ""}
 ${links ? `  ${links}` : ""}
   <style>
-/* === Aicata Base Reset === */
-*, *::before, *::after { box-sizing: border-box; }
-html, body {
-  margin: 0;
-  min-height: 100vh;
-  background-color: #ffffff;
-  color: #333333;
-  font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
-  overflow-y: auto !important;
-}
-img { max-width: 100%; height: auto; display: block; }
-a { text-decoration: none; color: inherit; }
-section, header, footer, main, nav { display: block; }
+${baseResetCss}
   </style>
-  <style>
+  <style id="aicata-ai-css">
 /* === AI Generated CSS === */
 ${css}
   </style>
@@ -133,13 +137,12 @@ ${sectionDetectionScript ? `<script>${sectionDetectionScript}</script>` : ""}
 }
 
 /**
- * ViewMode初期値: チャット横プレビューはモバイルがデフォルト
- * デスクトップページは幅が足りず品質が分からないため
+ * ビューポートデバイス種別からデフォルトのViewModeを返す
  */
 function getDefaultViewMode(viewport?: DeviceType): ViewMode {
   if (viewport === "mobile") return "mobile";
   if (viewport === "tablet") return "tablet";
-  return DEFAULT_VIEW_MODE;
+  return "desktop";
 }
 
 export default function LivePreview({
@@ -159,10 +162,8 @@ export default function LivePreview({
   isTemplatePreview = false,
   viewport,
   compact = false,
-  onRequestExpand,
-  showcaseTrigger,
 }: LivePreviewProps) {
-  // デバイスに応じたデフォルトViewMode（プレビューパネルはモバイルがデフォルト）
+  // デバイスに応じたデフォルトViewMode
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     getDefaultViewMode(viewport),
   );
@@ -170,12 +171,9 @@ export default function LivePreview({
   const [showComplete, setShowComplete] = useState(false);
   const [editorEnabled, setEditorEnabled] = useState(enableSectionEditor);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
-  /** 生成完了ショーケースモード: 一時的にデスクトップ表示 + パネル拡大 */
-  const [isShowcasing, setIsShowcasing] = useState(false);
   const wasGeneratingRef = useRef(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
-  const preViewModeRef = useRef<ViewMode>("mobile");
 
   const isMobileViewport = viewport === "mobile" || viewport === "tablet";
 
@@ -197,60 +195,14 @@ export default function LivePreview({
 
   const { sections } = useIframeSections(iframeRef);
 
-  // ── 生成完了ショーケース: 一時的にデスクトップ表示 + パネル拡大 ──
   useEffect(() => {
     if (wasGeneratingRef.current && !isGenerating && html) {
       setShowComplete(true);
-      const timer1 = setTimeout(() => setShowComplete(false), 3000);
-
-      // デスクトップでのみショーケースモード
-      if (!isMobileViewport) {
-        // ショーケース開始: デスクトップビューに切替 + パネル拡大
-        preViewModeRef.current = viewMode;
-        setViewMode("desktop");
-        setIsShowcasing(true);
-        onRequestExpand?.(true);
-
-        // 6秒後にモバイルビューに戻す + パネル縮小
-        const timer2 = setTimeout(() => {
-          setIsShowcasing(false);
-          setViewMode(preViewModeRef.current);
-          onRequestExpand?.(false);
-        }, 6000);
-
-        return () => { clearTimeout(timer1); clearTimeout(timer2); };
-      }
-
-      return () => clearTimeout(timer1);
+      const timer = setTimeout(() => setShowComplete(false), 3000);
+      return () => clearTimeout(timer);
     }
     wasGeneratingRef.current = isGenerating;
   }, [isGenerating, html]);
-
-  // ── 外部トリガーによるショーケースモード ──
-  const showcaseTriggerRef = useRef(showcaseTrigger);
-  useEffect(() => {
-    if (
-      showcaseTrigger !== undefined &&
-      showcaseTrigger !== showcaseTriggerRef.current &&
-      !isMobileViewport &&
-      html
-    ) {
-      preViewModeRef.current = viewMode;
-      setViewMode("desktop");
-      setIsShowcasing(true);
-      onRequestExpand?.(true);
-
-      const timer = setTimeout(() => {
-        setIsShowcasing(false);
-        setViewMode(preViewModeRef.current);
-        onRequestExpand?.(false);
-      }, 6000);
-
-      showcaseTriggerRef.current = showcaseTrigger;
-      return () => clearTimeout(timer);
-    }
-    showcaseTriggerRef.current = showcaseTrigger;
-  }, [showcaseTrigger]);
 
   const handleOpenInNewTab = useCallback(() => {
     const fullHtml = buildFullHtml(html, css, false);
@@ -534,10 +486,10 @@ export default function LivePreview({
         >
           <div
             className={clsx(
-              "transition-all duration-300 h-full relative",
+              "overflow-hidden transition-all duration-300 h-full relative",
               isMobileViewport
-                ? "w-full overflow-auto"
-                : "bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden",
+                ? "w-full"
+                : "bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)]",
             )}
             style={
               isMobileViewport
@@ -558,16 +510,10 @@ export default function LivePreview({
                           ...iframeMobileStyle,
                           border: "none",
                         }
-                      : {
-                          width: "100%",
-                          height: "100%",
-                          border: "none",
-                          display: "block",
-                        }
+                      : { width: "100%", height: "100%" }
                   }
                   sandbox="allow-scripts allow-same-origin"
                   title="ページプレビュー"
-                  scrolling="yes"
                 />
 
                 {/* セクションエディタオーバーレイ */}

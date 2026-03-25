@@ -10,18 +10,9 @@ import {
   buildBrandMemoryPrompt,
 } from "@/lib/brand-memory";
 import { saveMessage } from "@/lib/services/conversation-service";
-import { generateDesignSpec, assembleAndValidate } from "@/lib/ddp";
-import type { DDPInput, DesignSpec, RenderedSection } from "@/lib/ddp";
-import { DEFAULT_DDP_CONFIG } from "@/lib/ddp/types";
-import {
-  SECTION_ARTISAN_PROMPT,
-  buildSectionPrompt,
-  parseSectionOutput,
-} from "@/lib/ddp/stage2-helpers";
+import { runDDP } from "@/lib/ddp";
+import type { DDPInput } from "@/lib/ddp";
 import { prisma } from "@/lib/db";
-import Anthropic from "@anthropic-ai/sdk";
-import { runDDPNextPipeline } from "@/lib/ddp-next";
-import type { DDPNextInput, DDPNextProgressEvent } from "@/lib/ddp-next";
 
 // Next.js Route Segment Config — allow long-running streaming responses
 export const maxDuration = 300; // 5 minutes
@@ -175,183 +166,18 @@ export async function POST(request: Request) {
       ? true
       : detectPageGenerationRequest(latestUserText, pageType);
 
-    // ── DDP パイプライン（新規ページ生成時のみ。Enhanceモードはレガシーパスへ） ──
     // ── Vercel Hobby プラン検出 ──
+    // Vercel Hobby プランは60秒のハードタイムアウトがある。
+    // DDP パイプラインは複数のAI呼び出しを行い60秒以上かかるため、
+    // Hobby プランではDDPをスキップしてレガシーストリーミングを使用する。
     const isVercelHobby = process.env.VERCEL === "1" && !process.env.VERCEL_PRO;
     const skipDDP = isVercelHobby || process.env.SKIP_DDP === "1";
 
-    // ── DDP Next パイプライン（USE_DDP_NEXT=1 で有効化） ──
-    const useDDPNext = process.env.USE_DDP_NEXT === "1";
-
-    if (useDDPNext && isPageGenerationRequest && !linkedPage && !skipDDP) {
-      console.log("[Stream API] Using DDP Next pipeline for page generation");
-
-      try {
-        const stream = new ReadableStream({
-          async start(controller) {
-            const sse = new SSEWriter(controller);
-            try {
-              sse.sendText("ページをデザインしています...\n\n");
-
-              // DDPNextInput 構築
-              // 業種: ユーザーテキストのキーワード → URL分析結果 → "general" の優先順
-              const textIndustry = detectIndustry(latestUserText);
-              const resolvedIndustry = (
-                textIndustry !== "general"
-                  ? textIndustry
-                  : (urlAnalysis as any)?.industry || "general"
-              );
-              // トーン: ユーザーテキスト + URL分析結果をマージ
-              const textTones = detectTones(latestUserText);
-              const urlTones = (urlAnalysis as any)?.tones as string[] | undefined;
-              const mergedTones = textTones.length > 0
-                ? textTones
-                : (urlTones || []);
-
-              console.log("[DDP Next] Industry resolution:", {
-                textIndustry,
-                urlIndustry: (urlAnalysis as any)?.industry,
-                resolved: resolvedIndustry,
-                textTones,
-                urlTones,
-                mergedTones,
-              });
-
-              // ストアIDを取得（ThemeLayout連携用）
-              let storeId: string | undefined;
-              try {
-                const store = await prisma.store.findFirst({
-                  orderBy: { updatedAt: "desc" },
-                  select: { id: true },
-                });
-                storeId = store?.id;
-              } catch { /* non-fatal */ }
-
-              const ddpNextInput: DDPNextInput = {
-                pageType: (pageType || detectPageType(latestUserText)) as any,
-                industry: resolvedIndustry as any,
-                brandName: detectBrandName(latestUserText),
-                tones: mergedTones as any[],
-                targetAudience: "",
-                userInstructions: latestUserText,
-                referenceUrl: urlAnalysis?.url,
-                urlAnalysis: urlAnalysis || undefined,
-                storeId,
-              };
-
-              // Brand Memory 統合
-              try {
-                const bm = await getActiveBrandMemory();
-                if (bm) {
-                  ddpNextInput.brandMemory = {
-                    brandName: bm.brandName || undefined,
-                    industry: bm.industry || undefined,
-                    tones: bm.voiceTone ? [bm.voiceTone] : undefined,
-                    colors: {
-                      ...(bm.primaryColor ? { primary: bm.primaryColor } : {}),
-                      ...(bm.secondaryColor ? { secondary: bm.secondaryColor } : {}),
-                      ...(bm.accentColor ? { accent: bm.accentColor } : {}),
-                    },
-                    fonts: [bm.primaryFont, bm.bodyFont].filter(Boolean) as string[],
-                  };
-                }
-              } catch { /* non-fatal */ }
-
-              // Anthropic クライアント（Phase 4 用）
-              const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-              // SSE 進行イベントのコールバック
-              const onProgress = (event: DDPNextProgressEvent) => {
-                if (sse.isClosed) return;
-                switch (event.phase) {
-                  case "intent":
-                    sse.sendText("**Step 1/4**: デザイン意図を解析しています...\n");
-                    break;
-                  case "compose":
-                    sse.sendText(`**Step 2/4**: ${event.message}\n`);
-                    // Phase 2完了時: DNA可視化ブロックを送信
-                    if (event.data?.targetDNA) {
-                      const dnaPayload = JSON.stringify({
-                        data: event.data.targetDNA,
-                        confidence: event.data.confidence,
-                        templateId: event.data.templateId,
-                      });
-                      sse.sendText(`\n---DNA_START---${dnaPayload}---DNA_END---\n\n`);
-                    }
-                    break;
-                  case "assemble":
-                    sse.sendText("**Step 3/4**: ページを組み立てています...\n");
-                    break;
-                  case "personalize":
-                    sse.sendText("**Step 4/4**: コンテンツをカスタマイズしています...\n");
-                    break;
-                  case "done":
-                    // handled below
-                    break;
-                  case "error":
-                    sse.sendText(`\nエラー: ${event.message}\n`);
-                    break;
-                }
-              };
-
-              // パイプライン実行
-              const result = await runDDPNextPipeline(
-                ddpNextInput,
-                onProgress,
-                anthropicClient,
-              );
-
-              // 完成 HTML を PAGE_START/PAGE_END マーカー付きで送信
-              sse.sendText(`\n---PAGE_START---\n`);
-              const doc = result.fullDocument;
-              const chunkSize = 2000;
-              for (let i = 0; i < doc.length; i += chunkSize) {
-                if (sse.isClosed) break;
-                sse.sendText(doc.slice(i, i + chunkSize));
-              }
-              sse.sendText(`\n---PAGE_END---\n`);
-
-              sse.sendText(`\nページが完成しました！（テンプレート: ${result.templateId}, ${Math.round(result.timing.total)}ms）\n`);
-
-              const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
-              if (isSiteBuildRequest) {
-                sse.sendText(`\n続けて他のページも作成できます。\n`);
-              }
-            } catch (innerErr) {
-              const errMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
-              console.error("[DDP Next] Pipeline failed:", errMsg, innerErr);
-              sse.sendText(`\n\nページ生成中にエラーが発生しました: ${errMsg}\nもう一度お試しください。\n`);
-            }
-
-            sse.sendDone({ model: DEFAULT_MODEL || "claude-sonnet-4-20250514" });
-            sse.close();
-
-            // DB保存
-            if (conversationId) {
-              try {
-                await saveMessage(conversationId, "assistant", sse.accumulated, {
-                  model: DEFAULT_MODEL || "claude-sonnet-4-20250514",
-                });
-              } catch (e) {
-                console.error("[Stream API] Failed to save DDP Next assistant message:", e);
-              }
-            }
-          },
-          cancel() { /* aborted by client */ },
-        });
-
-        return new Response(stream, { headers: SSE_HEADERS });
-      } catch (err) {
-        console.error("[Stream API] DDP Next stream setup failed, falling through:", err);
-        // フォールスルーして DDP v2 またはレガシーパスへ
-      }
-    }
-
+    // ── DDP パイプライン（新規ページ生成時のみ。Enhanceモードはレガシーパスへ） ──
     if (isPageGenerationRequest && !linkedPage && !skipDDP) {
-      console.log("[Stream API] Using DDP v2 pipeline for page generation");
+      console.log("[Stream API] Using DDP pipeline for page generation");
 
       const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
-      let ddpSucceeded = false;
 
       // Brand Memory 取得
       let brandMemoryData;
@@ -375,257 +201,200 @@ export async function POST(request: Request) {
       const ddpInput = buildDDPInput(latestUserText, pageType, urlAnalysis, brandMemoryData);
       if (isSiteBuildRequest) ddpInput.pageType = "landing";
 
-      // ── DDP v2: インクリメンタルビルド ──
-      // セクションを1つずつ生成し、SSE でリアルタイム進捗を返す。
-      // 各ステップの結果はDBに保存されるので、タイムアウトしても作業は失われない。
-      try {
-        const stream = new ReadableStream({
-          async start(controller) {
-            const sse = new SSEWriter(controller);
+      // ── SSE ストリームを先に開き、DDP 進捗をリアルタイムで送信 ──
+      // DDP 失敗時はストリーム内でレガシーパスにフォールバック（C-2修正改善版）
+      const stream = new ReadableStream({
+        async start(controller) {
+          const sse = new SSEWriter(controller);
+          const modelId = DEFAULT_MODEL || "claude-sonnet-4-20250514";
 
-            try {
-              // 開始メッセージ
-              if (isSiteBuildRequest) {
-                sse.sendText("承知しました！サイト全体を構築していきますね。\n\n");
-                sse.sendText("まずはトップページから作成しています...\n\n");
-              } else {
-                sse.sendText("ページをデザインしています...\n\n");
-              }
+          try {
+            // 開始メッセージ
+            if (isSiteBuildRequest) {
+              sse.sendText("承知しました！サイト全体を構築していきますね。\n\n");
+              sse.sendText("まずはトップページから作成していきます。\n\n");
+            }
+            sse.sendText("🎨 デザインを設計中...\n\n");
 
-              // ── Stage 1: Design Director（~15-20秒）──
-              sse.sendText("**Step 1/3**: デザイン方針を設計しています...\n");
+            // DDP パイプラインをリアルタイムプログレス付きで実行
+            const ddpResult = await runDDP(ddpInput, undefined, (event) => {
+              if (sse.isClosed) return;
 
-              const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-              const ddpConfig = {
-                ...DEFAULT_DDP_CONFIG,
-                sectionModel: process.env.CLAUDE_MODEL_DEFAULT || DEFAULT_DDP_CONFIG.sectionModel,
-                specModel: process.env.CLAUDE_MODEL_DEFAULT || DEFAULT_DDP_CONFIG.specModel,
-              };
-
-              let spec: DesignSpec;
-              try {
-                spec = await generateDesignSpec(anthropicClient, ddpInput, ddpConfig);
-                console.log("[DDP v2] Stage 1 complete:", spec.designPhilosophy.slice(0, 60));
-              } catch (specErr) {
-                const errDetail = specErr instanceof Error ? specErr.message : String(specErr);
-                console.error("[DDP v2] Stage 1 failed:", errDetail, specErr);
-                sse.sendText(`\n**エラー (Stage 1)**: ${errDetail}\n`);
-                throw specErr;
-              }
-
-              if (!spec.sections || spec.sections.length === 0) {
-                throw new Error("DesignSpec にセクションがありません");
-              }
-
-              // コスト制御: DDP_MAX_SECTIONS でセクション数を制限（テスト用）
-              const maxSections = parseInt(process.env.DDP_MAX_SECTIONS || "0", 10);
-              if (maxSections > 0 && spec.sections.length > maxSections) {
-                console.log(`[DDP v2] Limiting sections: ${spec.sections.length} → ${maxSections} (DDP_MAX_SECTIONS)`);
-                spec.sections = spec.sections.slice(0, maxSections);
-              }
-
-              sse.sendText(`\n**デザイン方針**: ${spec.designPhilosophy}\n`);
-              sse.sendText(`**配色**: ${spec.colors.reasoning}\n`);
-              sse.sendText(`**セクション構成**: ${spec.sections.length}セクション\n\n`);
-
-              // DB に BuildJob を保存（中断回復用）
-              let buildJobId: string | undefined;
-              try {
-                const buildJob = await prisma.buildJob.create({
-                  data: {
-                    conversationId: conversationId || undefined,
-                    pageType: ddpInput.pageType,
-                    url: ddpInput.urlAnalysis?.url,
-                    userInstructions: ddpInput.userInstructions || latestUserText,
-                    status: "building",
-                    designSpec: JSON.stringify(spec),
-                  },
-                });
-                buildJobId = buildJob.id;
-
-                // BuildSection レコードを作成
-                await Promise.all(
-                  spec.sections.map((section, idx) =>
-                    prisma.buildSection.create({
-                      data: {
-                        buildId: buildJob.id,
-                        sectionId: section.id,
-                        spec: JSON.stringify(section),
-                        sortOrder: idx,
-                        status: "pending",
-                      },
-                    }),
-                  ),
-                );
-                console.log("[DDP v2] BuildJob created:", buildJobId);
-              } catch (dbErr) {
-                console.warn("[DDP v2] BuildJob DB save failed (non-fatal):", dbErr);
-              }
-
-              // ── Stage 2: Section Artisan（1セクションずつ、~15秒×N）──
-              sse.sendText(`**Step 2/3**: セクションを生成しています...\n`);
-
-              const renderedSections: RenderedSection[] = [];
-
-              for (let i = 0; i < spec.sections.length; i++) {
-                if (sse.isClosed) break;
-
-                const section = spec.sections[i];
-                sse.sendText(`  [${i + 1}/${spec.sections.length}] ${section.purpose} を生成中...\n`);
-
-                try {
-                  const userPrompt = buildSectionPrompt(spec, section);
-                  const response = await Promise.race([
-                    anthropicClient.messages.create({
-                      model: ddpConfig.sectionModel,
-                      max_tokens: ddpConfig.sectionMaxTokens,
-                      system: SECTION_ARTISAN_PROMPT,
-                      messages: [{ role: "user", content: userPrompt }],
-                    }),
-                    new Promise<never>((_, reject) =>
-                      setTimeout(() => reject(new Error("セクション生成タイムアウト（45秒）")), 45000),
-                    ),
-                  ]);
-
-                  const text = response.content
-                    .filter((b) => b.type === "text")
-                    .map((b) => (b as any).text as string)
-                    .join("");
-
-                  const parsed = parseSectionOutput(text, section.id);
-
-                  if (parsed.html.length > 30) {
-                    renderedSections.push({
-                      id: section.id,
-                      html: parsed.html,
-                      css: parsed.css,
-                      status: "success",
-                    });
-                    sse.sendText(`  ✓ ${section.purpose} 完了\n`);
-
-                    // DB更新（非同期、エラーはログのみ）
-                    if (buildJobId) {
-                      prisma.buildSection.updateMany({
-                        where: { buildId: buildJobId, sectionId: section.id },
-                        data: { html: parsed.html, css: parsed.css, status: "complete" },
-                      }).catch((dbErr: unknown) => {
-                        console.warn(`[DDP v2] BuildSection update failed for ${section.id}:`, dbErr);
-                      });
-                    }
-                  } else {
-                    renderedSections.push({
-                      id: section.id,
-                      html: `<section data-section-id="${section.id}"><p>${section.purpose}</p></section>`,
-                      css: "",
-                      status: "failed",
-                      error: "生成内容が不十分",
-                    });
-                    sse.sendText(`  △ ${section.purpose}（部分的）\n`);
-                  }
-                } catch (sectionErr) {
-                  console.error(`[DDP v2] Section ${section.id} failed:`, sectionErr);
-                  renderedSections.push({
-                    id: section.id,
-                    html: `<section data-section-id="${section.id}"><p>${section.purpose}</p></section>`,
-                    css: "",
-                    status: "failed",
-                    error: sectionErr instanceof Error ? sectionErr.message : "不明なエラー",
-                  });
-                  sse.sendText(`  × ${section.purpose} 失敗（スキップ）\n`);
-                  // 失敗しても次のセクションへ続行
+              if (event.stage === "spec" && event.status === "complete") {
+                const spec = "spec" in event ? event.spec : null;
+                if (spec) {
+                  sse.sendText(`✅ デザイン設計完了\n`);
+                  sse.sendText(`**デザイン方針**: ${spec.designPhilosophy}\n`);
+                  sse.sendText(`**配色**: ${spec.colors.reasoning}\n`);
+                  sse.sendText(`**セクション構成**: ${spec.sections.length}セクション\n\n`);
+                  sse.sendText(`🔨 セクションを生成中...\n`);
                 }
+              } else if (event.stage === "section" && event.status === "start") {
+                const id = "sectionId" in event ? event.sectionId : "?";
+                const idx = "index" in event ? (event as any).index : 0;
+                const total = "total" in event ? (event as any).total : 0;
+                sse.sendText(`  ⚙️ セクション ${idx + 1}/${total}: ${id}...\n`);
+              } else if (event.stage === "section" && event.status === "complete") {
+                const id = "sectionId" in event ? event.sectionId : "?";
+                sse.sendText(`  ✅ ${id} 完了\n`);
+              } else if (event.stage === "section" && event.status === "failed") {
+                const id = "sectionId" in event ? event.sectionId : "?";
+                sse.sendText(`  ⚠️ ${id} — リトライ中...\n`);
+              } else if (event.stage === "assembly" && event.status === "start") {
+                sse.sendText(`\n🧩 ページを組み立て中...\n`);
+              } else if (event.stage === "assembly" && event.status === "complete") {
+                sse.sendText(`✅ ページ組み立て完了\n`);
               }
+            });
 
-              // ── Stage 3: Harmony Assembler（決定的処理、<1秒）──
-              sse.sendText(`\n**Step 3/3**: ページを組み立てています...\n\n`);
+            // DDP 成功 — 完成 HTML を PAGE_START/PAGE_END で送信
+            sse.sendText(`\n🔍 品質チェック完了。プレビューを生成中...\n\n`);
 
-              const assembled = assembleAndValidate(spec, renderedSections);
+            sse.sendText(`---PAGE_START---\n`);
+            const doc = ddpResult.fullDocument;
+            const chunkSize = 500;
+            for (let i = 0; i < doc.length; i += chunkSize) {
+              if (sse.isClosed) break;
+              sse.sendText(doc.slice(i, i + chunkSize));
+              await new Promise((r) => setTimeout(r, 3));
+            }
+            sse.sendText(`\n---PAGE_END---\n`);
 
-              console.log("[DDP v2] Assembly complete:", {
-                htmlLength: assembled.html.length,
-                valid: assembled.validation.isValid,
-              });
-
-              // BuildJob を完了に更新（非同期、エラーはログのみ）
-              if (buildJobId) {
-                prisma.buildJob.update({
-                  where: { id: buildJobId },
-                  data: {
-                    assembledHtml: assembled.html,
-                    assembledCss: assembled.css,
-                    fullDocument: assembled.fullDocument,
-                    status: "complete",
-                  },
-                }).catch((dbErr: unknown) => {
-                  console.warn("[DDP v2] BuildJob update failed:", dbErr);
-                });
-              }
-
-              // 完成 HTML を PAGE_START/PAGE_END マーカー付きで送信
-              sse.sendText(`---PAGE_START---\n`);
-
-              const doc = assembled.fullDocument;
-              const chunkSize = 2000;
-              for (let i = 0; i < doc.length; i += chunkSize) {
-                if (sse.isClosed) break;
-                sse.sendText(doc.slice(i, i + chunkSize));
-              }
-
-              sse.sendText(`\n---PAGE_END---\n`);
-
-              const successCount = renderedSections.filter((s) => s.status === "success").length;
-              sse.sendText(`\nページが完成しました！（${successCount}/${spec.sections.length}セクション成功）\n`);
-
-              if (isSiteBuildRequest) {
-                sse.sendText(`\n続けて他のページも作成できます。例えば：\n`);
-                sse.sendText(`・「コレクションページを作成してください」\n`);
-                sse.sendText(`・「商品詳細ページを作成してください」\n`);
-                sse.sendText(`・「ブランドストーリーページを作成してください」\n\n`);
-                sse.sendText(`どのページを次に作成しましょうか？`);
-              }
-
-              ddpSucceeded = true;
-            } catch (innerErr) {
-              const errMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
-              console.error("[DDP v2] Pipeline failed:", errMsg, innerErr);
-              // SSEストリームにエラーを送信してcloseする
-              sse.sendText(`\n\nページ生成中にエラーが発生しました: ${errMsg}\nもう一度お試しください。\n`);
+            if (isSiteBuildRequest) {
+              sse.sendText(`\nトップページが完成しました！プレビューでご確認ください。\n\n`);
+              sse.sendText(`続けて他のページも作成できます。例えば：\n`);
+              sse.sendText(`・「コレクションページを作成してください」\n`);
+              sse.sendText(`・「商品詳細ページを作成してください」\n`);
+              sse.sendText(`・「ブランドストーリーページを作成してください」\n\n`);
+              sse.sendText(`どのページを次に作成しましょうか？`);
             }
 
-            sse.sendDone({ model: DEFAULT_MODEL || "claude-sonnet-4-20250514" });
+            sse.sendDone({ model: modelId });
+            sse.close();
+
+            // DB保存（ストリーム完了後に非同期）
+            if (conversationId) {
+              try {
+                await saveMessage(conversationId, "assistant", sse.accumulated, { model: modelId });
+              } catch (e) {
+                console.error("[Stream API] Failed to save DDP assistant message:", e);
+              }
+
+              // ── DDP 生成ページを Page テーブルに保存 ──
+              try {
+                const pageTitle = ddpResult.spec?.designPhilosophy?.slice(0, 50) || "DDP生成ページ";
+                await prisma.page.create({
+                  data: {
+                    title: pageTitle,
+                    slug: "",
+                    html: ddpResult.html,
+                    css: ddpResult.css,
+                    status: "draft",
+                    source: "aicata",
+                    version: 1,
+                    conversationId,
+                    pageType: ddpInput.pageType || "landing",
+                  },
+                });
+                console.log("[Stream API] DDP page saved to DB", {
+                  conversationId,
+                  pageType: ddpInput.pageType,
+                  htmlLength: ddpResult.html.length,
+                  cssLength: ddpResult.css.length,
+                });
+              } catch (e) {
+                console.error("[Stream API] Failed to save DDP page to DB:", e);
+              }
+            }
+          } catch (ddpError) {
+            // ── DDP 失敗: ストリーム内でレガシーパスにフォールバック ──
+            console.error("[Stream API] DDP failed, falling back to legacy within stream:", ddpError);
+
+            // 既に送信した進捗テキストをリセットはできないが、
+            // ユーザーにフォールバックを通知してからレガシー生成を続行
+            sse.sendText("\n\n---\n⚡ 高速生成に切り替えています...\n\n");
+
+            try {
+              // レガシーシステムプロンプト構築
+              let legacySystemPrompt: string;
+              try {
+                const result = buildSystemPrompt(latestUserText, conversationTexts, urlAnalysis, pageType);
+                legacySystemPrompt = result.prompt;
+              } catch {
+                legacySystemPrompt = "あなたはAicata — ShopifyストアのAIページビルダーです。ユーザーの要望に応じてHTML+CSSでページを生成してください。生成コードは ---PAGE_START--- と ---PAGE_END--- で囲んでください。HTMLを先に、最後に<style>タグでCSSをまとめてください。";
+              }
+
+              // Brand Memory をレガシープロンプトにも注入
+              try {
+                const brandMemory = await getActiveBrandMemory();
+                if (brandMemory) {
+                  const brandPrompt = buildBrandMemoryPrompt(brandMemory);
+                  if (brandPrompt) legacySystemPrompt = `${legacySystemPrompt}\n\n${brandPrompt}`;
+                }
+              } catch { /* non-fatal */ }
+
+              const aiMessages = (messages as IncomingMessage[]).map(
+                (msg): ModelMessage => {
+                  if (typeof msg.content === "string") {
+                    return { role: msg.role as "user" | "assistant", content: msg.content } as ModelMessage;
+                  }
+                  return {
+                    role: msg.role as "user",
+                    content: msg.content.map((block) => {
+                      if (block.type === "text") return { type: "text" as const, text: block.text };
+                      return { type: "image" as const, image: block.source.data, mimeType: block.source.media_type };
+                    }),
+                  } as ModelMessage;
+                },
+              );
+
+              const aiResult = streamText({
+                model: anthropic(modelId),
+                system: legacySystemPrompt,
+                messages: aiMessages,
+                maxOutputTokens: DEFAULT_MAX_TOKENS,
+              });
+
+              for await (const chunk of aiResult.textStream) {
+                if (sse.isClosed) break;
+                sse.sendText(chunk);
+              }
+
+              const usage = await aiResult.usage;
+              const hasPageMarker = sse.accumulated.includes("---PAGE_START---");
+              const isIncomplete = hasPageMarker && !sse.accumulated.includes("---PAGE_END---");
+              sse.sendDone({ model: modelId, usage, incomplete: isIncomplete });
+            } catch (legacyError) {
+              console.error("[Stream API] Legacy fallback also failed:", legacyError);
+              sse.sendError(
+                legacyError instanceof Error ? legacyError.message : "ページ生成に失敗しました",
+                true,
+              );
+            }
+
             sse.close();
 
             // DB保存
-            if (conversationId) {
+            if (conversationId && sse.accumulated) {
               try {
-                await saveMessage(conversationId, "assistant", sse.accumulated, {
-                  model: DEFAULT_MODEL || "claude-sonnet-4-20250514",
-                });
+                await saveMessage(conversationId, "assistant", sse.accumulated, { model: modelId });
               } catch (e) {
-                console.error("[Stream API] Failed to save DDP v2 assistant message:", e);
+                console.error("[Stream API] Failed to save fallback assistant message:", e);
               }
             }
-          },
-          cancel() { /* aborted by client */ },
-        });
+          }
+        },
+        cancel() { /* aborted by client */ },
+      });
 
-        return new Response(stream, { headers: SSE_HEADERS });
-      } catch (err) {
-        console.error("[Stream API] DDP v2 stream setup failed, falling back to legacy:", err);
-        // ddpSucceeded remains false → fall through to legacy streaming
-      }
-
-      // DDP が失敗した場合のみレガシーパスへフォールバック
-      if (ddpSucceeded) {
-        return new Response("DDP completed", { status: 200 });
-      }
+      return new Response(stream, { headers: SSE_HEADERS });
     }
 
-    if (skipDDP && isPageGenerationRequest && !linkedPage) {
-          console.log("[Stream API] DDP skipped (Vercel Hobby/SKIP_DDP) — using legacy streaming for page generation");
-        }
-
     // ── レガシー: Vercel AI SDK ストリーミング ──
+    if (skipDDP && isPageGenerationRequest && !linkedPage) {
+      console.log("[Stream API] DDP skipped (Vercel Hobby/SKIP_DDP) — using legacy streaming for page generation");
+    }
+
     let systemPrompt: string;
     let designContext;
     let isGen3 = false;
@@ -812,42 +581,56 @@ export async function POST(request: Request) {
               });
             }
           } catch (e) {
+            console.error("[Stream API] Failed to auto-save enhanced page:", e);
+          }
+        }
 
         // ── Enhance モード 続き生成: PAGE_START なしで HTML/CSS の続きが来た場合 ──
+        // 前の生成が中断され、ユーザーが「続きを生成」した場合
         if (linkedPage && !fullText.includes("---PAGE_START---") && fullText.includes("---PAGE_END---")) {
           try {
+            // 前のメッセージから中断されたHTMLを取得
             const prevMessages = await prisma.message.findMany({
-              where: { conversationId: conversationId },
+              where: { conversationId: conversationId! },
               orderBy: { createdAt: "desc" },
               take: 5,
             });
             const prevAssistant = prevMessages.find(
-              (m: { role: string; content: string }) => m.role === "assistant" && m.content.includes("---PAGE_START---") && !m.content.includes("---PAGE_END---"),
+              (m) => m.role === "assistant" && m.content.includes("---PAGE_START---") && !m.content.includes("---PAGE_END---"),
             );
             if (prevAssistant) {
               const startMarker = "---PAGE_START---";
               const partialContent = prevAssistant.content.slice(
                 prevAssistant.content.indexOf(startMarker) + startMarker.length,
               );
+              // 続きの内容から PAGE_END までを抽出
               const endIdx = fullText.indexOf("---PAGE_END---");
               const continuationContent = endIdx >= 0 ? fullText.slice(0, endIdx).trim() : fullText.trim();
               const mergedBlock = (partialContent + "\n" + continuationContent).trim();
+
               const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
               const styleMatches = [...mergedBlock.matchAll(styleRegex)];
               const css = styleMatches.map((m) => m[1].trim()).join("\n");
               const htmlOnly = mergedBlock.replace(styleRegex, "").trim();
+
               if (htmlOnly) {
                 await prisma.page.update({
                   where: { id: linkedPage.id },
-                  data: { html: htmlOnly, css: css || linkedPage.css, updatedAt: new Date() },
+                  data: {
+                    html: htmlOnly,
+                    css: css || linkedPage.css,
+                    updatedAt: new Date(),
+                  },
+                });
+                console.log("[Stream API] Continuation merged and saved", {
+                  pageId: linkedPage.id,
+                  htmlLength: htmlOnly.length,
+                  cssLength: css.length,
                 });
               }
             }
           } catch (e) {
             console.error("[Stream API] Failed to merge continuation:", e);
-          }
-        }
-            console.error("[Stream API] Failed to auto-save enhanced page:", e);
           }
         }
 
@@ -894,32 +677,48 @@ function detectPageGenerationRequest(
   text: string,
   explicitPageType?: string,
 ): boolean {
-  // 継続メッセージ（ストリーム中断からの復帰）はDDPスキップ — レガシーパスで高速処理
-  if (text.includes("前回のページ生成が途中で中断") || text.includes("---PAGE_START---") || text.includes("---PAGE_END---")) {
-    console.log("[Stream API] Continuation message detected — skipping DDP");
-    return false;
-  }
-
   // 明示的にpageTypeが指定されている場合は生成リクエスト
   if (explicitPageType) return true;
 
   // サイト全体構築リクエストも生成リクエスト
   if (detectSiteBuildRequest(text)) return true;
 
-  // ページ生成を示すキーワード
-  const generationKeywords = [
+  const lowerText = text.toLowerCase();
+
+  // ── 除外パターン: 質問・相談・アドバイス系はページ生成ではない ──
+  const questionPatterns = [
+    "教えて", "とは", "について", "の違い", "方法は", "やり方",
+    "アドバイス", "おすすめ", "ヒント", "コツ", "ポイント",
+    "どうすれば", "どうやって", "なぜ", "何が", "いつ",
+    "SEO", "マーケティング", "集客", "分析", "運営",
+    "返信", "テンプレート", "書き方", "例文",
+    "比較", "違い", "メリット", "デメリット",
+    "確認して", "チェックして", "レビューして",
+  ];
+  const isQuestion = questionPatterns.some((kw) => lowerText.includes(kw));
+
+  // ── 強い生成シグナル: これらがあれば質問パターンでも生成とみなす ──
+  const strongGenerationSignals = [
     "ページを作", "ページ作成", "ページ生成",
+    "サイトを作", "サイト作成",
+    "リビルド", "rebuild", "作り直し", "リニューアル",
+  ];
+  const hasStrongSignal = strongGenerationSignals.some((kw) => lowerText.includes(kw));
+  if (hasStrongSignal) return true;
+
+  // 質問系なら生成ではない
+  if (isQuestion) return false;
+
+  // ── 弱い生成シグナル: 質問でない場合のみ有効 ──
+  const generationKeywords = [
     "トップページ", "ランディングページ", "LP",
     "商品ページ", "商品詳細",
     "コレクション", "カテゴリー",
     "ブログ", "記事",
     "お問い合わせ", "コンタクト",
     "作って", "作成して", "生成して", "デザインして",
-    "リビルド", "rebuild",
-    "作り直し", "リニューアル",
   ];
 
-  const lowerText = text.toLowerCase();
   return generationKeywords.some((kw) => lowerText.includes(kw));
 }
 
@@ -1079,27 +878,23 @@ function buildEnhanceSystemPrompt(page: {
     "1. **必ず改善後の完全なHTML+CSSを出力してください。** 部分的なコードや説明だけではなく、ページ全体を出力します。",
     "2. **出力コードは必ず `---PAGE_START---` と `---PAGE_END---` で囲んでください。** これがないとプレビューに反映されません。",
     "3. **既存のコンテンツ（テキスト、画像URL等）はできるだけ活かしてください。** デザインやレイアウトを改善しつつ、コンテンツは保持します。",
-    "4. **CSSを先に出力し、その後にHTMLを出力してください。**（ストリーム中断時でもスタイルが適用されるため）",
+    "4. HTMLを先に出力し、最後に `<style>` タグでCSSをまとめてください。",
     "5. レスポンシブデザインを心がけてください。",
     "6. モダンなCSS機能（Grid, Flexbox, CSS変数, アニメーション等）を活用してください。",
-    "7. まず簡潔に改善内容を説明し（2-3行程度、**必ず現在進行形**で「〜を改善しています」のように書くこと。「改善しました」のような完了形は禁止）、その後にコードを出力してください。",
+    "7. まず簡潔に改善内容を説明し（2-3行程度）、その後にコードを出力してください。",
     "",
     "## 出力フォーマット例",
     "",
     "```",
-    "改善内容の説明（2-3行、進行形で）",
+    "改善内容の説明（2-3行）",
     "",
     "---PAGE_START---",
-    "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">",
-    "<link href=\"https://fonts.googleapis.com/css2?family=...\" rel=\"stylesheet\">",
-    "",
-    "<style>",
-    "  /* 改善後のCSS */",
-    "</style>",
-    "",
     "<div class=\"page-container\">",
     "  <!-- 改善後のHTML -->",
     "</div>",
+    "<style>",
+    "  /* 改善後のCSS */",
+    "</style>",
     "---PAGE_END---",
     "```",
     "",

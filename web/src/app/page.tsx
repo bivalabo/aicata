@@ -9,7 +9,7 @@ import MobilePanelSwitcher, {
   type MobilePanel,
 } from "@/components/layout/MobilePanelSwitcher";
 import ChatView from "@/components/chat/ChatView";
-import LivePreview, { buildFullHtml } from "@/components/preview/LivePreview";
+import LivePreview from "@/components/preview/LivePreview";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { useViewport } from "@/hooks/useViewport";
 import clsx from "clsx";
@@ -144,6 +144,12 @@ export default function Home() {
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("chat");
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // ── Undo/Redo 用の HTML 履歴スタック ──
+  const htmlHistoryRef = useRef<string[]>([]);
+  const htmlHistoryIndexRef = useRef(-1);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   // ── AI生成完了時にモバイルでプレビューへ自動切り替え ──
   const prevPageDataRef = useRef<PageData | null>(null);
@@ -268,12 +274,47 @@ export default function Home() {
     setPageData(data);
     if (data) {
       setSaveState("idle");
+      // Undo 履歴を初期化（新しいページ生成時）
+      htmlHistoryRef.current = [data.html];
+      htmlHistoryIndexRef.current = 0;
+      setCanUndo(false);
+      setCanRedo(false);
     }
   }, []);
 
   const handleHtmlChange = useCallback((newHtml: string) => {
-    setPageData((prev) => (prev ? { ...prev, html: newHtml } : prev));
+    setPageData((prev) => {
+      if (!prev) return prev;
+
+      // ── Undo/Redo 履歴にプッシュ ──
+      const history = htmlHistoryRef.current;
+      const idx = htmlHistoryIndexRef.current;
+      // 現在位置より先の履歴を切り捨て
+      htmlHistoryRef.current = history.slice(0, idx + 1);
+      htmlHistoryRef.current.push(newHtml);
+      // 最大50エントリに制限
+      if (htmlHistoryRef.current.length > 50) {
+        htmlHistoryRef.current = htmlHistoryRef.current.slice(-50);
+      }
+      htmlHistoryIndexRef.current = htmlHistoryRef.current.length - 1;
+      setCanUndo(htmlHistoryIndexRef.current > 0);
+      setCanRedo(false);
+
+      return { ...prev, html: newHtml };
+    });
     setSaveState("idle");
+
+    // ── Auto-save: 3秒 debounce ──
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      // savedPageId がある場合のみ自動保存（新規未保存ページは自動保存しない）
+      // ref 経由で最新の値を参照（stale closure 回避）
+      if (savedPageIdRef.current) {
+        handleSaveInternalRef.current();
+      }
+    }, 3000);
+    // handleSavePageInternal は ref 経由で安定化しているため依存不要
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [pendingSectionEdit, setPendingSectionEdit] = useState<string | null>(
@@ -292,18 +333,27 @@ export default function Home() {
     [viewport.isMobileOrTablet],
   );
 
-  const handleSavePage = useCallback(async () => {
-    if (!pageData) return;
+  // ── 保存のコアロジック（auto-save / 手動保存 共用） ──
+  const pageDataRef = useRef(pageData);
+  pageDataRef.current = pageData;
+  const savedPageIdRef = useRef(savedPageId);
+  savedPageIdRef.current = savedPageId;
+
+  const handleSavePageInternal = useCallback(async () => {
+    const currentPageData = pageDataRef.current;
+    if (!currentPageData) return;
+
+    // Optimistic: 即座に "saved" 表示
     setSaveState("saving");
 
     try {
-      if (savedPageId) {
-        const res = await fetch(`/api/pages/${savedPageId}`, {
+      if (savedPageIdRef.current) {
+        const res = await fetch(`/api/pages/${savedPageIdRef.current}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            html: pageData.html,
-            css: pageData.css,
+            html: currentPageData.html,
+            css: currentPageData.css,
           }),
         });
         if (!res.ok) throw new Error("Update failed");
@@ -316,8 +366,8 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title,
-            html: pageData.html,
-            css: pageData.css,
+            html: currentPageData.html,
+            css: currentPageData.css,
             conversationId: activeConversationId,
           }),
         });
@@ -335,13 +385,44 @@ export default function Home() {
       console.error("Page save error:", error);
       setSaveState("idle");
     }
-  }, [pageData, savedPageId, activeConversationId, conversations]);
+  }, [activeConversationId, conversations]);
+
+  const handleSaveInternalRef = useRef(handleSavePageInternal);
+  handleSaveInternalRef.current = handleSavePageInternal;
+
+  const handleSavePage = useCallback(async () => {
+    // auto-save タイマーをクリア（手動保存が優先）
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    await handleSaveInternalRef.current();
+  }, []);
+
+  // ── Undo / Redo ──
+  const handleUndo = useCallback(() => {
+    const idx = htmlHistoryIndexRef.current;
+    if (idx <= 0) return;
+    const newIdx = idx - 1;
+    htmlHistoryIndexRef.current = newIdx;
+    const prevHtml = htmlHistoryRef.current[newIdx];
+    setPageData((prev) => (prev ? { ...prev, html: prevHtml } : prev));
+    setCanUndo(newIdx > 0);
+    setCanRedo(true);
+    setSaveState("idle");
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    const idx = htmlHistoryIndexRef.current;
+    const history = htmlHistoryRef.current;
+    if (idx >= history.length - 1) return;
+    const newIdx = idx + 1;
+    htmlHistoryIndexRef.current = newIdx;
+    const nextHtml = history[newIdx];
+    setPageData((prev) => (prev ? { ...prev, html: nextHtml } : prev));
+    setCanUndo(true);
+    setCanRedo(newIdx < history.length - 1);
+    setSaveState("idle");
+  }, []);
 
   const [isStreaming, setIsStreaming] = useState(false);
-  /** プレビューパネルのショーケース拡大モード（生成完了時に一時的にtrue） */
-  const [previewExpanded, setPreviewExpanded] = useState(false);
-  /** 外部からLivePreviewのショーケースモードを起動するトリガー */
-  const [showcaseTrigger, setShowcaseTrigger] = useState(0);
   const showPreview = pageData !== null;
 
   // ── フルスクリーンエディタモード ──
@@ -363,24 +444,9 @@ export default function Home() {
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, []);
-
-  // ── ChatView → デスクトッププレビュー拡大 ──
-  const handleExpandDesktopPreview = useCallback(() => {
-    setPreviewExpanded(true);
-    setShowcaseTrigger((n) => n + 1);
-  }, []);
-
-  // ── ChatView → 新しいウィンドウでプレビュー ──
-  const handleOpenPreviewNewWindow = useCallback(() => {
-    if (!pageData) return;
-    const fullHtml = buildFullHtml(pageData.html, pageData.css, false);
-    const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, [pageData]);
 
   // ── モバイル: fullPreview では UI 要素を最小化 ──
   const isFullPreview = mobilePanel === "fullPreview";
@@ -410,6 +476,8 @@ export default function Home() {
             onSendAIMessage={handleEditorAIMessage}
             pendingAIMessage={editorAIPending}
             onPendingAIMessageConsumed={() => setEditorAIPending(null)}
+            onUndo={canUndo ? handleUndo : undefined}
+            onRedo={canRedo ? handleRedo : undefined}
           />
         )}
       </AnimatePresence>
@@ -468,14 +536,11 @@ export default function Home() {
                 /* ===== デスクトップレイアウト: サイドバイサイド ===== */
                 <>
                   <div
-                    className={clsx(
-                      "overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
+                    className={
                       showPreview
-                        ? previewExpanded
-                          ? "w-[25%] min-w-[300px]"
-                          : "w-[45%] min-w-[360px]"
-                        : "flex-1",
-                    )}
+                        ? "w-[45%] min-w-[360px] overflow-hidden transition-all duration-300"
+                        : "flex-1 overflow-hidden"
+                    }
                   >
                     <ErrorBoundary label="チャット">
                       <ChatView
@@ -489,9 +554,7 @@ export default function Home() {
                         onPendingMessageConsumed={() =>
                           setPendingSectionEdit(null)
                         }
-                        onExpandDesktopPreview={handleExpandDesktopPreview}
-                        onOpenPreviewNewWindow={handleOpenPreviewNewWindow}
-                        currentPageData={pageData}
+                        autoSendPending={editorMode}
                       />
                     </ErrorBoundary>
                   </div>
@@ -513,8 +576,6 @@ export default function Home() {
                           onChatEditSection={handleChatEditSection}
                           onOpenEditor={handleOpenEditor}
                           viewport={viewport.device}
-                          onRequestExpand={setPreviewExpanded}
-                          showcaseTrigger={showcaseTrigger}
                         />
                       </ErrorBoundary>
                     </div>
@@ -543,8 +604,7 @@ export default function Home() {
                         onPendingMessageConsumed={() =>
                           setPendingSectionEdit(null)
                         }
-                        onOpenPreviewNewWindow={handleOpenPreviewNewWindow}
-                        currentPageData={pageData}
+                        autoSendPending={editorMode}
                       />
                     </ErrorBoundary>
                   </div>

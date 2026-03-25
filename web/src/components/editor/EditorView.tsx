@@ -18,6 +18,8 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import clsx from "clsx";
 import { useIframeSections, getSectionDetectionScript } from "./useIframeSections";
@@ -58,6 +60,9 @@ interface EditorViewProps {
   /** Prefill for AI input from section actions */
   pendingAIMessage?: string | null;
   onPendingAIMessageConsumed?: () => void;
+  /** Undo/Redo */
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 export default function EditorView({
@@ -74,6 +79,8 @@ export default function EditorView({
   onStopAI,
   pendingAIMessage,
   onPendingAIMessageConsumed,
+  onUndo,
+  onRedo,
 }: EditorViewProps) {
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>("desktop");
@@ -88,16 +95,67 @@ export default function EditorView({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
-  // Build iframe content
+  // Build iframe content — only rebuild srcdoc on structural changes (refreshKey) or editor toggle
   const srcdoc = useMemo(
     () => buildFullHtml(html, css, editorEnabled),
-    [html, css, editorEnabled]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [refreshKey, editorEnabled]
   );
+
+  // ── Incremental iframe update: テキスト/画像編集時は postMessage で body のみ差し替え ──
+  const lastSentHtmlRef = useRef(html);
+  const lastSentCssRef = useRef(css);
+  const lastRefreshKeyRef = useRef(refreshKey);
+
+  useEffect(() => {
+    // refreshKey が変わった場合はフルリロード済み → ref をリセットしてスキップ
+    if (refreshKey !== lastRefreshKeyRef.current) {
+      lastRefreshKeyRef.current = refreshKey;
+      lastSentHtmlRef.current = html;
+      lastSentCssRef.current = css;
+      return;
+    }
+    // 内容が変わっていなければスキップ
+    if (html === lastSentHtmlRef.current && css === lastSentCssRef.current) return;
+    lastSentHtmlRef.current = html;
+    lastSentCssRef.current = css;
+
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+
+    // extractLinkTags で <link> タグを除外した body 部分のみ送信
+    const linkRegex = /<link[^>]*>/gi;
+    const bodyHtml = html.replace(linkRegex, "").trim();
+    iframe.contentWindow.postMessage(
+      { type: "update-content", body: bodyHtml, css },
+      "*"
+    );
+  }, [html, css, refreshKey]);
 
   const currentView = VIEW_SIZES[viewMode];
 
   // Section detection
   const { sections } = useIframeSections(iframeRef);
+
+  // Keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          onRedo?.();
+        } else {
+          onUndo?.();
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+        e.preventDefault();
+        onRedo?.();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onUndo, onRedo]);
 
   // Generation complete detection
   useEffect(() => {
@@ -197,9 +255,11 @@ export default function EditorView({
     }
   }, [html, onHtmlChange]);
 
+  // テキスト/画像編集: incremental update（postMessage）を使うので refreshKey 不要
   const handleHtmlChangeFromEditor = useCallback((newHtml: string) => {
     onHtmlChange?.(newHtml);
-    setRefreshKey((k) => k + 1);
+    // Note: 構造変更でなくテキスト変更のみなので refreshKey は更新しない
+    // → postMessage の incremental update で反映される
   }, [onHtmlChange]);
 
   const handleChatEditSection = useCallback((sectionId: string) => {
@@ -284,6 +344,29 @@ export default function EditorView({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5">
+          {/* Undo/Redo */}
+          {(onUndo || onRedo) && (
+            <>
+              <button
+                onClick={onUndo}
+                disabled={!onUndo}
+                className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                title="元に戻す (Ctrl+Z)"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={onRedo}
+                disabled={!onRedo}
+                className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                title="やり直し (Ctrl+Shift+Z)"
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </button>
+              <div className="h-4 w-px bg-white/[0.08]" />
+            </>
+          )}
+
           {/* Editor toggle */}
           <button
             onClick={() => {
@@ -390,7 +473,7 @@ export default function EditorView({
             }}
           >
             {/* Page frame with shadow */}
-            <div className="bg-white rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.35)] overflow-auto relative">
+            <div className="bg-white rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.35)] overflow-hidden relative">
               {html ? (
                 <>
                   <iframe
@@ -423,6 +506,7 @@ export default function EditorView({
                       onMoveDown={onHtmlChange ? handleMoveDownSection : undefined}
                       onDeleteSection={onHtmlChange ? handleDeleteSection : undefined}
                       onChatEditSection={handleChatEditSection}
+                      zoom={zoom}
                     />
                   )}
                 </>

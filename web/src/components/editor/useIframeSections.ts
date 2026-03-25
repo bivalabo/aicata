@@ -143,6 +143,31 @@ export function getSectionDetectionScript(): string {
         '*'
       );
     }
+    if (event.data?.type === 'scrollToSection' && event.data.sectionId) {
+      const el = document.querySelector('[data-section-id="' + event.data.sectionId + '"]');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+    // ── Incremental update: bodyのみ差し替え（フルリロード回避） ──
+    if (event.data?.type === 'update-content') {
+      var newBody = event.data.body;
+      var newCss = event.data.css;
+      if (newBody !== undefined) {
+        document.body.innerHTML = newBody;
+      }
+      if (newCss !== undefined) {
+        var aiStyle = document.getElementById('aicata-ai-css');
+        if (aiStyle) {
+          aiStyle.textContent = newCss;
+        }
+      }
+      // 更新後にセクション情報を再送信
+      setTimeout(function() {
+        var sections = getSectionBounds();
+        parent.postMessage({ type: 'section-bounds', sections: sections }, '*');
+      }, 50);
+    }
   });
 
   // 初期送信

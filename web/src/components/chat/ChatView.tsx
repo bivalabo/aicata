@@ -1,8 +1,7 @@
 "use client";
 
-import { useRef, useEffect, useCallback, useState, useMemo, lazy, Suspense } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import ChatMessage from "./ChatMessage";
-import PageCompleteActions from "./PageCompleteActions";
 import ChatInput from "./ChatInput";
 import WelcomeScreen from "./WelcomeScreen";
 import OnboardingFlow, {
@@ -14,8 +13,6 @@ import { useChat, type Message, type Attachment } from "@/hooks/useChat";
 import { extractPageData, stripPageMarkers, hasPageData } from "@/lib/page-parser";
 import type { PageData } from "@/lib/page-parser";
 import dynamic from "next/dynamic";
-
-const DesignDNAVisualizer = lazy(() => import("./DesignDNAVisualizer"));
 
 // Lazy-load SiteRebuildFlow (heavy component)
 const SiteRebuildFlow = dynamic(
@@ -168,12 +165,8 @@ interface ChatViewProps {
   onTemplatePreviewChange?: (isTemplate: boolean) => void;
   pendingMessage?: string | null;
   onPendingMessageConsumed?: () => void;
-  /** プレビューをデスクトップ拡大するコールバック */
-  onExpandDesktopPreview?: () => void;
-  /** プレビューを新しいウィンドウで開くコールバック */
-  onOpenPreviewNewWindow?: () => void;
-  /** 現在のページデータ（アクションボタン表示用） */
-  currentPageData?: { html: string; css: string } | null;
+  /** true の場合、pendingMessage を自動送信する（エディタAIパネルからの指示用） */
+  autoSendPending?: boolean;
 }
 
 export default function ChatView({
@@ -184,9 +177,7 @@ export default function ChatView({
   onTemplatePreviewChange,
   pendingMessage,
   onPendingMessageConsumed,
-  onExpandDesktopPreview,
-  onOpenPreviewNewWindow,
-  currentPageData,
+  autoSendPending = false,
 }: ChatViewProps) {
   const {
     messages,
@@ -246,23 +237,6 @@ export default function ChatView({
 
   const [currentPageType, setCurrentPageType] = useState<string | null>(null);
   const [isAnalyzingUrl, setIsAnalyzingUrl] = useState(false);
-  // ── 送信準備中フラグ（WelcomeScreen のフラッシュ防止） ──
-  const [isSending, setIsSending] = useState(false);
-
-  // isSending を解除: メッセージが追加されたら送信準備完了
-  useEffect(() => {
-    if (isSending && (messages.length > 0 || isStreaming)) {
-      setIsSending(false);
-    }
-  }, [isSending, messages.length, isStreaming]);
-
-  // onboardingType をメッセージ到着後に安全にクリア（WelcomeScreen フラッシュ防止）
-  useEffect(() => {
-    if (pendingOnboardingClearRef.current && messages.length > 0) {
-      pendingOnboardingClearRef.current = false;
-      setOnboardingType(null);
-    }
-  }, [messages.length]);
 
   // ストリーミング状態の変化を親コンポーネントに通知
   useEffect(() => {
@@ -270,6 +244,7 @@ export default function ChatView({
   }, [isStreaming, onStreamingChange]);
 
   // Detect page data in AI responses and update preview
+  // 続きの生成（continuation）の場合、前の不完全なページと結合する
   useEffect(() => {
     if (!onPageUpdate) return;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -289,23 +264,33 @@ export default function ChatView({
             return;
           }
         }
-      }
-
         // ── 続き生成の結合: PAGE_START がないが、前のメッセージに不完全なページがある ──
+        // 続きの生成レスポンスは PAGE_START なしで HTML/CSS の続きを含む
         if (i === messages.length - 1 && !msg.content.includes("---PAGE_START---")) {
+          // 前のアシスタントメッセージに不完全なページがあるか確認
           for (let j = i - 1; j >= 0; j--) {
             const prevMsg = messages[j];
             if (prevMsg.role === "assistant" && prevMsg.content.includes("---PAGE_START---") && !prevMsg.content.includes("---PAGE_END---")) {
+              // 不完全なページを発見 — 現在のメッセージの内容を結合して抽出
               const combinedContent = prevMsg.content + "\n" + msg.content + "\n---PAGE_END---";
               const data = extractPageData(combinedContent);
               if (data) {
+                console.log("[Aicata] Continuation merged:", {
+                  htmlLength: data.html.length,
+                  cssLength: data.css.length,
+                });
+                onTemplatePreviewChange?.(false);
                 onPageUpdate(data);
                 return;
               }
               break;
             }
+            if (prevMsg.role === "assistant" && prevMsg.content.includes("---PAGE_END---")) {
+              break; // 完了済みのページがある場合はスキップ
+            }
           }
         }
+      }
     }
   }, [messages, onPageUpdate]);
 
@@ -353,10 +338,6 @@ export default function ChatView({
 
   const handleSend = useCallback(
     async (content: string, attachments?: Attachment[]) => {
-      // WelcomeScreen フラッシュ防止: 初回送信時は即座にフラグを立てる
-      if (messages.length === 0) {
-        setIsSending(true);
-      }
       let urlAnalysis: unknown;
 
       if (containsUrl(content)) {
@@ -383,7 +364,7 @@ export default function ChatView({
 
       sendMessage(content, attachments, currentPageType || undefined, urlAnalysis);
     },
-    [sendMessage, currentPageType, messages.length],
+    [sendMessage, currentPageType],
   );
 
   // WelcomeScreen: template selection
@@ -431,13 +412,10 @@ export default function ChatView({
   );
 
   // Onboarding completion
-  // NOTE: onboardingType を null にするのはメッセージが追加されてからにする。
-  // 先に null にすると showWelcome=true の瞬間が発生してフラッシュする。
-  const pendingOnboardingClearRef = useRef(false);
   const handleOnboardingComplete = useCallback(
     async (compiledPrompt: string, pageType: string, selections: OnboardingSelections) => {
+      setOnboardingType(null);
       setCurrentPageType(pageType === "site-build" ? "landing" : pageType);
-      pendingOnboardingClearRef.current = true;
       handleSend(compiledPrompt);
     },
     [handleSend],
@@ -447,36 +425,15 @@ export default function ChatView({
     setOnboardingType(null);
   }, []);
 
-  // ── DNAデータ抽出（メッセージコンテンツからDNAブロックを抽出） ──
-  const DNA_REGEX = /---DNA_START---([\s\S]*?)---DNA_END---/;
-
-  const extractDNAData = useCallback((content: string): { data: any; confidence?: number; templateId?: string } | null => {
-    const match = content.match(DNA_REGEX);
-    if (!match) return null;
-    try {
-      return JSON.parse(match[1].trim());
-    } catch {
-      return null;
-    }
-  }, []);
-
-  // Strip page markers AND DNA markers from display
+  // Strip page markers from display
   const displayContent = useCallback((content: string) => {
-    // DNAマーカーを常に除去（ChatViewがDNAビジュアライザーを別途レンダリング）
-    // 完全なマーカーペア（START...END）を除去
-    let cleaned = content.replace(/---DNA_START---[\s\S]*?---DNA_END---/g, "");
-    // ストリーミング中: まだENDが届いていない不完全なDNAブロックも除去
-    cleaned = cleaned.replace(/---DNA_START---[\s\S]*$/g, "");
-    // 万が一の孤立マーカーも除去
-    cleaned = cleaned.replace(/---DNA_(?:START|END)---/g, "");
-
-    if (hasPageData(cleaned)) {
-      const stripped = stripPageMarkers(cleaned);
+    if (hasPageData(content)) {
+      const stripped = stripPageMarkers(content);
       if (stripped.trim()) return stripped;
       return "ページをプレビューに反映しました。右側のプレビューパネルでご確認ください。";
     }
 
-    const trimmed = cleaned.trim();
+    const trimmed = content.trim();
     const codeLines = trimmed.split("\n").filter((line) => {
       const l = line.trim();
       return (
@@ -504,7 +461,7 @@ export default function ChatView({
       return textParts || "ページの生成を続行しています。プレビューパネルで確認できます。";
     }
 
-    return cleaned;
+    return content;
   }, []);
 
   const lastMessage = messages[messages.length - 1];
@@ -514,7 +471,7 @@ export default function ChatView({
     isStreaming && lastMessage?.role === "assistant" &&
     lastMessage.content.includes("---PAGE_START---");
 
-  const showWelcome = messages.length === 0 && !isStreaming && !onboardingType && !isSending;
+  const showWelcome = messages.length === 0 && !isStreaming && !onboardingType;
   const showOnboarding = onboardingType !== null && messages.length === 0;
 
   return (
@@ -537,67 +494,18 @@ export default function ChatView({
           />
         ) : (
           <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-            {/* 送信準備中のローディング表示 */}
-            {isSending && messages.length === 0 && (
-              <div className="flex items-center justify-center py-20">
-                <div className="flex items-center gap-3 text-base-content/50">
-                  <Sparkles className="w-5 h-5 animate-pulse" />
-                  <span className="text-sm">準備しています...</span>
-                </div>
-              </div>
+            {messages.map((msg) =>
+              msg.role === "assistant" && !msg.content && isStreaming ? (
+                <ChatMessage key={msg.id} role="assistant" content="" isStreaming />
+              ) : (
+                <ChatMessage
+                  key={msg.id}
+                  role={msg.role}
+                  content={msg.role === "assistant" ? displayContent(msg.content) : msg.content}
+                  attachments={msg.attachments}
+                />
+              ),
             )}
-            {messages.map((msg, idx) => {
-              const isLastAssistant =
-                msg.role === "assistant" &&
-                idx === messages.length - 1;
-              const hasCompletedPage =
-                isLastAssistant &&
-                !isStreaming &&
-                msg.content.includes("---PAGE_START---") &&
-                msg.content.includes("---PAGE_END---");
-
-              // DNAデータ抽出（アシスタントメッセージからDNAブロックを検出）
-              const dnaData = msg.role === "assistant"
-                ? extractDNAData(msg.content)
-                : null;
-
-              return (
-                <div key={msg.id}>
-                  {msg.role === "assistant" && !msg.content && isStreaming ? (
-                    <ChatMessage role="assistant" content="" isStreaming />
-                  ) : (
-                    <ChatMessage
-                      role={msg.role}
-                      content={msg.role === "assistant" ? displayContent(msg.content) : msg.content}
-                      attachments={msg.attachments}
-                    />
-                  )}
-                  {/* Design DNA ビジュアライゼーション */}
-                  {dnaData?.data && (
-                    <div className="ml-10 mt-2">
-                      <Suspense fallback={<div className="h-32 animate-pulse bg-accent/5 rounded-2xl" />}>
-                        <DesignDNAVisualizer
-                          data={dnaData.data}
-                          confidence={dnaData.confidence}
-                          templateId={dnaData.templateId}
-                        />
-                      </Suspense>
-                    </div>
-                  )}
-                  {/* ページ生成完了後のアクションボタン */}
-                  {hasCompletedPage && currentPageData && (
-                    <div className="ml-10 mt-1">
-                      <PageCompleteActions
-                        html={currentPageData.html}
-                        css={currentPageData.css}
-                        onExpandDesktop={onExpandDesktopPreview}
-                        onOpenNewWindow={onOpenPreviewNewWindow}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
             <div ref={messagesEndRef} />
           </div>
         )}
@@ -633,14 +541,15 @@ export default function ChatView({
               </div>
               <button
                 onClick={() => {
+                  // 中断箇所の最後の200文字を取得して、続きから生成させる
                   const pageStartIdx = lastAssistant.content.indexOf("---PAGE_START---");
                   const partialHtml = pageStartIdx >= 0
                     ? lastAssistant.content.slice(pageStartIdx + "---PAGE_START---".length)
                     : "";
                   const lastChunk = partialHtml.slice(-200).trim();
                   const continuationMsg = lastChunk
-                    ? `前回のページ生成が途中で中断されました。以下が中断直前のコードの末尾です:\n\`\`\`\n${lastChunk}\n\`\`\`\nこの続きからコードを出力してください。前回の途中から再開し、残りのHTML/CSSを出力して最後に ---PAGE_END--- で閉じてください。`
-                    : "前回のページ生成が途中で中断されました。---PAGE_START--- から ---PAGE_END--- まで完全なページを再生成してください。";
+                    ? `前回のページ生成が途中で中断されました。以下が中断直前のコードの末尾です:\n\`\`\`\n${lastChunk}\n\`\`\`\nこの続きからコードを出力してください。前回の途中から再開し、残りのHTML/CSSを出力して最後に ---PAGE_END--- で閉じてください。前置きの説明は不要です。コードだけ出力してください。`
+                    : "前回のページ生成が途中で中断されました。---PAGE_START--- から ---PAGE_END--- まで完全なページを再生成してください。前置きの説明は最小限にして、コードを出力してください。";
                   handleSend(continuationMsg);
                 }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-md hover:shadow-amber-500/20 transition-all shrink-0"
@@ -712,6 +621,7 @@ export default function ChatView({
             }
             prefillMessage={pendingMessage}
             onPrefillConsumed={onPendingMessageConsumed}
+            autoSendPrefill={autoSendPending}
           />
         </div>
       )}

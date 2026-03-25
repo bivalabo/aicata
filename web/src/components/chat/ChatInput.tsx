@@ -13,6 +13,8 @@ interface ChatInputProps {
   /** 外部からチャット入力にプリセットするメッセージ */
   prefillMessage?: string | null;
   onPrefillConsumed?: () => void;
+  /** true の場合、prefillMessage を自動送信する（エディタAIパネルからの指示用） */
+  autoSendPrefill?: boolean;
 }
 
 function fileToAttachment(file: File): Promise<Attachment> {
@@ -50,6 +52,7 @@ export default function ChatInput({
   placeholder = "メッセージを入力...",
   prefillMessage,
   onPrefillConsumed,
+  autoSendPrefill = false,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -65,17 +68,29 @@ export default function ChatInput({
     }
   }, [message]);
 
+  // Stable ref for onSend to avoid effect re-triggering on function identity changes
+  const onSendRef = useRef(onSend);
+  onSendRef.current = onSend;
+
   // Prefill message from external source (e.g. section edit button)
   useEffect(() => {
     if (prefillMessage) {
-      setMessage(prefillMessage);
-      onPrefillConsumed?.();
-      // Focus textarea after prefill
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 50);
+      if (autoSendPrefill && !disabled) {
+        // エディタAIパネルからの指示 — 即時送信
+        onSendRef.current(prefillMessage);
+        onPrefillConsumed?.();
+      } else {
+        setMessage(prefillMessage);
+        onPrefillConsumed?.();
+        // Focus textarea after prefill
+        setTimeout(() => {
+          textareaRef.current?.focus();
+        }, 50);
+      }
     }
-  }, [prefillMessage, onPrefillConsumed]);
+    // onSend は ref 経由で安定化、prefillMessage の変化のみで発火
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillMessage, autoSendPrefill, disabled]);
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const validFiles = Array.from(files).filter((f) =>

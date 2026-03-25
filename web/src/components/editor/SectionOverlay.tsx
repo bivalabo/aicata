@@ -19,6 +19,8 @@ interface SectionOverlayProps {
   onChatEditSection?: (sectionId: string) => void;
   /** AIで自動改善（セクション単位） */
   onEnhanceSection?: (sectionId: string) => void;
+  /** EditorView の zoom レベル — セクション座標のスケーリング補正に使用 */
+  zoom?: number;
 }
 
 interface SectionHighlight {
@@ -45,25 +47,25 @@ export default function SectionOverlay({
   onDeleteSection,
   onChatEditSection,
   onEnhanceSection,
+  zoom = 1,
 }: SectionOverlayProps) {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [hoveredSectionId, setHoveredSectionId] = useState<string | null>(null);
   const containerRef = useRef(iframeContainer);
   containerRef.current = iframeContainer;
 
-  // セクション情報とコンテナのオフセットを計算 — sections のみを dependency に
+  // セクション座標計算
+  // iframe 内の getBoundingClientRect() はビューポート相対座標。
+  // SectionOverlay の absolute div は `position: relative` の祖先（page frame）内で配置。
+  // page frame は zoom 変換コンテナの子要素なので、iframe 座標をそのまま使えば
+  // CSS transform が自動的にスケーリングする。
+  // iframeContainer のスクロールはオーバーレイ位置に影響しない（page frame 内の相対位置）。
   const highlights = useMemo<SectionHighlight[]>(() => {
-    const container = containerRef.current;
-    if (!container) return [];
-
-    const containerScrollTop = container.scrollTop || 0;
-    const containerScrollLeft = container.scrollLeft || 0;
-
     return Array.from(sections.values()).map((section) => ({
       id: section.id,
       label: getSectionLabel(section.id),
-      top: section.top + containerScrollTop,
-      left: section.left + containerScrollLeft,
+      top: section.top,
+      left: section.left,
       width: section.width,
       height: section.height,
     }));
