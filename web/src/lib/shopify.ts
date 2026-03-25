@@ -253,6 +253,21 @@ export async function listAllCollections(
   return [...custom, ...smart];
 }
 
+/** コレクション内の商品一覧を取得 */
+export async function listCollectionProducts(
+  shop: string,
+  accessToken: string,
+  collectionId: number,
+  limit = 250,
+): Promise<ShopifyProduct[]> {
+  const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
+    shop,
+    accessToken,
+    `collections/${collectionId}/products.json?limit=${limit}`,
+  );
+  return data.products;
+}
+
 /** ページ詳細を取得 */
 export async function getPage(
   shop: string,

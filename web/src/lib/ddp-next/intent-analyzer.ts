@@ -82,33 +82,39 @@ const TONE_DNA_MAP: Record<string, Partial<DesignDNAPreferences>> = {
 
 const INDUSTRY_DNA_BIAS: Record<string, Partial<DesignDNAPreferences>> = {
   beauty: {
-    minimalism: 0.3, whitespace: 0.4, serifAffinity: 0.4,
-    imageWeight: 0.5, colorSaturation: -0.1, animationIntensity: 0.2,
+    minimalism: 0.3, whitespace: 0.4, contrast: 0.2,
+    serifAffinity: 0.4, colorSaturation: -0.1, layoutComplexity: -0.2,
+    imageWeight: 0.5, asymmetry: 0.1, novelty: 0.1, animationIntensity: 0.2,
   },
   fashion: {
     minimalism: 0.4, whitespace: 0.3, contrast: 0.3,
-    imageWeight: 0.6, asymmetry: 0.2, novelty: 0.3,
+    serifAffinity: 0.0, colorSaturation: 0.0, layoutComplexity: 0.1,
+    imageWeight: 0.6, asymmetry: 0.2, novelty: 0.3, animationIntensity: 0.3,
   },
   food: {
-    minimalism: -0.1, whitespace: 0.2, colorSaturation: 0.3,
-    imageWeight: 0.7, serifAffinity: 0.1, animationIntensity: 0.0,
+    minimalism: -0.1, whitespace: 0.2, contrast: 0.1,
+    serifAffinity: 0.1, colorSaturation: 0.3, layoutComplexity: 0.0,
+    imageWeight: 0.7, asymmetry: 0.0, novelty: -0.1, animationIntensity: 0.0,
   },
   tech: {
     minimalism: 0.3, whitespace: 0.2, contrast: 0.4,
-    serifAffinity: -0.5, colorSaturation: 0.1, novelty: 0.4,
-    animationIntensity: 0.4,
+    serifAffinity: -0.5, colorSaturation: 0.1, layoutComplexity: 0.2,
+    imageWeight: 0.3, asymmetry: 0.2, novelty: 0.4, animationIntensity: 0.4,
   },
   health: {
     minimalism: 0.2, whitespace: 0.4, contrast: -0.1,
-    serifAffinity: 0.1, colorSaturation: -0.2, imageWeight: 0.3,
+    serifAffinity: 0.1, colorSaturation: -0.2, layoutComplexity: -0.2,
+    imageWeight: 0.3, asymmetry: 0.0, novelty: -0.1, animationIntensity: 0.1,
   },
   lifestyle: {
     minimalism: 0.1, whitespace: 0.3, contrast: 0.1,
-    serifAffinity: 0.0, colorSaturation: 0.1, imageWeight: 0.4,
+    serifAffinity: 0.2, colorSaturation: 0.1, layoutComplexity: 0.0,
+    imageWeight: 0.4, asymmetry: 0.1, novelty: 0.0, animationIntensity: 0.1,
   },
   general: {
-    minimalism: 0.0, whitespace: 0.2, contrast: 0.0,
-    serifAffinity: 0.0, colorSaturation: 0.0, imageWeight: 0.2,
+    minimalism: 0.1, whitespace: 0.2, contrast: 0.1,
+    serifAffinity: 0.0, colorSaturation: 0.0, layoutComplexity: 0.0,
+    imageWeight: 0.2, asymmetry: 0.0, novelty: 0.0, animationIntensity: 0.1,
   },
 };
 

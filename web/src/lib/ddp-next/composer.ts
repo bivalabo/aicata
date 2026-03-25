@@ -14,7 +14,7 @@ import {
   getSectionsByCategory,
 } from "@/lib/design-engine/knowledge/sections/registry";
 import { getAllTemplates } from "@/lib/design-engine/template-selector";
-import { assemblePage, assembleFullHtml } from "@/lib/design-engine/page-assembler";
+import { assemblePage } from "@/lib/design-engine/page-assembler";
 import type {
   PageTemplate,
   SectionTemplate,
@@ -226,7 +226,7 @@ function toneBasedDNA(tones: string[]): DesignDNAPreferences {
   return result as unknown as DesignDNAPreferences;
 }
 
-/** テンプレートのセクション構成を解決 */
+/** テンプレートのセクション構成を解決（フロー最適化付き） */
 function resolveSections(
   template: PageTemplate,
   targetDNA: DesignDNAPreferences,
@@ -256,7 +256,115 @@ function resolveSections(
     });
   }
 
-  return resolved.sort((a, b) => a.order - b.order);
+  // テンプレート定義順でソート後、フローヒントで微調整
+  resolved.sort((a, b) => a.order - b.order);
+  return optimizeSectionFlow(resolved);
+}
+
+/**
+ * セクションフロー最適化
+ *
+ * flowsWellAfter / flowsWellBefore ヒントを使って隣接セクション間の
+ * 相性を評価し、同一orderグループ内で並び替える。
+ * テンプレート設計者の意図（order値）を大きく崩さず、
+ * 隣接ペアのフロースコアを最大化する。
+ */
+function optimizeSectionFlow(sections: ResolvedSection[]): ResolvedSection[] {
+  if (sections.length <= 2) return sections;
+
+  // 隣接ペアのフロースコアを計算
+  const flowScore = computeFlowScore(sections);
+
+  // 同一 order 内のセクションをグループ化してスワップ候補を探す
+  // order が連番なら1セクション1グループ → スワップは隣接のみ
+  // 実用的には、隣接ペアのスコアが低い箇所を検出し、近傍スワップで改善を試みる
+  let improved = true;
+  let iterations = 0;
+  const maxIterations = sections.length * 2; // 収束保証
+
+  while (improved && iterations < maxIterations) {
+    improved = false;
+    iterations++;
+
+    for (let i = 0; i < sections.length - 1; i++) {
+      const currentPairScore = adjacentFlowScore(sections, i);
+      // i と i+1 をスワップした場合のスコア
+      const swappedSections = [...sections];
+      [swappedSections[i], swappedSections[i + 1]] = [swappedSections[i + 1], swappedSections[i]];
+      const swappedPairScore = adjacentFlowScore(swappedSections, i);
+
+      // スワップが改善かつ、order差が2以内（大きな順序変更は避ける）
+      const orderDiff = Math.abs(sections[i].order - sections[i + 1].order);
+      if (swappedPairScore > currentPairScore && orderDiff <= 2) {
+        sections[i] = swappedSections[i];
+        sections[i + 1] = swappedSections[i + 1];
+        improved = true;
+      }
+    }
+  }
+
+  // order値を再割当て（最終的な順序を反映）
+  sections.forEach((s, idx) => { s.order = idx; });
+
+  return sections;
+}
+
+/** 位置 i と i+1 の隣接ペアフロースコア（前後の文脈含む） */
+function adjacentFlowScore(sections: ResolvedSection[], i: number): number {
+  let score = 0;
+
+  // i → i+1 のペア
+  score += pairFlowScore(sections[i], sections[i + 1]);
+
+  // i-1 → i のペア（存在すれば）
+  if (i > 0) {
+    score += pairFlowScore(sections[i - 1], sections[i]);
+  }
+
+  // i+1 → i+2 のペア（存在すれば）
+  if (i + 2 < sections.length) {
+    score += pairFlowScore(sections[i + 1], sections[i + 2]);
+  }
+
+  return score;
+}
+
+/** 2セクション間のフロースコア（0=ニュートラル, 正=良い, 負=悪い） */
+function pairFlowScore(preceding: ResolvedSection, following: ResolvedSection): number {
+  const precedingMeta = getSectionMeta(preceding.template.id);
+  const followingMeta = getSectionMeta(following.template.id);
+
+  let score = 0;
+
+  // preceding の flowsWellBefore に following のカテゴリが含まれるか
+  if (precedingMeta?.flowsWellBefore) {
+    const followingCategory = following.template.category;
+    if (precedingMeta.flowsWellBefore.includes(followingCategory)) {
+      score += 1.0;
+    }
+  }
+
+  // following の flowsWellAfter に preceding のカテゴリが含まれるか
+  if (followingMeta?.flowsWellAfter) {
+    const precedingCategory = preceding.template.category;
+    if (followingMeta.flowsWellAfter.includes(precedingCategory)) {
+      score += 1.0;
+    }
+  }
+
+  // 双方向で一致 → ボーナス
+  if (score >= 2.0) score += 0.5;
+
+  return score;
+}
+
+/** セクション配列全体のフロースコア合計 */
+function computeFlowScore(sections: ResolvedSection[]): number {
+  let total = 0;
+  for (let i = 0; i < sections.length - 1; i++) {
+    total += pairFlowScore(sections[i], sections[i + 1]);
+  }
+  return total;
 }
 
 /** 部分的なDNAを完全なDNAに埋める */
@@ -346,22 +454,35 @@ ${headerCss}
 /* === Footer Zone === */
 ${footerCss}`;
 
-  // assembleFullHtml でベースを生成し、ヘッダー/フッターを組み込んだバージョンを構築
-  const baseFullDocument = assembleFullHtml(plan.template);
+  // フルドキュメントを構築（fontLinks + style + 3ゾーンHTML）
+  // assembleFullHtml の代わりに直接構築して CSS マージ問題を回避
+  const { css: baseCss } = result;
 
-  // ヘッダー/フッターをフルドキュメントに挿入
-  let fullDocument: string;
-  if (!skipGlobal && (headerHtml || footerHtml)) {
-    // baseFullDocument の本体部分をゾーン付きHTMLに差し替え
-    fullDocument = baseFullDocument
-      .replace(result.html, zoneHtml)
-      .replace(
-        "</style>",
-        `/* === Header Zone === */\n${headerCss}\n/* === Footer Zone === */\n${footerCss}\n</style>`,
-      );
-  } else {
-    fullDocument = baseFullDocument;
-  }
+  // fontLinks を result.html の先頭から抽出
+  const fontLinksMatch = result.html.match(/^(<link[^>]*>[\s\S]*?<link[^>]*>)\s*/);
+  const fontLinks = fontLinksMatch ? fontLinksMatch[1] : "";
+
+  const fullCss = skipGlobal
+    ? baseCss
+    : `${baseCss}
+
+/* === Header Zone === */
+${headerCss}
+
+/* === Footer Zone === */
+${footerCss}`;
+
+  const fullDocument = `${fontLinks}
+
+<style>
+${fullCss}
+</style>
+
+${headerHtml}
+
+${result.html.replace(fontLinks, "").trim()}
+
+${footerHtml}`;
 
   // プレースホルダー一覧を抽出（{{BRAND_NAME}} 形式）
   const placeholderRegex = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
@@ -382,7 +503,7 @@ ${footerCss}`;
     meta: {
       templateId: plan.template.id,
       sectionCount: plan.sections.length + (headerHtml ? 1 : 0) + (footerHtml ? 1 : 0),
-      fontLinks: "",  // assembleFullHtml に含まれる
+      fontLinks,
     },
   };
 }
