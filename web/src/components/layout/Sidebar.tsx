@@ -46,9 +46,6 @@ const NAV_ITEMS = [
   { id: "pages", icon: FileText, label: "ページ管理" },
   { id: "settings", icon: Settings, label: "設定" },
   { id: "admin", icon: Brain, label: "Intelligence" },
-];
-
-const COMING_SOON_ITEMS = [
   { id: "seo", icon: Search, label: "SEO" },
 ];
 
@@ -183,25 +180,7 @@ export default function Sidebar({
           ))}
         </div>
 
-        {/* Coming Soon */}
-        {!collapsed && (
-          <div className="mt-4 pt-3 border-t border-black/[0.04]">
-            <span className="px-3.5 text-[11px] text-muted-foreground/50 uppercase tracking-wider font-medium">
-              Coming Soon
-            </span>
-            <div className="flex flex-col gap-1 mt-2">
-              {COMING_SOON_ITEMS.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14px] text-muted-foreground/40 cursor-default"
-                >
-                  <item.icon className="w-5 h-5 shrink-0" />
-                  <span>{item.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* spacing for nav items */}
       </nav>
 
       {/* Divider */}

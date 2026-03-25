@@ -56,6 +56,15 @@ const SettingsView = dynamic(
     ),
   },
 );
+const SeoView = dynamic(() => import("@/components/seo/SeoView"), {
+  loading: () => (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="animate-pulse text-muted-foreground text-sm">
+        読み込み中...
+      </div>
+    </div>
+  ),
+});
 const SiteBuilderView = dynamic(
   () => import(/* webpackChunkName: "site-builder-v3" */ "@/components/site-builder/SiteBuilderView"),
   {
@@ -81,50 +90,7 @@ interface ConversationItem {
   type: string;
 }
 
-const NAV_LABELS: Record<string, { title: string; description: string }> = {
-  site: {
-    title: "サイト構築",
-    description: "Shopifyストアの構築・テーマ設定を管理します",
-  },
-  pages: {
-    title: "ページ管理",
-    description: "AIで生成したページの一覧・編集・Shopifyへのデプロイ",
-  },
-  seo: {
-    title: "SEO",
-    description: "検索エンジン最適化の分析・改善ツール",
-  },
-  admin: {
-    title: "Aicata Intelligence",
-    description: "ACE & ADIS — デザイン知能の管理・キュレーション",
-  },
-  settings: {
-    title: "設定",
-    description: "アプリ設定・Shopify連携・APIキーの管理",
-  },
-};
-
-function ComingSoonPlaceholder({ navId }: { navId: string }) {
-  const info = NAV_LABELS[navId] || { title: navId, description: "" };
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-6">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-        <span className="text-2xl">🚧</span>
-      </div>
-      <div>
-        <h2 className="text-lg font-semibold text-foreground mb-1">
-          {info.title}
-        </h2>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          {info.description}
-        </p>
-      </div>
-      <span className="text-xs text-muted-foreground/60 bg-black/[0.03] px-3 py-1.5 rounded-full">
-        近日公開予定
-      </span>
-    </div>
-  );
-}
+// NAV_LABELS と ComingSoonPlaceholder は不要になったため削除済み
 
 export default function Home() {
   const viewport = useViewport();
@@ -702,9 +668,11 @@ export default function Home() {
               <ErrorBoundary label="サイト構築">
                 <SiteBuilderView />
               </ErrorBoundary>
-            ) : (
-              <ComingSoonPlaceholder navId={activeNav} />
-            )}
+            ) : activeNav === "seo" ? (
+              <ErrorBoundary label="SEO分析">
+                <SeoView />
+              </ErrorBoundary>
+            ) : null}
           </div>
         </main>
       </div>
@@ -730,10 +698,15 @@ function MobileHeader({
   onNewChat: () => void;
   activeNav: string;
 }) {
-  const label =
-    activeNav === "chat"
-      ? "ページ制作"
-      : NAV_LABELS[activeNav]?.title ?? activeNav;
+  const NAV_LABEL_MAP: Record<string, string> = {
+    chat: "ページ制作",
+    site: "サイト構築",
+    pages: "ページ管理",
+    seo: "SEO",
+    admin: "Intelligence",
+    settings: "設定",
+  };
+  const label = NAV_LABEL_MAP[activeNav] ?? activeNav;
 
   return (
     <div className="flex items-center justify-between h-12 px-4 bg-white/80 backdrop-blur-sm border-b border-border shrink-0">

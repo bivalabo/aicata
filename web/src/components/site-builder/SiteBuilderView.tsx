@@ -447,37 +447,137 @@ function AicataTemplateStatus({
 // 2. Global Elements Tab
 // ============================================================
 
+interface GlobalElementDef {
+  id: string;
+  icon: typeof Menu;
+  title: string;
+  description: string;
+  /** registry category for fetching templates */
+  category: string;
+}
+
+const GLOBAL_ELEMENTS: GlobalElementDef[] = [
+  {
+    id: "header",
+    icon: Menu,
+    title: "ヘッダー",
+    description: "ナビゲーション・ロゴ・検索バー・カート",
+    category: "navigation",
+  },
+  {
+    id: "footer",
+    icon: Layout,
+    title: "フッター",
+    description: "リンク・ニュースレター・SNSリンク",
+    category: "footer",
+  },
+  {
+    id: "navigation",
+    icon: ChevronRight,
+    title: "ナビゲーションメニュー",
+    description: "メインメニュー・モバイルメニュー構成",
+    category: "navigation",
+  },
+  {
+    id: "announcement",
+    icon: Type,
+    title: "アナウンスメントバー",
+    description: "セール告知・送料無料ラインなど",
+    category: "announcement",
+  },
+];
+
 function GlobalElementsTab() {
-  const globalElements = [
-    {
-      id: "header",
-      icon: Menu,
-      title: "ヘッダー",
-      description: "ナビゲーション・ロゴ・検索バー・カート",
-      status: "coming-soon" as const,
+  const [activeElement, setActiveElement] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<
+    Array<{ id: string; name: string; html: string; css?: string }>
+  >([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generated, setGenerated] = useState(false);
+
+  const handleElementClick = useCallback(
+    async (el: GlobalElementDef) => {
+      if (activeElement === el.id) {
+        setActiveElement(null);
+        setTemplates([]);
+        setSelectedTemplate(null);
+        setPreviewHtml(null);
+        return;
+      }
+      setActiveElement(el.id);
+      setSelectedTemplate(null);
+      setPreviewHtml(null);
+      setGenerated(false);
+
+      // Fetch templates from the registry API
+      setLoadingTemplates(true);
+      try {
+        const res = await fetch(
+          `/api/admin/design-registry?category=${el.category}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setTemplates(
+            (data.sections || []).map(
+              (s: { id: string; name: string; html?: string; css?: string }) => ({
+                id: s.id,
+                name: s.name,
+                html: s.html || "",
+                css: s.css || "",
+              })
+            )
+          );
+        }
+      } catch {
+        // If registry API fails, use template names from static list
+        setTemplates([]);
+      } finally {
+        setLoadingTemplates(false);
+      }
     },
-    {
-      id: "footer",
-      icon: Layout,
-      title: "フッター",
-      description: "リンク・ニュースレター・SNSリンク",
-      status: "coming-soon" as const,
+    [activeElement]
+  );
+
+  const handleSelectTemplate = useCallback(
+    (tpl: { id: string; html: string; css?: string }) => {
+      setSelectedTemplate(tpl.id);
+      setPreviewHtml(tpl.html);
+      setGenerated(false);
     },
-    {
-      id: "navigation",
-      icon: ChevronRight,
-      title: "ナビゲーションメニュー",
-      description: "メインメニュー・モバイルメニュー構成",
-      status: "coming-soon" as const,
-    },
-    {
-      id: "announcement",
-      icon: Type,
-      title: "アナウンスメントバー",
-      description: "セール告知・送料無料ラインなど",
-      status: "coming-soon" as const,
-    },
-  ];
+    []
+  );
+
+  const handleGenerate = useCallback(async () => {
+    if (!activeElement) return;
+    setGenerating(true);
+    setGenerated(false);
+    try {
+      // Use the section preview API to generate a customized version
+      const res = await fetch("/api/admin/section-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionId: selectedTemplate || activeElement,
+          customize: true,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.html) {
+          setPreviewHtml(data.html);
+        }
+      }
+      setGenerated(true);
+    } catch {
+      // Preview generation failed — keep existing preview
+      setGenerated(true);
+    } finally {
+      setGenerating(false);
+    }
+  }, [activeElement, selectedTemplate]);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -490,33 +590,158 @@ function GlobalElementsTab() {
           <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
             ヘッダー・フッターなど全ページに共通する要素を、
             Brand Memoryに基づいてAIがデザインします。
-            個別ページではなくストア全体の統一感を担う重要なパーツです。
+            テンプレートを選んでカスタマイズできます。
           </p>
         </div>
       </div>
 
       <div className="space-y-3">
-        {globalElements.map((el) => (
-          <div
-            key={el.id}
-            className="flex items-center gap-4 p-4 rounded-2xl border border-border/50 bg-white/60 backdrop-blur-sm hover:bg-white/80 transition-colors"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-              <el.icon className="w-5 h-5 text-gray-500" />
+        {GLOBAL_ELEMENTS.map((el) => {
+          const isActive = activeElement === el.id;
+          return (
+            <div key={el.id} className="space-y-0">
+              <button
+                onClick={() => handleElementClick(el)}
+                className={clsx(
+                  "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left",
+                  isActive
+                    ? "border-accent/40 bg-accent/5 shadow-sm"
+                    : "border-border/50 bg-white/60 backdrop-blur-sm hover:bg-white/80"
+                )}
+              >
+                <div
+                  className={clsx(
+                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                    isActive ? "bg-accent/10" : "bg-gray-100"
+                  )}
+                >
+                  <el.icon
+                    className={clsx(
+                      "w-5 h-5",
+                      isActive ? "text-accent" : "text-gray-500"
+                    )}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-semibold text-foreground">
+                    {el.title}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">
+                    {el.description}
+                  </p>
+                </div>
+                <ChevronRight
+                  className={clsx(
+                    "w-4 h-4 text-muted-foreground/40 transition-transform shrink-0",
+                    isActive && "rotate-90"
+                  )}
+                />
+              </button>
+
+              {/* Expanded panel */}
+              {isActive && (
+                <div className="mt-2 p-4 rounded-2xl border border-border/30 bg-white/80 space-y-4">
+                  {/* Template selector */}
+                  <div>
+                    <p className="text-[13px] font-medium text-foreground mb-2">
+                      テンプレートを選択
+                    </p>
+                    {loadingTemplates ? (
+                      <div className="flex items-center gap-2 py-3 text-muted-foreground text-[13px]">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        読み込み中...
+                      </div>
+                    ) : templates.length === 0 ? (
+                      <p className="text-[12px] text-muted-foreground py-2">
+                        テンプレートが見つかりません
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {templates.map((tpl) => (
+                          <button
+                            key={tpl.id}
+                            onClick={() => handleSelectTemplate(tpl)}
+                            className={clsx(
+                              "p-3 rounded-xl border text-left transition-all text-[13px]",
+                              selectedTemplate === tpl.id
+                                ? "border-accent bg-accent/5 font-medium"
+                                : "border-border/40 hover:border-accent/30 hover:bg-accent/[0.02]"
+                            )}
+                          >
+                            <span className="line-clamp-1">{tpl.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview area */}
+                  {previewHtml && (
+                    <div>
+                      <p className="text-[13px] font-medium text-foreground mb-2">
+                        プレビュー
+                      </p>
+                      <div className="rounded-xl border border-border/30 overflow-hidden bg-white">
+                        <iframe
+                          srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:system-ui,-apple-system,sans-serif;font-size:14px;overflow-x:hidden}</style></head><body>${previewHtml}</body></html>`}
+                          className="w-full border-0"
+                          style={{ height: "200px" }}
+                          sandbox="allow-same-origin"
+                          title="プレビュー"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleGenerate}
+                      disabled={generating}
+                      className={clsx(
+                        "flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium transition-colors",
+                        generated
+                          ? "bg-emerald-500 text-white"
+                          : "bg-accent text-white hover:bg-accent/90",
+                        generating && "opacity-70 cursor-wait"
+                      )}
+                    >
+                      {generating ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : generated ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <Zap className="w-4 h-4" />
+                      )}
+                      {generating
+                        ? "生成中..."
+                        : generated
+                          ? "生成完了"
+                          : selectedTemplate
+                            ? "カスタマイズ生成"
+                            : "AIで自動生成"}
+                    </button>
+                    {previewHtml && (
+                      <button
+                        onClick={() => {
+                          const el = document.createElement("textarea");
+                          el.value = previewHtml;
+                          document.body.appendChild(el);
+                          el.select();
+                          document.execCommand("copy");
+                          document.body.removeChild(el);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] text-muted-foreground border border-border/40 hover:bg-gray-50 transition-colors"
+                      >
+                        HTMLをコピー
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-semibold text-foreground">
-                {el.title}
-              </p>
-              <p className="text-[12px] text-muted-foreground mt-0.5">
-                {el.description}
-              </p>
-            </div>
-            <span className="text-[11px] text-muted-foreground/60 bg-black/[0.03] px-2.5 py-1 rounded-full shrink-0">
-              近日公開
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
