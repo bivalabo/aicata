@@ -443,75 +443,320 @@ function AicataTemplateStatus({
 // 2. Global Elements Tab
 // ============================================================
 
+interface ThemeLayoutData {
+  id?: string;
+  headerSectionId: string;
+  footerSectionId: string;
+  showAnnouncement: boolean;
+  announcementText: string;
+  announcementLink: string;
+  deployMode: string;
+}
+
+interface SectionOption {
+  id: string;
+  name: string;
+  nameJa: string;
+  description: string;
+}
+
 function GlobalElementsTab() {
-  const globalElements = [
-    {
-      id: "header",
-      icon: Menu,
-      title: "ヘッダー",
-      description: "ナビゲーション・ロゴ・検索バー・カート",
-      status: "coming-soon" as const,
-    },
-    {
-      id: "footer",
-      icon: Layout,
-      title: "フッター",
-      description: "リンク・ニュースレター・SNSリンク",
-      status: "coming-soon" as const,
-    },
-    {
-      id: "navigation",
-      icon: ChevronRight,
-      title: "ナビゲーションメニュー",
-      description: "メインメニュー・モバイルメニュー構成",
-      status: "coming-soon" as const,
-    },
-    {
-      id: "announcement",
-      icon: Type,
-      title: "アナウンスメントバー",
-      description: "セール告知・送料無料ラインなど",
-      status: "coming-soon" as const,
-    },
-  ];
+  const [themeLayout, setThemeLayout] = useState<ThemeLayoutData | null>(null);
+  const [headerOptions, setHeaderOptions] = useState<SectionOption[]>([]);
+  const [footerOptions, setFooterOptions] = useState<SectionOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+
+  // データ取得
+  useEffect(() => {
+    async function fetchLayout() {
+      try {
+        const res = await fetch("/api/theme-layout");
+        if (!res.ok) throw new Error("Failed to fetch");
+        const data = await res.json();
+        setHeaderOptions(data.headerOptions || []);
+        setFooterOptions(data.footerOptions || []);
+        if (data.themeLayout) {
+          setThemeLayout(data.themeLayout);
+        } else {
+          // デフォルト値
+          setThemeLayout({
+            headerSectionId: "nav-elegant-dropdown",
+            footerSectionId: "footer-elegant-columns",
+            showAnnouncement: false,
+            announcementText: "",
+            announcementLink: "",
+            deployMode: "full",
+          });
+        }
+      } catch {
+        // ストア未接続時のフォールバック
+        setThemeLayout({
+          headerSectionId: "nav-elegant-dropdown",
+          footerSectionId: "footer-elegant-columns",
+          showAnnouncement: false,
+          announcementText: "",
+          announcementLink: "",
+          deployMode: "full",
+        });
+        setHeaderOptions([
+          { id: "nav-elegant-dropdown", name: "Elegant Dropdown", nameJa: "エレガント ドロップダウン", description: "洗練されたドロップダウンメニュー" },
+          { id: "nav-minimal-sticky", name: "Minimal Sticky", nameJa: "ミニマル スティッキー", description: "追従するミニマルナビ" },
+          { id: "nav-mega-menu", name: "Mega Menu", nameJa: "メガメニュー", description: "3段階メガメニュー" },
+          { id: "nav-transparent-overlay", name: "Transparent Overlay", nameJa: "トランスペアレント", description: "透明オーバーレイナビ" },
+          { id: "nav-category-tabs", name: "Category Tabs", nameJa: "カテゴリータブ", description: "カテゴリタブバー" },
+          { id: "nav-side-drawer", name: "Side Drawer", nameJa: "サイドドロワー", description: "サイドパネルナビ" },
+        ]);
+        setFooterOptions([
+          { id: "footer-elegant-columns", name: "Elegant Columns", nameJa: "エレガント カラム", description: "複数カラムフッター" },
+          { id: "footer-minimal-centered", name: "Minimal Centered", nameJa: "ミニマル センター", description: "中央揃えフッター" },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchLayout();
+  }, []);
+
+  // 保存
+  const handleSave = useCallback(async () => {
+    if (!themeLayout) return;
+    setSaving(true);
+    setSaveMessage("");
+    try {
+      const method = themeLayout.id ? "PUT" : "POST";
+      const res = await fetch("/api/theme-layout", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(themeLayout),
+      });
+      if (!res.ok) {
+        // POST で 409 (既存) の場合は PUT にフォールバック
+        if (res.status === 409) {
+          const fallbackRes = await fetch("/api/theme-layout", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(themeLayout),
+          });
+          if (fallbackRes.ok) {
+            const data = await fallbackRes.json();
+            setThemeLayout(data.themeLayout);
+            setSaveMessage("保存しました");
+            return;
+          }
+        }
+        throw new Error("Save failed");
+      }
+      const data = await res.json();
+      setThemeLayout(data.themeLayout);
+      setSaveMessage("保存しました");
+    } catch {
+      setSaveMessage("保存に失敗しました");
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMessage(""), 3000);
+    }
+  }, [themeLayout]);
+
+  const updateLayout = (updates: Partial<ThemeLayoutData>) => {
+    setThemeLayout((prev) => prev ? { ...prev, ...updates } : null);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl space-y-6">
+      {/* 説明ヘッダー */}
       <div className="flex items-start gap-3 p-4 rounded-2xl bg-accent/5 border border-accent/10">
         <Zap className="w-5 h-5 text-accent mt-0.5 shrink-0" />
         <div>
           <p className="text-[14px] font-medium text-foreground">
-            グローバル要素のAIデザイン
+            グローバル要素の管理
           </p>
           <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
-            ヘッダー・フッターなど全ページに共通する要素を、
-            Brand Memoryに基づいてAIがデザインします。
-            個別ページではなくストア全体の統一感を担う重要なパーツです。
+            ヘッダー・フッター・アナウンスメントバーは全ページに共通する要素です。
+            ここで選択した設定はShopifyのテーマエディターからも編集可能です。
           </p>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {globalElements.map((el) => (
-          <div
-            key={el.id}
-            className="flex items-center gap-4 p-4 rounded-2xl border border-border/50 bg-white/60 backdrop-blur-sm hover:bg-white/80 transition-colors"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-              <el.icon className="w-5 h-5 text-gray-500" />
+      {/* ── ヘッダー選択 ── */}
+      <SectionPicker
+        label="ヘッダー"
+        sublabel="ナビゲーション・ロゴ・検索・カート"
+        icon={Menu}
+        options={headerOptions}
+        selectedId={themeLayout?.headerSectionId || ""}
+        onSelect={(id) => updateLayout({ headerSectionId: id })}
+      />
+
+      {/* ── フッター選択 ── */}
+      <SectionPicker
+        label="フッター"
+        sublabel="リンク・ニュースレター・SNS・決済アイコン"
+        icon={Layout}
+        options={footerOptions}
+        selectedId={themeLayout?.footerSectionId || ""}
+        onSelect={(id) => updateLayout({ footerSectionId: id })}
+      />
+
+      {/* ── アナウンスメントバー ── */}
+      <div className="p-4 rounded-2xl border border-border/50 bg-white/60 backdrop-blur-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+              <Type className="w-5 h-5 text-amber-600" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-semibold text-foreground">
-                {el.title}
-              </p>
-              <p className="text-[12px] text-muted-foreground mt-0.5">
-                {el.description}
-              </p>
+            <div>
+              <p className="text-[14px] font-semibold text-foreground">アナウンスメントバー</p>
+              <p className="text-[12px] text-muted-foreground">セール告知・送料無料ライン等</p>
             </div>
-            <span className="text-[11px] text-muted-foreground/60 bg-black/[0.03] px-2.5 py-1 rounded-full shrink-0">
-              近日公開
-            </span>
           </div>
+          <button
+            onClick={() => updateLayout({ showAnnouncement: !themeLayout?.showAnnouncement })}
+            className={clsx(
+              "relative w-11 h-6 rounded-full transition-colors",
+              themeLayout?.showAnnouncement ? "bg-accent" : "bg-gray-200",
+            )}
+          >
+            <span
+              className={clsx(
+                "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform",
+                themeLayout?.showAnnouncement ? "left-[22px]" : "left-0.5",
+              )}
+            />
+          </button>
+        </div>
+
+        {themeLayout?.showAnnouncement && (
+          <div className="space-y-2 pt-2 border-t border-border/30">
+            <input
+              type="text"
+              placeholder="例: 全品送料無料キャンペーン実施中！"
+              value={themeLayout?.announcementText || ""}
+              onChange={(e) => updateLayout({ announcementText: e.target.value })}
+              className="w-full px-3 py-2 text-[13px] rounded-lg border border-border/50 bg-white focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/40"
+            />
+            <input
+              type="text"
+              placeholder="リンクURL（任意）"
+              value={themeLayout?.announcementLink || ""}
+              onChange={(e) => updateLayout({ announcementLink: e.target.value })}
+              className="w-full px-3 py-2 text-[13px] rounded-lg border border-border/50 bg-white focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/40"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ── デプロイモード ── */}
+      <div className="p-4 rounded-2xl border border-border/50 bg-white/60 backdrop-blur-sm space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+            <Shield className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-foreground">デプロイモード</p>
+            <p className="text-[12px] text-muted-foreground">Shopifyテーマへの反映方式</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { id: "full", label: "フル", desc: "theme.liquid含む" },
+            { id: "inject", label: "インジェクト", desc: "セクション追加のみ" },
+            { id: "template", label: "テンプレート", desc: "ページ単位" },
+          ].map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => updateLayout({ deployMode: mode.id })}
+              className={clsx(
+                "p-3 rounded-xl border text-left transition-all",
+                themeLayout?.deployMode === mode.id
+                  ? "border-accent bg-accent/5 ring-1 ring-accent/20"
+                  : "border-border/50 bg-white hover:bg-gray-50",
+              )}
+            >
+              <p className="text-[13px] font-medium">{mode.label}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{mode.desc}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 保存ボタン ── */}
+      <div className="flex items-center gap-3 pt-2">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2.5 text-[13px] font-medium text-white bg-accent hover:bg-accent/90 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+          {saving ? "保存中..." : "設定を保存"}
+        </button>
+        {saveMessage && (
+          <span className={clsx(
+            "text-[13px]",
+            saveMessage.includes("失敗") ? "text-red-500" : "text-green-600",
+          )}>
+            {saveMessage}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ヘッダー/フッター選択コンポーネント
+ */
+function SectionPicker({
+  label,
+  sublabel,
+  icon: Icon,
+  options,
+  selectedId,
+  onSelect,
+}: {
+  label: string;
+  sublabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  options: SectionOption[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="p-4 rounded-2xl border border-border/50 bg-white/60 backdrop-blur-sm space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
+          <Icon className="w-5 h-5 text-violet-600" />
+        </div>
+        <div>
+          <p className="text-[14px] font-semibold text-foreground">{label}</p>
+          <p className="text-[12px] text-muted-foreground">{sublabel}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => onSelect(opt.id)}
+            className={clsx(
+              "p-3 rounded-xl border text-left transition-all",
+              selectedId === opt.id
+                ? "border-accent bg-accent/5 ring-1 ring-accent/20"
+                : "border-border/50 bg-white hover:bg-gray-50",
+            )}
+          >
+            <p className="text-[13px] font-medium text-foreground">{opt.nameJa}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{opt.description}</p>
+          </button>
         ))}
       </div>
     </div>

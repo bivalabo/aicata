@@ -110,6 +110,8 @@ export interface DDPNextInput {
   };
   /** ユーザーのDesign DNA（学習済みの場合） */
   userDNA?: DesignDNAPreferences;
+  /** ストアID（ThemeLayout取得用） */
+  storeId?: string;
 }
 
 /** Phase 1: 意図解析結果 */

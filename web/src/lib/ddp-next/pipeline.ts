@@ -24,6 +24,31 @@ import {
   cleanupRemainingPlaceholders,
   setCleanupIndustry,
 } from "./personalizer";
+import { prisma } from "@/lib/db";
+
+// ── ThemeLayout → Assembly Options ──
+interface ThemeLayoutOptions {
+  headerSectionId?: string;
+  footerSectionId?: string;
+  skipHeaderFooter?: boolean;
+}
+
+async function fetchThemeLayoutOptions(storeId?: string): Promise<ThemeLayoutOptions> {
+  if (!storeId) return {};
+  try {
+    const themeLayout = await prisma.themeLayout.findFirst({
+      where: { storeId },
+    });
+    if (!themeLayout) return {};
+    return {
+      headerSectionId: themeLayout.headerSectionId,
+      footerSectionId: themeLayout.footerSectionId,
+    };
+  } catch (err) {
+    console.warn("[DDP Next] ThemeLayout fetch failed, using defaults:", err);
+    return {};
+  }
+}
 
 // ============================================================
 // Progress Callback
@@ -133,6 +158,15 @@ export async function runDDPNextPipeline(
     throw err;
   }
 
+  // ── Phase 2.5: ThemeLayout取得（DB読み取り、<50ms）──
+  const layoutOptions = await fetchThemeLayoutOptions(input.storeId);
+  if (layoutOptions.headerSectionId || layoutOptions.footerSectionId) {
+    console.log("[DDP Next] ThemeLayout loaded:", {
+      header: layoutOptions.headerSectionId,
+      footer: layoutOptions.footerSectionId,
+    });
+  }
+
   // ── Phase 3: Page Assembly（決定的、<5ms）──
   onProgress?.({
     phase: "assemble",
@@ -143,7 +177,7 @@ export async function runDDPNextPipeline(
   const t3 = performance.now();
   let assembled: AssembledPage;
   try {
-    assembled = assembleComposedPage(plan);
+    assembled = assembleComposedPage(plan, layoutOptions);
     timing.assembly = performance.now() - t3;
 
     console.log("[DDP Next] Phase 3 complete:", {
@@ -256,15 +290,16 @@ export async function runDDPNextPipeline(
  * DDP Next パイプラインを軽量実行（Phase 4スキップ）
  * プレビュー用 — テンプレートHTML + フォールバックコピーのみ
  */
-export function runDDPNextPreview(input: DDPNextInput): {
+export async function runDDPNextPreview(input: DDPNextInput): Promise<{
   intent: IntentAnalysis;
   plan: CompositionPlan;
   assembled: AssembledPage;
   preview: PersonalizedPage;
-} {
+}> {
   const intent = analyzeIntent(input);
   const plan = composePagePlan(intent);
-  const assembled = assembleComposedPage(plan);
+  const layoutOptions = await fetchThemeLayoutOptions(input.storeId);
+  const assembled = assembleComposedPage(plan, layoutOptions);
   const preview = personalizeContentFallback(
     assembled,
     intent.contentRequirements,

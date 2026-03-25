@@ -21,6 +21,10 @@ import type {
   SectionCategory,
   DesignTokenSet,
 } from "@/lib/design-engine/types";
+
+// ── デフォルトヘッダー/フッター（ThemeLayout未設定時のプレビュー用）──
+const DEFAULT_HEADER_SECTION = "nav-elegant-dropdown";
+const DEFAULT_FOOTER_SECTION = "footer-elegant-columns";
 import type {
   IntentAnalysis,
   CompositionPlan,
@@ -293,17 +297,76 @@ function buildReasons(
  * Phase 3: 選定されたコンポーネントからページを組み立てる
  * AI不使用 — 完全に決定的
  */
-export function assembleComposedPage(plan: CompositionPlan): AssembledPage {
+export function assembleComposedPage(
+  plan: CompositionPlan,
+  options?: {
+    headerSectionId?: string;
+    footerSectionId?: string;
+    skipHeaderFooter?: boolean;
+  },
+): AssembledPage {
   // page-assembler の assemblePage を使用（font links + reset CSS + token CSS + sections を結合）
   const result = assemblePage(plan.template);
 
-  // assembleFullHtml でフルHTML文書を生成
-  const fullDocument = assembleFullHtml(plan.template);
+  // ── 3ゾーン構築: ヘッダー + コンテンツ + フッター ──
+  const headerSectionId = options?.headerSectionId || DEFAULT_HEADER_SECTION;
+  const footerSectionId = options?.footerSectionId || DEFAULT_FOOTER_SECTION;
+  const skipGlobal = options?.skipHeaderFooter || false;
+
+  let headerHtml = "";
+  let headerCss = "";
+  let footerHtml = "";
+  let footerCss = "";
+
+  if (!skipGlobal) {
+    const headerSection = getSectionById(headerSectionId);
+    if (headerSection) {
+      headerHtml = headerSection.html;
+      headerCss = headerSection.css;
+    }
+    const footerSection = getSectionById(footerSectionId);
+    if (footerSection) {
+      footerHtml = footerSection.html;
+      footerCss = footerSection.css;
+    }
+  }
+
+  // 3ゾーン統合HTML
+  const zoneHtml = `${headerHtml}
+
+${result.html}
+
+${footerHtml}`;
+
+  const zoneCss = `${result.css}
+
+/* === Header Zone === */
+${headerCss}
+
+/* === Footer Zone === */
+${footerCss}`;
+
+  // assembleFullHtml でベースを生成し、ヘッダー/フッターを組み込んだバージョンを構築
+  const baseFullDocument = assembleFullHtml(plan.template);
+
+  // ヘッダー/フッターをフルドキュメントに挿入
+  let fullDocument: string;
+  if (!skipGlobal && (headerHtml || footerHtml)) {
+    // baseFullDocument の本体部分をゾーン付きHTMLに差し替え
+    fullDocument = baseFullDocument
+      .replace(result.html, zoneHtml)
+      .replace(
+        "</style>",
+        `/* === Header Zone === */\n${headerCss}\n/* === Footer Zone === */\n${footerCss}\n</style>`,
+      );
+  } else {
+    fullDocument = baseFullDocument;
+  }
 
   // プレースホルダー一覧を抽出（{{BRAND_NAME}} 形式）
   const placeholderRegex = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
   const placeholders: string[] = [];
-  const combined = result.html + result.css;
+  const combined = zoneHtml + zoneCss;
   let match;
   while ((match = placeholderRegex.exec(combined)) !== null) {
     if (!placeholders.includes(match[0])) {
@@ -312,13 +375,13 @@ export function assembleComposedPage(plan: CompositionPlan): AssembledPage {
   }
 
   return {
-    html: result.html,
-    css: result.css,
+    html: zoneHtml,
+    css: zoneCss,
     fullDocument,
     placeholders,
     meta: {
       templateId: plan.template.id,
-      sectionCount: plan.sections.length,
+      sectionCount: plan.sections.length + (headerHtml ? 1 : 0) + (footerHtml ? 1 : 0),
       fontLinks: "",  // assembleFullHtml に含まれる
     },
   };

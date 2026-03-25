@@ -202,6 +202,32 @@ export default function SiteMapView({
   const handleDeploy = async (pageId: string) => {
     setDeploying(pageId);
     try {
+      // ── Pre-deploy 互換性チェック ──
+      const checkRes = await fetch("/api/shopify/compatibility-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId }),
+      });
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.summary && !checkData.summary.passed) {
+          const errorCount = checkData.summary.errorCount || 0;
+          const warningCount = checkData.summary.warningCount || 0;
+          const proceed = confirm(
+            `互換性チェックで問題が検出されました。\nエラー: ${errorCount}件 / 警告: ${warningCount}件\n\nデプロイを続行しますか？`,
+          );
+          if (!proceed) {
+            setDeploying(null);
+            return;
+          }
+        } else if (checkData.summary?.warningCount > 0) {
+          showToast(
+            `互換性チェック: 警告 ${checkData.summary.warningCount}件（デプロイ続行）`,
+          );
+        }
+      }
+
+      // ── デプロイ実行 ──
       const res = await fetch("/api/shopify/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -217,6 +217,16 @@ export async function POST(request: Request) {
                 mergedTones,
               });
 
+              // ストアIDを取得（ThemeLayout連携用）
+              let storeId: string | undefined;
+              try {
+                const store = await prisma.store.findFirst({
+                  orderBy: { updatedAt: "desc" },
+                  select: { id: true },
+                });
+                storeId = store?.id;
+              } catch { /* non-fatal */ }
+
               const ddpNextInput: DDPNextInput = {
                 pageType: (pageType || detectPageType(latestUserText)) as any,
                 industry: resolvedIndustry as any,
@@ -226,6 +236,7 @@ export async function POST(request: Request) {
                 userInstructions: latestUserText,
                 referenceUrl: urlAnalysis?.url,
                 urlAnalysis: urlAnalysis || undefined,
+                storeId,
               };
 
               // Brand Memory 統合
