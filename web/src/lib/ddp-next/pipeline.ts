@@ -24,6 +24,7 @@ import {
   cleanupRemainingPlaceholders,
   setCleanupIndustry,
 } from "./personalizer";
+import { fineTunePage } from "./fine-tuner";
 import { prisma } from "@/lib/db";
 
 // ── ThemeLayout → Assembly Options ──
@@ -246,6 +247,32 @@ export async function runDDPNextPipeline(
   setCleanupIndustry(intent.contentRequirements.industry || input.industry || "general");
   personalized.fullDocument = cleanupRemainingPlaceholders(personalized.fullDocument);
 
+  // ── Phase 5: Fine-tuning & Brand Fit（決定的、<5ms）──
+  onProgress?.({
+    phase: "personalize", // UIでは「パーソナライズ」の続きとして表示
+    message: "ブランドに合わせた最終調整をしています...",
+    progress: 90,
+  });
+
+  const t5 = performance.now();
+  const fineTuned = fineTunePage({
+    fullDocument: personalized.fullDocument,
+    requirements: intent.contentRequirements,
+    brandMemory: input.brandMemory ? {
+      colors: input.brandMemory.colors,
+      fonts: input.brandMemory.fonts,
+    } : undefined,
+  });
+  personalized.fullDocument = fineTuned.fullDocument;
+
+  if (fineTuned.adjustments.length > 0) {
+    console.log("[DDP Next] Phase 5 complete:", {
+      adjustments: fineTuned.adjustments.length,
+      details: fineTuned.adjustments.map((a) => `${a.variable}: ${a.from} → ${a.to}`),
+      ms: Math.round(performance.now() - t5),
+    });
+  }
+
   // ── 完了 ──
   timing.total = performance.now() - totalStart;
   tokenUsage.total = tokenUsage.intentAnalysis + tokenUsage.personalization;
@@ -306,4 +333,90 @@ export async function runDDPNextPreview(input: DDPNextInput): Promise<{
   );
 
   return { intent, plan, assembled, preview };
+}
+
+/**
+ * 3パターンプレビュー生成
+ *
+ * 仕様: DNA座標に最も近い3つのテンプレートで、
+ * ヒーローセクションのみを高速プレビュー生成（AI不使用）
+ *
+ * ユーザーが1つを選択 → その後フルパイプラインで完成
+ */
+export async function generateThreePatternPreview(
+  input: DDPNextInput,
+): Promise<{
+  intent: IntentAnalysis;
+  previews: Array<{
+    templateId: string;
+    templateName: string;
+    score: number;
+    heroHtml: string;
+    fullDocument: string;
+    designTokens: Record<string, string>;
+  }>;
+}> {
+  const intent = analyzeIntent(input);
+
+  // Phase 2を3回実行（上位3テンプレートを取得）
+  const { composeTopNPlans } = await import("./composer");
+  const plans = composeTopNPlans(intent, 3);
+
+  const layoutOptions = await fetchThemeLayoutOptions(input.storeId);
+
+  const previews = plans.map((plan) => {
+    // Phase 3: 各テンプレートで組立
+    const assembled = assembleComposedPage(plan, layoutOptions);
+
+    // Phase 4 (fallback): ブランド名だけ置換
+    const preview = personalizeContentFallback(
+      assembled,
+      intent.contentRequirements,
+    );
+
+    // ヒーローセクションのHTMLを抽出
+    const heroHtml = extractHeroSection(preview.fullDocument);
+
+    // デザイントークンを抽出
+    const designTokens = extractDesignTokens(assembled.css);
+
+    return {
+      templateId: plan.template.id,
+      templateName: plan.template.name || plan.template.id,
+      score: plan.templateScore,
+      heroHtml,
+      fullDocument: preview.fullDocument,
+      designTokens,
+    };
+  });
+
+  return { intent, previews };
+}
+
+// ── Helper: ヒーローセクション抽出 ──
+
+function extractHeroSection(html: string): string {
+  // data-section-type="hero" または最初のセクションを抽出
+  const heroRegex = /<(?:section|div)[^>]*data-section-(?:type|id)="[^"]*hero[^"]*"[^>]*>[\s\S]*?<\/(?:section|div)>/i;
+  const match = html.match(heroRegex);
+  if (match) return match[0];
+
+  // フォールバック: 最初の<section>タグ
+  const sectionRegex = /<section[^>]*>[\s\S]*?<\/section>/i;
+  const sectionMatch = html.match(sectionRegex);
+  return sectionMatch ? sectionMatch[0] : "";
+}
+
+// ── Helper: デザイントークン抽出 ──
+
+function extractDesignTokens(css: string): Record<string, string> {
+  const tokens: Record<string, string> = {};
+  const varRegex = /--(aicata-)?(?:color|font)-[\w-]+\s*:\s*([^;]+)/g;
+  let match;
+  while ((match = varRegex.exec(css)) !== null) {
+    const fullMatch = match[0];
+    const [name, value] = fullMatch.split(":").map((s) => s.trim());
+    tokens[name] = value;
+  }
+  return tokens;
 }

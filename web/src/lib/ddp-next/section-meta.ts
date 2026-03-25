@@ -440,5 +440,32 @@ export function getSectionMetaByCategory(category: SectionCategory): SectionMeta
     .sort((a, b) => computeHQSComposite(b.hqs) - computeHQSComposite(a.hqs));
 }
 
+/**
+ * セクションメタを更新（EMA更新結果の反映用）
+ * メモリ内のMETA_MAPを直接書き換える（サーバーレス環境ではリクエスト間で永続しない）
+ */
+export function updateSectionMeta(
+  sectionId: string,
+  updates: Partial<Omit<SectionMeta, "sectionId">>,
+): boolean {
+  const existing = META_MAP.get(sectionId);
+  if (!existing) return false;
+
+  const updated = { ...existing, ...updates };
+  META_MAP.set(sectionId, updated);
+
+  // SECTION_META_LIST も更新
+  const idx = SECTION_META_LIST.findIndex((m) => m.sectionId === sectionId);
+  if (idx >= 0) {
+    SECTION_META_LIST[idx] = updated;
+  }
+
+  return true;
+}
+
+/** Alias exports for cross-module compatibility */
+export const getAllSectionMetas = getAllSectionMeta;
+export const getSectionsByCategory = getSectionMetaByCategory;
+
 // Import for computeHQSComposite
 import { computeHQSComposite } from "./types";

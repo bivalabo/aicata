@@ -113,6 +113,51 @@ export function composePagePlan(
   };
 }
 
+/**
+ * 上位N件のテンプレートでCompositionPlanを生成（3パターンプレビュー用）
+ */
+export function composeTopNPlans(
+  intent: IntentAnalysis,
+  n: number,
+): CompositionPlan[] {
+  const { targetDNA, contentRequirements } = intent;
+  const { industry, pageType, tones } = contentRequirements;
+
+  const templates = getAllTemplates();
+  let scored = templates
+    .filter((t) => {
+      if (t.pageType === pageType) return true;
+      if (pageType === "landing" && t.pageType === "general") return true;
+      if (pageType === "general" && t.pageType === "landing") return true;
+      return false;
+    })
+    .map((template) => ({
+      template,
+      score: scoreTemplate(template, targetDNA, industry, tones),
+    }))
+    .sort((a, b) => b.score.total - a.score.total);
+
+  if (scored.length === 0) {
+    scored = templates
+      .map((template) => ({
+        template,
+        score: scoreTemplate(template, targetDNA, industry, tones),
+      }))
+      .sort((a, b) => b.score.total - a.score.total);
+  }
+
+  return scored.slice(0, n).map((entry) => {
+    const sections = resolveSections(entry.template, targetDNA, pageType);
+    return {
+      template: entry.template,
+      templateScore: entry.score.total,
+      reasons: buildReasons(entry.score, entry.template),
+      sections,
+      designTokens: entry.template.designTokens,
+    };
+  });
+}
+
 /** テンプレートのスコアリング */
 interface TemplateScoreBreakdown {
   total: number;
