@@ -543,11 +543,11 @@ export const COLLECTION_FILTER_SIDEBAR: SectionTemplate = {
       font-family: var(--font-body);
       font-size: 0.9rem;
       font-weight: 600;
-      border: 1px solid var(--border-color);
+      border: 1px solid var(--color-border, #e5e5e5);
       border-radius: 4px;
       cursor: pointer;
       transition: var(--transition);
-      background-color: white;
+      background-color: var(--color-bg, #fff);
     }
 
     .collection-filter-sidebar__size-label:hover {

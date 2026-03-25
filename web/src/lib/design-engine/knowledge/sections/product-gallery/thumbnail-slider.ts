@@ -40,7 +40,7 @@ export const PRODUCT_GALLERY_THUMBNAIL_SLIDER: SectionTemplate = {
               data-index="3"
               style="display: none;"
             />
-            <div class="product-gallery-thumbnail-slider__zoom-indicator">
+            <div class="product-gallery-thumbnail-slider__zoom-indicator" aria-label="Zoom in to see more detail">
               <span class="product-gallery-thumbnail-slider__zoom-text">Hover to zoom</span>
             </div>
           </div>

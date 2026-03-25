@@ -981,6 +981,45 @@ function buildGlobalCss(): string {
 @layer aicata-base, aicata-sections;
 
 @layer aicata-base {
+  /* ── Fallback Design Tokens ── */
+  /* Ensures sections render correctly even when template-specific tokens are missing */
+  :root {
+    --color-bg: var(--aicata-color-bg, #ffffff);
+    --color-text: var(--aicata-color-text, #1a1a1a);
+    --color-accent: var(--aicata-color-accent, #2563eb);
+    --color-muted: var(--aicata-color-muted, #6b7280);
+    --color-border: var(--aicata-color-border, #e5e7eb);
+    --color-surface: var(--aicata-color-surface, #f3f4f6);
+    --color-button-text: var(--aicata-color-button-text, #ffffff);
+    --font-heading: var(--aicata-font-heading, "Inter", "Noto Sans JP", sans-serif);
+    --font-body: var(--aicata-font-body, "Inter", "Noto Sans JP", sans-serif);
+    --font-accent: var(--aicata-font-accent, "Inter", sans-serif);
+    --section-padding: var(--aicata-section-padding, clamp(40px, 6vw, 100px));
+    --section-padding-sm: var(--aicata-section-padding-sm, clamp(24px, 4vw, 60px));
+    --gap-lg: var(--aicata-gap-lg, clamp(24px, 3vw, 48px));
+    --gap-md: var(--aicata-gap-md, clamp(16px, 2vw, 32px));
+    --gap-sm: var(--aicata-gap-sm, clamp(8px, 1vw, 16px));
+    --content-max: var(--aicata-content-max, 1200px);
+    --content-narrow: var(--aicata-content-narrow, 800px);
+    --ease-default: var(--aicata-ease-default, cubic-bezier(0.25, 0.1, 0.25, 1));
+    --ease-out: var(--aicata-ease-out, cubic-bezier(0, 0, 0.2, 1));
+    --duration-slow: var(--aicata-duration-slow, 0.4s);
+    --duration-default: var(--aicata-duration-default, 0.2s);
+    --duration-fast: var(--aicata-duration-fast, 0.1s);
+  }
+
+  /* ── Global Reduced Motion ── */
+  @media (prefers-reduced-motion: reduce) {
+    .aicata-section *,
+    .aicata-section *::before,
+    .aicata-section *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   /* ── Aicata Section Reset ── */
   .aicata-section {
     box-sizing: border-box;

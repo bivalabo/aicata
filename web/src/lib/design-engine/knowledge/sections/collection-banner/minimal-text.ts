@@ -57,7 +57,7 @@ export const COLLECTION_BANNER_MINIMAL_TEXT: SectionTemplate = {
       --padding-vertical: clamp(2rem, 6vh, 4rem);
       --padding-horizontal: clamp(1.5rem, 5vw, 3rem);
       --border-width: 1px;
-      --border-color: #e5e5e5;
+      --border-color: var(--color-border, #e5e5e5);
     }
 
     .collection-banner-minimal-text__wrapper {
@@ -125,6 +125,15 @@ export const COLLECTION_BANNER_MINIMAL_TEXT: SectionTemplate = {
       to {
         opacity: 1;
         transform: translateX(0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .collection-banner-minimal-text__title,
+      .collection-banner-minimal-text__subtitle,
+      .collection-banner-minimal-text__border {
+        animation: none !important;
+        opacity: 1;
       }
     }
   `,

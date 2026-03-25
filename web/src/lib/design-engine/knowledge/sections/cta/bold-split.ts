@@ -39,6 +39,12 @@ const CTA_BOLD_SPLIT: SectionTemplate = {
   overflow: hidden;
 }
 
+@media (max-width: 767px) {
+  .cta-bold-split__container {
+    gap: 24px !important;
+  }
+}
+
 .cta-bold-split__background {
   position: absolute;
   top: 0;
@@ -55,16 +61,16 @@ const CTA_BOLD_SPLIT: SectionTemplate = {
 }
 
 .cta-bold-split__shape--1 {
-  width: 400px;
-  height: 400px;
+  width: max(200px, 400px);
+  height: max(200px, 400px);
   top: -100px;
   right: -100px;
   background: radial-gradient(circle, var(--color-accent), transparent);
 }
 
 .cta-bold-split__shape--2 {
-  width: 300px;
-  height: 300px;
+  width: max(150px, 300px);
+  height: max(150px, 300px);
   bottom: -80px;
   right: 20%;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.3), transparent);

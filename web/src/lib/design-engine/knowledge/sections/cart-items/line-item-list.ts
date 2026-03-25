@@ -294,7 +294,7 @@ const CART_ITEMS_LINE_LIST: SectionTemplate = {
 /* Mobile */
 @media (max-width: 640px) {
   .cart-items-line-list__item {
-    grid-template-columns: 70px 1fr auto;
+    grid-template-columns: 70px 1fr auto auto;
     gap: 1rem;
   }
 
@@ -304,11 +304,16 @@ const CART_ITEMS_LINE_LIST: SectionTemplate = {
   }
 
   .cart-items-line-list__quantity {
-    display: none;
+    width: 90px;
+    font-size: 0.9rem;
+  }
+
+  .cart-items-line-list__qty-input {
+    width: 30px;
   }
 
   .cart-items-line-list__price {
-    min-width: auto;
+    min-width: 70px;
   }
 
   .cart-items-line-list__item-title {

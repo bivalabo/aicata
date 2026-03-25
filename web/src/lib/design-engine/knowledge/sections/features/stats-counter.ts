@@ -37,7 +37,7 @@ const FEATURES_STATS_COUNTER: SectionTemplate = {
 .features-stats-counter {
   width: 100%;
   padding: 60px 20px;
-  background: linear-gradient(135deg, var(--color-bg) 0%, var(--color-surface) 100%);
+  background: linear-gradient(135deg, var(--color-bg) 0%, var(--color-surface, #f5f5f5) 100%);
   color: var(--color-text);
 }
 

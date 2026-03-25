@@ -181,6 +181,14 @@ const HERO_FULLSCREEN_VISUAL: SectionTemplate = {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .hero-fullscreen-visual__scroll-indicator,
+  .hero-fullscreen-visual * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 @media (min-width: 768px) {
   .hero-fullscreen-visual__heading {
     font-size: 56px;

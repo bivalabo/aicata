@@ -103,6 +103,18 @@ const ANNOUNCEMENT_TOP_BAR: SectionTemplate = {
   opacity: 1;
 }
 
+.announcement-top-bar__link:focus-visible {
+  outline: 2px solid var(--color-bg);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.announcement-top-bar__close:focus-visible {
+  outline: 2px solid var(--color-bg);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .announcement-top-bar__close {
   position: absolute;
   top: 50%;

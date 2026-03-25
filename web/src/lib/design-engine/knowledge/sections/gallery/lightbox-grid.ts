@@ -174,6 +174,15 @@ const GALLERY_LIGHTBOX_GRID: SectionTemplate = {
   }
 }
 
+@media (max-width: 480px) {
+  .gallery-lightbox-grid__grid {
+    grid-template-columns: 1fr !important;
+  }
+  .gallery-lightbox-grid__item--span-2 {
+    grid-column: span 1;
+  }
+}
+
 @media (min-width: 1024px) {
   .gallery-lightbox-grid {
     padding: 100px 60px;
