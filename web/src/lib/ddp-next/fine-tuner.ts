@@ -466,33 +466,45 @@ function parseColor(color: string): [number, number, number] {
     const r = parseInt(hex[0] + hex[0], 16);
     const g = parseInt(hex[1] + hex[1], 16);
     const b = parseInt(hex[2] + hex[2], 16);
+    // Guard against NaN from invalid hex
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return [0, 0, 0];
     return [r, g, b];
   }
   if (hex.length >= 6) {
     const r = parseInt(hex.slice(0, 2), 16);
     const g = parseInt(hex.slice(2, 4), 16);
     const b = parseInt(hex.slice(4, 6), 16);
+    // Guard against NaN from invalid hex
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return [0, 0, 0];
     return [r, g, b];
   }
   return [0, 0, 0];
 }
 
 function relativeLuminance([r, g, b]: [number, number, number]): number {
+  // Guard against invalid RGB values
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return 0.5;
+
   const sR = r / 255;
   const sG = g / 255;
   const sB = b / 255;
   const R = sR <= 0.03928 ? sR / 12.92 : Math.pow((sR + 0.055) / 1.055, 2.4);
   const G = sG <= 0.03928 ? sG / 12.92 : Math.pow((sG + 0.055) / 1.055, 2.4);
   const B = sB <= 0.03928 ? sB / 12.92 : Math.pow((sB + 0.055) / 1.055, 2.4);
-  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  // Guard against NaN result
+  return isNaN(luminance) ? 0.5 : luminance;
 }
 
 function computeContrastRatio(color1: string, color2: string): number {
   const l1 = relativeLuminance(parseColor(color1));
   const l2 = relativeLuminance(parseColor(color2));
+  // Guard against NaN luminance values
+  if (isNaN(l1) || isNaN(l2)) return 4.5; // Default safe contrast ratio
   const lighter = Math.max(l1, l2);
   const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
+  const ratio = (lighter + 0.05) / (darker + 0.05);
+  return isNaN(ratio) ? 4.5 : ratio;
 }
 
 function estimateSaturation(color: string): number {

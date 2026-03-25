@@ -13,6 +13,7 @@ import { saveMessage } from "@/lib/services/conversation-service";
 import { runDDP } from "@/lib/ddp";
 import type { DDPInput } from "@/lib/ddp";
 import { prisma } from "@/lib/db";
+import { ChatStreamInputSchema, parseBody } from "@/lib/api-validators";
 
 // Next.js Route Segment Config — allow long-running streaming responses
 export const maxDuration = 300; // 5 minutes
@@ -105,15 +106,10 @@ class SSEWriter {
 
 export async function POST(request: Request) {
   try {
-    const { messages, conversationId, pageType, urlAnalysis } =
-      await request.json();
-
-    if (!messages || !Array.isArray(messages)) {
-      return new Response(
-        JSON.stringify({ error: "メッセージが必要です" }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
-    }
+    const rawBody = await request.json();
+    const parsed = parseBody(ChatStreamInputSchema, rawBody);
+    if (!parsed.success) return parsed.response;
+    const { messages, conversationId, pageType, urlAnalysis } = parsed.data;
 
     // Save user message to DB if conversationId provided
     const lastUserMsg = messages[messages.length - 1] as IncomingMessage;

@@ -41,7 +41,9 @@ function useShopifyConnection() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/shopify/store")
+    const controller = new AbortController();
+
+    fetch("/api/shopify/store", { signal: controller.signal })
       .then((r) => r.json())
       .then((data) => {
         setStoreInfo(data);
@@ -50,13 +52,17 @@ function useShopifyConnection() {
         setStoreInfo({ connected: false, store: null });
       })
       .finally(() => setLoading(false));
+
+    return () => controller.abort();
   }, []);
 
   const refresh = useCallback(() => {
-    fetch("/api/shopify/store")
+    const controller = new AbortController();
+    fetch("/api/shopify/store", { signal: controller.signal })
       .then((r) => r.json())
       .then((data) => setStoreInfo(data))
       .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   return { storeInfo, loading, refresh };

@@ -18,13 +18,7 @@ import {
   checkFileStatus,
   listShopifyFiles,
 } from "@/lib/media-assets";
-
-async function getStore() {
-  return prisma.store.findFirst({
-    where: { isActive: true },
-    select: { id: true, shop: true, accessToken: true },
-  });
-}
+import { requireStore, optionalStore } from "@/lib/api-auth";
 
 /**
  * GET: メディアアセット一覧
@@ -42,7 +36,7 @@ export async function GET(req: NextRequest) {
 
     // ── Shopify CDN上の全ファイル一覧 ──
     if (source === "shopify") {
-      const store = await getStore();
+      const store = await requireStore();
       if (!store) {
         return NextResponse.json({ error: "ストアが接続されていません" }, { status: 400 });
       }
@@ -141,7 +135,7 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const store = await getStore();
+    const store = await requireStore();
     if (!store) {
       return NextResponse.json({ error: "ストアが接続されていません" }, { status: 400 });
     }

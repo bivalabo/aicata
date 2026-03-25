@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 export interface Attachment {
   id: string;
@@ -350,6 +350,14 @@ export function useChat(options: UseChatOptions = {}) {
     setError(null);
     conversationIdRef.current = null;
   }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearTimers();
+      abortRef.current?.abort();
+    };
+  }, [clearTimers]);
 
   return {
     messages,

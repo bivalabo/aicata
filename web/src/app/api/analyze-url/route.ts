@@ -13,6 +13,7 @@ import type {
   SectionCategory,
 } from "@/lib/design-engine/types";
 import { cachedFetch, CACHE_PRESETS } from "@/lib/api-cache";
+import { validateExternalUrl } from "@/lib/url-validator";
 
 export async function POST(request: Request) {
   try {
@@ -28,6 +29,15 @@ export async function POST(request: Request) {
       parsedUrl = new URL(url);
     } catch {
       return Response.json({ error: "無効なURLです" }, { status: 400 });
+    }
+
+    // SSRF protection: validate external URL
+    const validation = validateExternalUrl(parsedUrl.href);
+    if (!validation.valid) {
+      return Response.json(
+        { error: validation.reason || "URLは許可されていません" },
+        { status: 400 },
+      );
     }
 
     // 同一URLの解析結果をキャッシュ（1時間有効）

@@ -133,6 +133,9 @@ export function getSectionDetectionScript(): string {
   }
 
   window.addEventListener('message', (event) => {
+    // ── Security: Only accept messages from same origin ──
+    if (event.origin !== window.location.origin) return;
+
     if (event.data?.type === 'request-sections') {
       const sections = getSectionBounds();
       parent.postMessage(

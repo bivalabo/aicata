@@ -200,7 +200,8 @@ function scoreTemplate(
   const avgHQS = sectionMetas.length > 0
     ? sectionMetas.reduce((sum, m) => sum + computeHQSComposite(m!.hqs), 0) / sectionMetas.length
     : 3.0;
-  const hqsScore = Math.min(1.0, (avgHQS - 1.0) / 4.0); // 1-5 → 0-1
+  const clampedHQS = Math.max(1.0, Math.min(5.0, avgHQS)); // Ensure 1-5 range
+  const hqsScore = Math.min(1.0, (clampedHQS - 1.0) / 4.0); // 1-5 → 0-1
 
   const total =
     WEIGHTS.dnaSimilarity * dnaSimilarity +
@@ -233,7 +234,7 @@ function estimateTemplateDNA(template: PageTemplate): DesignDNAPreferences {
 
   for (const key of keys) {
     const values = sectionDNAs.map((d) => d[key] ?? 0);
-    result[key] = values.reduce((a, b) => a + b, 0) / values.length;
+    result[key] = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
   }
 
   return result as unknown as DesignDNAPreferences;

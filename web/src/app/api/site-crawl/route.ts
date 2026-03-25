@@ -5,6 +5,7 @@
 
 import { parse as parseHtml } from "node-html-parser";
 import type { PageType } from "@/lib/design-engine/types";
+import { validateExternalUrl } from "@/lib/url-validator";
 
 export const maxDuration = 60; // 最大60秒
 
@@ -246,6 +247,15 @@ export async function POST(request: Request) {
       parsedUrl = new URL(url.startsWith("http") ? url : `https://${url}`);
     } catch {
       return Response.json({ error: "無効なURLです" }, { status: 400 });
+    }
+
+    // SSRF protection: validate external URL
+    const validation = validateExternalUrl(parsedUrl.href);
+    if (!validation.valid) {
+      return Response.json(
+        { error: validation.reason || "URLは許可されていません" },
+        { status: 400 },
+      );
     }
 
     const baseUrl = parsedUrl.origin;

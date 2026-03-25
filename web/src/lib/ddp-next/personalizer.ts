@@ -254,10 +254,7 @@ Apple、無印良品、資生堂のような洗練されたブランドサイト
 
   for (const [placeholder, content] of Object.entries(generatedContent)) {
     if (personalizedDocument.includes(placeholder)) {
-      personalizedDocument = personalizedDocument.replaceAll(
-        placeholder,
-        content,
-      );
+      personalizedDocument = personalizedDocument.split(placeholder).join(content);
       replacedCount++;
     }
   }
@@ -266,10 +263,7 @@ Apple、無印良品、資生堂のような洗練されたブランドサイト
   const brandNamePlaceholders = ["{{BRAND_NAME}}", "{{SHOP_NAME}}", "{{STORE_NAME}}"];
   for (const bp of brandNamePlaceholders) {
     if (personalizedDocument.includes(bp) && requirements.brandName) {
-      personalizedDocument = personalizedDocument.replaceAll(
-        bp,
-        requirements.brandName,
-      );
+      personalizedDocument = personalizedDocument.split(bp).join(requirements.brandName);
       if (!generatedContent[bp]) {
         generatedContent[bp] = requirements.brandName;
         replacedCount++;
@@ -430,7 +424,7 @@ export function personalizeContentFallback(
 
   for (const bp of brandPlaceholders) {
     if (personalizedDocument.includes(bp)) {
-      personalizedDocument = personalizedDocument.replaceAll(bp, brandName);
+      personalizedDocument = personalizedDocument.split(bp).join(brandName);
       generatedContent[bp] = brandName;
       replacedCount++;
     }
@@ -503,10 +497,7 @@ export function personalizeContentFallback(
 
   for (const [placeholder, value] of Object.entries(FALLBACK_VALUES)) {
     if (personalizedDocument.includes(placeholder)) {
-      personalizedDocument = personalizedDocument.replaceAll(
-        placeholder,
-        value,
-      );
+      personalizedDocument = personalizedDocument.split(placeholder).join(value);
       generatedContent[placeholder] = value;
       replacedCount++;
     }

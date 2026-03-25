@@ -4,6 +4,7 @@
  * POST /api/pages — 新規ページ作成
  */
 import { prisma } from "@/lib/db";
+import { CreatePageSchema, parseBody } from "@/lib/api-validators";
 
 export async function GET(request: Request) {
   try {
@@ -72,8 +73,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { title, html, css, slug, conversationId } = body;
+    const rawBody = await request.json();
+    const parsed = parseBody(CreatePageSchema, rawBody);
+    if (!parsed.success) return parsed.response;
+    const { title, html, css, slug, conversationId } = parsed.data;
 
     if (!html && !css) {
       return Response.json(

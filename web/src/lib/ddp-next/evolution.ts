@@ -158,6 +158,7 @@ export function updateUserDNA(
 
     const before = currentDNA[key] ?? 0;
     const updated = before + alpha * (sectionValue - before);
+    if (isNaN(updated)) continue; // Guard against NaN propagation
     const clamped = Math.max(-1, Math.min(1, updated));
 
     if (Math.abs(clamped - before) > 0.01) {
