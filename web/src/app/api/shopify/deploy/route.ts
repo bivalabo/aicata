@@ -17,11 +17,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getMainTheme, deployToTheme } from "@/lib/shopify";
+import { getMainTheme, deployToTheme, putAsset } from "@/lib/shopify";
 import { prisma } from "@/lib/db";
 import {
   convertToLiquid,
   generateTemplateSuffix,
+  convertGlobalSectionToLiquid,
+  buildSectionGroup,
 } from "@/lib/design-engine/liquid-converter";
 import {
   selectBestTemplate,
@@ -153,12 +155,48 @@ export async function POST(req: NextRequest) {
         sectionFiles: conversion.sectionFiles,
         templateJson: conversion.templateJson.value,
         cssContent: conversion.cssAsset.value,
+        globalCssContent: conversion.globalCssAsset.value,
       },
     );
 
     console.log(
       `[Deploy] Successfully deployed ${deployedFiles.length} files to theme ${themeId}`,
     );
+
+    // 6b. ThemeLayout からヘッダー/フッターをデプロイ（存在する場合）
+    const themeLayout = await prisma.themeLayout.findFirst({
+      where: { storeId: store.id },
+    });
+
+    const globalSectionFiles: string[] = [];
+    if (themeLayout) {
+      // ヘッダーセクション
+      const headerLiquid = convertGlobalSectionToLiquid(themeLayout.headerSectionId);
+      if (headerLiquid) {
+        await putAsset(store.shop, store.accessToken, themeId, headerLiquid);
+        globalSectionFiles.push(headerLiquid.key);
+      }
+
+      // フッターセクション
+      const footerLiquid = convertGlobalSectionToLiquid(themeLayout.footerSectionId);
+      if (footerLiquid) {
+        await putAsset(store.shop, store.accessToken, themeId, footerLiquid);
+        globalSectionFiles.push(footerLiquid.key);
+      }
+
+      // ヘッダー/フッター グループJSON
+      const headerGroup = buildSectionGroup("header", [themeLayout.headerSectionId]);
+      await putAsset(store.shop, store.accessToken, themeId, headerGroup);
+      globalSectionFiles.push(headerGroup.key);
+
+      const footerGroup = buildSectionGroup("footer", [themeLayout.footerSectionId]);
+      await putAsset(store.shop, store.accessToken, themeId, footerGroup);
+      globalSectionFiles.push(footerGroup.key);
+
+      console.log(
+        `[Deploy] Global sections deployed: ${globalSectionFiles.join(", ")}`,
+      );
+    }
 
     // 7. ページのステータス更新
     await prisma.page.update({

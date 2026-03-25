@@ -8,6 +8,8 @@ import type {
   SectionTemplate,
   DesignTokenSet,
   FontDef,
+  ThemeLayout,
+  AssembledPage as AssembledPage3Zone,
 } from "./types";
 import { getSectionById } from "./knowledge/sections/registry";
 
@@ -151,6 +153,126 @@ export function assembleFullHtml(
 <style>
 ${css}
 </style>`;
+}
+
+/**
+ * 3ゾーンアセンブリ: ThemeLayout を使用してヘッダー・コンテンツ・フッターを分離
+ *
+ * Phase D: ThemeLayout からヘッダー/フッターセクションを解決し、
+ * コンテンツセクションと合わせて AssembledPage を生成
+ *
+ * @param pageTemplate コンテンツセクションのテンプレート
+ * @param themeLayout ストアのテーマレイアウト設定
+ * @param overrides プレースホルダー上書き
+ */
+export function assemblePageWithLayout(
+  pageTemplate: PageTemplate,
+  themeLayout: ThemeLayout,
+  overrides?: Record<string, Record<string, string>>,
+): AssembledPage3Zone {
+  // ── Header Zone ──
+  const headerSectionId = themeLayout.header.navigation.sectionId;
+  const headerSection = getSectionById(headerSectionId);
+  let headerHtml = "";
+  let headerCss = "";
+
+  if (headerSection) {
+    headerHtml = headerSection.html;
+    headerCss = headerSection.css;
+    // プレースホルダー置換
+    if (overrides?.[headerSectionId]) {
+      for (const [key, value] of Object.entries(overrides[headerSectionId])) {
+        const isUrl = key.includes("URL") || key.includes("IMAGE") || key.includes("SRC");
+        headerHtml = headerHtml.replaceAll(key, isUrl ? value : escapeHtml(value));
+      }
+    }
+  }
+
+  // Announcement bar
+  if (themeLayout.header.announcement.enabled) {
+    const announcementSection = getSectionById("announcement-top-bar");
+    if (announcementSection) {
+      const annoHtml = announcementSection.html
+        .replaceAll("{{ANNOUNCEMENT_TEXT}}", escapeHtml(themeLayout.header.announcement.text))
+        .replaceAll("{{ANNOUNCEMENT_LINK}}", themeLayout.header.announcement.link || "#");
+      headerHtml = annoHtml + "\n" + headerHtml;
+      headerCss = announcementSection.css + "\n" + headerCss;
+    }
+  }
+
+  // ── Content Zone ── (既存のassemblePage ロジックを再利用)
+  const contentResult = assemblePage(pageTemplate, overrides);
+
+  // ── Footer Zone ──
+  const footerSectionId = themeLayout.footer.sectionId;
+  const footerSection = getSectionById(footerSectionId);
+  let footerHtml = "";
+  let footerCss = "";
+
+  if (footerSection) {
+    footerHtml = footerSection.html;
+    footerCss = footerSection.css;
+    if (overrides?.[footerSectionId]) {
+      for (const [key, value] of Object.entries(overrides[footerSectionId])) {
+        const isUrl = key.includes("URL") || key.includes("IMAGE") || key.includes("SRC");
+        footerHtml = footerHtml.replaceAll(key, isUrl ? value : escapeHtml(value));
+      }
+    }
+  }
+
+  // ── Token + Font CSS ──
+  const tokenCss = buildTokenCss(pageTemplate.designTokens);
+  const resetCss = buildResetCss();
+  const fontLinks = buildFontLinks(pageTemplate.fonts);
+
+  // ── 結合 ──
+  const fullHtml = `${fontLinks}
+
+<header class="aicata-zone aicata-zone--header">
+${headerHtml}
+</header>
+
+<main class="aicata-zone aicata-zone--content">
+${contentResult.html}
+</main>
+
+<footer class="aicata-zone aicata-zone--footer">
+${footerHtml}
+</footer>`;
+
+  const fullCss = `${resetCss}
+
+${tokenCss}
+
+/* === Header Zone === */
+${headerCss}
+
+/* === Content Zone === */
+${contentResult.css.replace(resetCss, "").replace(tokenCss, "").trim()}
+
+/* === Footer Zone === */
+${footerCss}`;
+
+  return {
+    headerHtml,
+    headerCss,
+    contentHtml: contentResult.html,
+    contentCss: contentResult.css,
+    footerHtml,
+    footerCss,
+    fullHtml,
+    fullCss,
+    meta: {
+      ctaPlacement: "both",
+      socialProofIncluded: false,
+      sectionCount: contentResult.meta.sectionCount + (headerSection ? 1 : 0) + (footerSection ? 1 : 0),
+      missingSections: contentResult.meta.missingSections,
+      templateSuffix: pageTemplate.id,
+      pageType: pageTemplate.pageType,
+      headerSectionId,
+      footerSectionId,
+    },
+  };
 }
 
 // ============================================================

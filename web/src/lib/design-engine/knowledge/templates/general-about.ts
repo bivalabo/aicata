@@ -45,17 +45,19 @@ export const GENERAL_ABOUT: PageTemplate = {
       "--duration-fast": "0.2s",
     },
   },
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-elegant-dropdown
+  //   Footer: footer-elegant-columns
+
 
   sections: [
-    { sectionId: "nav-elegant-dropdown", order: 0 },
-    { sectionId: "hero-minimal-centered", order: 1 },
-    { sectionId: "story-split-text-image", order: 2 },
-    { sectionId: "story-full-bleed-image", order: 3 },
-    { sectionId: "features-icon-grid", order: 4 },
-    { sectionId: "story-timeline-vertical", order: 5 },
-    { sectionId: "testimonial-quote-single", order: 6 },
-    { sectionId: "cta-newsletter-minimal", order: 7 },
-    { sectionId: "footer-elegant-columns", order: 8 },
+    { sectionId: "hero-minimal-centered", order: 0},
+    { sectionId: "story-split-text-image", order: 1},
+    { sectionId: "story-full-bleed-image", order: 2},
+    { sectionId: "features-icon-grid", order: 3},
+    { sectionId: "story-timeline-vertical", order: 4},
+    { sectionId: "testimonial-quote-single", order: 5},
+    { sectionId: "cta-newsletter-minimal", order: 6},
   ],
 
   fonts: [

@@ -51,15 +51,17 @@ export const MINIMAL_FASHION_TOP: PageTemplate = {
   },
 
   // ── セクション構成 ──
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-transparent-overlay
+  //   Footer: footer-minimal-centered
+
   sections: [
-    { sectionId: "nav-transparent-overlay", order: 0 },
-    { sectionId: "hero-minimal-centered", order: 1 },
-    { sectionId: "products-horizontal-scroll", order: 2 },
-    { sectionId: "story-split-text-image", order: 3 },
-    { sectionId: "gallery-lightbox-grid", order: 4 },
-    { sectionId: "testimonial-quote-single", order: 5 },
-    { sectionId: "cta-newsletter-minimal", order: 6 },
-    { sectionId: "footer-minimal-centered", order: 7 },
+    { sectionId: "hero-minimal-centered", order: 0},
+    { sectionId: "products-horizontal-scroll", order: 1},
+    { sectionId: "story-split-text-image", order: 2},
+    { sectionId: "gallery-lightbox-grid", order: 3},
+    { sectionId: "testimonial-quote-single", order: 4},
+    { sectionId: "cta-newsletter-minimal", order: 5},
   ],
 
   // ── フォント ──

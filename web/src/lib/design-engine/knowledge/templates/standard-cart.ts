@@ -51,14 +51,16 @@ export const STANDARD_CART: PageTemplate = {
   },
 
   // ── セクション構成 ──
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-minimal-sticky
+  //   Footer: footer-elegant-columns
+
   sections: [
-    { sectionId: "nav-minimal-sticky", order: 0 },
-    { sectionId: "breadcrumb-simple-path", order: 1 },
-    { sectionId: "cart-items-line-list", order: 2 },
-    { sectionId: "cart-summary-order-total", order: 3 },
-    { sectionId: "trust-badges-icon-strip", order: 4 },
-    { sectionId: "related-products-card-scroll", order: 5 },
-    { sectionId: "footer-elegant-columns", order: 6 },
+    { sectionId: "breadcrumb-simple-path", order: 0},
+    { sectionId: "cart-items-line-list", order: 1},
+    { sectionId: "cart-summary-order-total", order: 2},
+    { sectionId: "trust-badges-icon-strip", order: 3},
+    { sectionId: "related-products-card-scroll", order: 4},
   ],
 
   // ── フォント ──

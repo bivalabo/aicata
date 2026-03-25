@@ -51,13 +51,14 @@ export const MINIMAL_FASHION_COLLECTION: PageTemplate = {
   },
 
   // ── セクション構成 ──
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-minimal-sticky, nav-category-tabs
+  //   Footer: footer-minimal-centered
+
   sections: [
-    { sectionId: "nav-minimal-sticky", order: 0 },
-    { sectionId: "nav-category-tabs", order: 1 },
-    { sectionId: "breadcrumb-simple-path", order: 2 },
-    { sectionId: "collection-banner-minimal-text", order: 3 },
-    { sectionId: "collection-grid-filterable", order: 4 },
-    { sectionId: "footer-minimal-centered", order: 5 },
+    { sectionId: "breadcrumb-simple-path", order: 0},
+    { sectionId: "collection-banner-minimal-text", order: 1},
+    { sectionId: "collection-grid-filterable", order: 2},
   ],
 
   // ── フォント ──

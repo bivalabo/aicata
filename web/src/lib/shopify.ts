@@ -464,6 +464,7 @@ export async function deployToTheme(
     sectionFiles: Array<{ key: string; value: string }>;
     templateJson: string;
     cssContent?: string;
+    globalCssContent?: string; // aicata-global.css — 共通リセット+ユーティリティ
   },
 ): Promise<string[]> {
   const deployedFiles: string[] = [];
@@ -474,7 +475,17 @@ export async function deployToTheme(
     deployedFiles.push(section.key);
   }
 
-  // 2. CSSアセットがあればアップロード
+  // 2. グローバルCSS（全セクション共有）をアップロード
+  if (deployment.globalCssContent) {
+    const globalCssKey = "assets/aicata-global.css";
+    await putAsset(shop, accessToken, themeId, {
+      key: globalCssKey,
+      value: deployment.globalCssContent,
+    });
+    deployedFiles.push(globalCssKey);
+  }
+
+  // 3. テンプレート固有CSSアセットをアップロード
   if (deployment.cssContent) {
     const cssKey = `assets/aicata-${deployment.templateSuffix}.css`;
     await putAsset(shop, accessToken, themeId, {

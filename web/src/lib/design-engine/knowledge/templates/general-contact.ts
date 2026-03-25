@@ -45,15 +45,17 @@ export const GENERAL_CONTACT: PageTemplate = {
       "--duration-fast": "0.15s",
     },
   },
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-minimal-sticky
+  //   Footer: footer-elegant-columns
+
 
   sections: [
-    { sectionId: "nav-minimal-sticky", order: 0 },
-    { sectionId: "breadcrumb-simple-path", order: 1 },
-    { sectionId: "hero-minimal-centered", order: 2 },
-    { sectionId: "contact-elegant-split", order: 3 },
-    { sectionId: "features-icon-grid", order: 4 },
-    { sectionId: "social-instagram-feed", order: 5 },
-    { sectionId: "footer-elegant-columns", order: 6 },
+    { sectionId: "breadcrumb-simple-path", order: 0},
+    { sectionId: "hero-minimal-centered", order: 1},
+    { sectionId: "contact-elegant-split", order: 2},
+    { sectionId: "features-icon-grid", order: 3},
+    { sectionId: "social-instagram-feed", order: 4},
   ],
 
   fonts: [

@@ -51,16 +51,18 @@ export const LUXURY_BEAUTY_TOP: PageTemplate = {
   },
 
   // ── セクション構成 ──
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-elegant-dropdown
+  //   Footer: footer-elegant-columns
+
   sections: [
-    { sectionId: "nav-elegant-dropdown", order: 0 },
-    { sectionId: "hero-split-image", order: 1 },
-    { sectionId: "story-split-text-image", order: 2 },
-    { sectionId: "products-card-grid", order: 3 },
-    { sectionId: "products-featured-single", order: 4 },
-    { sectionId: "features-icon-grid", order: 5 },
-    { sectionId: "testimonial-quote-single", order: 6 },
-    { sectionId: "cta-newsletter-minimal", order: 7 },
-    { sectionId: "footer-elegant-columns", order: 8 },
+    { sectionId: "hero-split-image", order: 0},
+    { sectionId: "story-split-text-image", order: 1},
+    { sectionId: "products-card-grid", order: 2},
+    { sectionId: "products-featured-single", order: 3},
+    { sectionId: "features-icon-grid", order: 4},
+    { sectionId: "testimonial-quote-single", order: 5},
+    { sectionId: "cta-newsletter-minimal", order: 6},
   ],
 
   // ── フォント ──

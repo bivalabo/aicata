@@ -45,13 +45,15 @@ export const GENERAL_SEARCH: PageTemplate = {
       "--duration-fast": "0.1s",
     },
   },
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-minimal-sticky
+  //   Footer: footer-minimal-centered
+
 
   sections: [
-    { sectionId: "nav-minimal-sticky", order: 0 },
-    { sectionId: "search-predictive-overlay", order: 1 },
-    { sectionId: "collection-filter-sidebar-accordion", order: 2 },
-    { sectionId: "products-card-grid", order: 3 },
-    { sectionId: "footer-minimal-centered", order: 4 },
+    { sectionId: "search-predictive-overlay", order: 0},
+    { sectionId: "collection-filter-sidebar-accordion", order: 1},
+    { sectionId: "products-card-grid", order: 2},
   ],
 
   fonts: [

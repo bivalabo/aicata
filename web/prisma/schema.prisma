@@ -20,6 +20,8 @@ model Store {
   updatedAt    DateTime @updatedAt
 
   brandMemory  BrandMemory?
+  themeLayout  ThemeLayout?
+  menus        StoreMenu[]
 
   @@index([isActive])
 }
@@ -62,6 +64,60 @@ model BrandMemory {
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+/// ============================================================
+/// Theme Layout — サイト全体の共通レイアウト
+/// ヘッダー/フッターをサイトレベルで管理し、全ページに自動反映
+/// Shopify theme.liquid + header-group + footer-group 相当
+/// ============================================================
+model ThemeLayout {
+  id                 String   @id @default(cuid())
+  storeId            String   @unique
+  store              Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  // ── ヘッダー設定 ──
+  headerSectionId    String   @default("nav-elegant-dropdown")
+  headerConfig       String   @default("{}") // JSON: HeaderConfig
+  showAnnouncement   Boolean  @default(false)
+  announcementText   String   @default("")
+  announcementLink   String   @default("")
+
+  // ── フッター設定 ──
+  footerSectionId    String   @default("footer-elegant-columns")
+  footerConfig       String   @default("{}") // JSON: FooterConfig
+
+  // ── グローバルデザイントークン ──
+  globalTokens       String   @default("{}") // JSON: DesignTokenSet
+  fonts              String   @default("[]") // JSON: FontDef[]
+  colorSchemes       String   @default("[]") // JSON: ColorScheme[]
+
+  // ── デプロイ設定 ──
+  deployMode         String   @default("full") // full, inject, template
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+/// ============================================================
+/// Store Menu — Shopify Navigation 互換メニュー
+/// Shopify linklists に対応し、双方向同期可能
+/// ============================================================
+model StoreMenu {
+  id             String    @id @default(cuid())
+  storeId        String
+  store          Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  handle         String                       // "main-menu", "footer" 等
+  title          String                       // "メインメニュー"
+  shopifyMenuId  String?                      // Shopify GID（同期用）
+  items          String    @default("[]")     // JSON: MenuItem[]（ネスト構造）
+  lastSyncedAt   DateTime?                    // Shopifyとの最終同期日時
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([storeId, handle])
+  @@index([storeId])
 }
 
 model Conversation {

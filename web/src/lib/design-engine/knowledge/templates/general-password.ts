@@ -45,11 +45,13 @@ export const GENERAL_PASSWORD: PageTemplate = {
       "--duration-fast": "0.2s",
     },
   },
+  // Original header/footer (now managed by ThemeLayout):
+  //   Footer: footer-minimal-centered
+
 
   sections: [
-    { sectionId: "hero-minimal-centered", order: 0 },
-    { sectionId: "contact-form-elegant-split", order: 1 },
-    { sectionId: "footer-minimal-centered", order: 2 },
+    { sectionId: "hero-minimal-centered", order: 0},
+    { sectionId: "contact-form-elegant-split", order: 1},
   ],
 
   fonts: [

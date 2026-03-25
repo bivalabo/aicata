@@ -45,13 +45,15 @@ export const GENERAL_LIST_COLLECTIONS: PageTemplate = {
       "--duration-fast": "0.15s",
     },
   },
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-elegant-dropdown
+  //   Footer: footer-elegant-columns
+
 
   sections: [
-    { sectionId: "nav-elegant-dropdown", order: 0 },
-    { sectionId: "breadcrumb-simple-path", order: 1 },
-    { sectionId: "hero-minimal-centered", order: 2 },
-    { sectionId: "collection-list-card-grid", order: 3 },
-    { sectionId: "footer-elegant-columns", order: 4 },
+    { sectionId: "breadcrumb-simple-path", order: 0},
+    { sectionId: "hero-minimal-centered", order: 1},
+    { sectionId: "collection-list-card-grid", order: 2},
   ],
 
   fonts: [

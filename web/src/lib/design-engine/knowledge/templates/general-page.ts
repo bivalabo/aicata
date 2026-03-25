@@ -45,14 +45,16 @@ export const GENERAL_PAGE: PageTemplate = {
       "--duration-fast": "0.15s",
     },
   },
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-elegant-dropdown
+  //   Footer: footer-elegant-columns
+
 
   sections: [
-    { sectionId: "nav-elegant-dropdown", order: 0 },
-    { sectionId: "breadcrumb-simple-path", order: 1 },
-    { sectionId: "hero-minimal-centered", order: 2 },
-    { sectionId: "story-full-bleed-image", order: 3 },
-    { sectionId: "cta-bold-split", order: 4 },
-    { sectionId: "footer-elegant-columns", order: 5 },
+    { sectionId: "breadcrumb-simple-path", order: 0},
+    { sectionId: "hero-minimal-centered", order: 1},
+    { sectionId: "story-full-bleed-image", order: 2},
+    { sectionId: "cta-bold-split", order: 3},
   ],
 
   fonts: [

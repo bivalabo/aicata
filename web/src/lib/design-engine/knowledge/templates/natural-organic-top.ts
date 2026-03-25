@@ -51,15 +51,17 @@ export const NATURAL_ORGANIC_TOP: PageTemplate = {
   },
 
   // ── セクション構成 ──
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-minimal-sticky
+  //   Footer: footer-elegant-columns
+
   sections: [
-    { sectionId: "nav-minimal-sticky", order: 0 },
-    { sectionId: "hero-organic-flowing", order: 1 },
-    { sectionId: "story-full-bleed-image", order: 2 },
-    { sectionId: "products-card-grid", order: 3 },
-    { sectionId: "features-image-cards", order: 4 },
-    { sectionId: "testimonial-carousel-multi", order: 5 },
-    { sectionId: "cta-newsletter-minimal", order: 6 },
-    { sectionId: "footer-elegant-columns", order: 7 },
+    { sectionId: "hero-organic-flowing", order: 0},
+    { sectionId: "story-full-bleed-image", order: 1},
+    { sectionId: "products-card-grid", order: 2},
+    { sectionId: "features-image-cards", order: 3},
+    { sectionId: "testimonial-carousel-multi", order: 4},
+    { sectionId: "cta-newsletter-minimal", order: 5},
   ],
 
   // ── フォント ──

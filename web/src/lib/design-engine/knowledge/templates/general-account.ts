@@ -45,12 +45,14 @@ export const GENERAL_ACCOUNT: PageTemplate = {
       "--duration-fast": "0.15s",
     },
   },
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-elegant-dropdown
+  //   Footer: footer-elegant-columns
+
 
   sections: [
-    { sectionId: "nav-elegant-dropdown", order: 0 },
-    { sectionId: "hero-minimal-centered", order: 1 },
-    { sectionId: "contact-form-elegant-split", order: 2 },
-    { sectionId: "footer-elegant-columns", order: 3 },
+    { sectionId: "hero-minimal-centered", order: 0},
+    { sectionId: "contact-form-elegant-split", order: 1},
   ],
 
   fonts: [

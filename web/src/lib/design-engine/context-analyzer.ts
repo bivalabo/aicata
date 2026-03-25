@@ -103,6 +103,9 @@ const PAGE_TYPE_KEYWORDS: Record<PageType, string[]> = {
   "404": [
     "404", "ページが見つかりません", "not found",
   ],
+  "gift-card": [
+    "ギフトカード", "ギフト券", "プレゼントカード", "gift card", "gift certificate",
+  ],
   general: [],
 };
 
@@ -248,7 +251,7 @@ function detectPageType(allText: string, currentMessage: string): PageType {
   const scores: Record<PageType, number> = {
     landing: 0, product: 0, collection: 0, "list-collections": 0,
     cart: 0, blog: 0, article: 0, about: 0, contact: 0,
-    search: 0, account: 0, password: 0, "404": 0, general: 0,
+    search: 0, account: 0, password: 0, "404": 0, "gift-card": 0, general: 0,
   };
 
   for (const [pageType, keywords] of Object.entries(PAGE_TYPE_KEYWORDS)) {

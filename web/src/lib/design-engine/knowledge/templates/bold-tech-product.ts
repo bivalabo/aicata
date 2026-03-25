@@ -51,18 +51,20 @@ export const BOLD_TECH_PRODUCT: PageTemplate = {
   },
 
   // ── セクション構成 ──
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-mega-menu
+  //   Announcement: announcement-top-bar
+  //   Footer: footer-elegant-columns
+
   sections: [
-    { sectionId: "announcement-top-bar", order: 0 },
-    { sectionId: "nav-mega-menu", order: 1 },
-    { sectionId: "breadcrumb-simple-path", order: 2 },
-    { sectionId: "product-gallery-thumbnail-slider", order: 3 },
-    { sectionId: "product-info-classic-vertical", order: 4 },
-    { sectionId: "product-description-tabbed", order: 5 },
-    { sectionId: "features-stats-counter", order: 6 },
-    { sectionId: "product-reviews-star-rating", order: 7 },
-    { sectionId: "related-products-card-scroll", order: 8 },
-    { sectionId: "cta-bold-split", order: 9 },
-    { sectionId: "footer-elegant-columns", order: 10 },
+    { sectionId: "breadcrumb-simple-path", order: 0},
+    { sectionId: "product-gallery-thumbnail-slider", order: 1},
+    { sectionId: "product-info-classic-vertical", order: 2},
+    { sectionId: "product-description-tabbed", order: 3},
+    { sectionId: "features-stats-counter", order: 4},
+    { sectionId: "product-reviews-star-rating", order: 5},
+    { sectionId: "related-products-card-scroll", order: 6},
+    { sectionId: "cta-bold-split", order: 7},
   ],
 
   // ── フォント ──

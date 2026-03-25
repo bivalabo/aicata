@@ -51,15 +51,17 @@ export const MINIMAL_FASHION_PRODUCT: PageTemplate = {
   },
 
   // ── セクション構成 ──
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-minimal-sticky
+  //   Footer: footer-minimal-centered
+
   sections: [
-    { sectionId: "nav-minimal-sticky", order: 0 },
-    { sectionId: "breadcrumb-simple-path", order: 1 },
-    { sectionId: "product-gallery-grid-layout", order: 2 },
-    { sectionId: "product-info-classic-vertical", order: 3 },
-    { sectionId: "product-description-tabbed", order: 4 },
-    { sectionId: "product-reviews-star-rating", order: 5 },
-    { sectionId: "related-products-card-scroll", order: 6 },
-    { sectionId: "footer-minimal-centered", order: 7 },
+    { sectionId: "breadcrumb-simple-path", order: 0},
+    { sectionId: "product-gallery-grid-layout", order: 1},
+    { sectionId: "product-info-classic-vertical", order: 2},
+    { sectionId: "product-description-tabbed", order: 3},
+    { sectionId: "product-reviews-star-rating", order: 4},
+    { sectionId: "related-products-card-scroll", order: 5},
   ],
 
   // ── フォント ──

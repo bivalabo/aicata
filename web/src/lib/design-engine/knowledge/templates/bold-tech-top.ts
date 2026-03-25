@@ -51,15 +51,17 @@ export const BOLD_TECH_TOP: PageTemplate = {
   },
 
   // ── セクション構成 ──
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-minimal-sticky
+  //   Footer: footer-minimal-centered
+
   sections: [
-    { sectionId: "nav-minimal-sticky", order: 0 },
-    { sectionId: "hero-video-background", order: 1 },
-    { sectionId: "features-stats-counter", order: 2 },
-    { sectionId: "products-masonry-grid", order: 3 },
-    { sectionId: "story-timeline-vertical", order: 4 },
-    { sectionId: "testimonial-carousel-multi", order: 5 },
-    { sectionId: "cta-bold-split", order: 6 },
-    { sectionId: "footer-minimal-centered", order: 7 },
+    { sectionId: "hero-video-background", order: 0},
+    { sectionId: "features-stats-counter", order: 1},
+    { sectionId: "products-masonry-grid", order: 2},
+    { sectionId: "story-timeline-vertical", order: 3},
+    { sectionId: "testimonial-carousel-multi", order: 4},
+    { sectionId: "cta-bold-split", order: 5},
   ],
 
   // ── フォント ──

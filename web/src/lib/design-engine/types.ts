@@ -31,6 +31,7 @@ export type PageType =
   | "account"        // customers/* — アカウント関連
   | "password"       // password — パスワード保護
   | "404"            // 404 — エラーページ
+  | "gift-card"      // gift_card — ギフトカード
   | "general";       // 汎用
 
 /** デザイントーン */
@@ -199,8 +200,298 @@ export interface TemplateMatch {
 export interface ConversionMeta {
   ctaPlacement: "above-fold" | "below-fold" | "both";
   socialProofIncluded: boolean;
-  trustSignalsIncluded: boolean;
-  productVisibility: "high" | "medium" | "low";
+  trustSignalsIncluded?: boolean;
+  productVisibility?: "high" | "medium" | "low";
+  /** 3-zone assembly 追加フィールド */
+  sectionCount?: number;
+  missingSections?: string[];
+  templateSuffix?: string;
+  pageType?: PageType;
+  headerSectionId?: string;
+  footerSectionId?: string;
+}
+
+// ============================================================
+// Gen-4: ThemeLayout — サイト全体の共通レイアウト
+// Shopify theme.liquid + header-group + footer-group 相当
+// ============================================================
+
+/** ページ種別 — gift-card 追加 */
+// (PageType に "gift-card" を追加済み — 上記参照)
+
+/** メニュー項目のリンク種別 */
+export type MenuItemType =
+  | "collection"
+  | "product"
+  | "page"
+  | "blog"
+  | "article"
+  | "policy"
+  | "url"
+  | "home";
+
+/** メニュー項目（Shopifyの link / MenuItem に相当） */
+export interface MenuItem {
+  id: string;
+  title: string;
+  url: string;
+  type: MenuItemType;
+  resourceId?: string;        // Shopify リソース GID（コレクション/商品等）
+  children: MenuItem[];       // 子メニュー（最大3階層）
+  /** メガメニュー拡張設定 */
+  mega?: MegaMenuConfig;
+  /** 画像（ビジュアルメニュー用） */
+  image?: { src: string; alt: string };
+}
+
+/** メガメニュー拡張設定 */
+export interface MegaMenuConfig {
+  enabled: boolean;
+  style: "columns" | "visual" | "tabbed" | "featured" | "editorial";
+  featuredImage?: { src: string; alt: string; url: string };
+  featuredProductIds?: string[];
+  columns?: number;
+}
+
+/** メニュー定義（Shopifyの linklist に相当） */
+export interface Menu {
+  id: string;
+  handle: string;             // "main-menu", "footer" 等
+  title: string;
+  items: MenuItem[];
+  shopifyMenuId?: string;     // Shopify側の Menu GID（同期用）
+}
+
+/** ナビゲーション描画オプション */
+export interface NavRenderOptions {
+  logoText: string;
+  logoUrl: string;
+  logoImage?: string;
+  showSearch: boolean;
+  showAccount: boolean;
+  showCart: boolean;
+  cartCount?: number;
+  announcementText?: string;
+}
+
+/** フッターメニュー構成 */
+export interface FooterMenus {
+  columns: Menu[];            // 各カラムのメニュー
+  bottom?: Menu;              // ポリシーリンク等
+}
+
+/** フッター描画オプション */
+export interface FooterRenderOptions {
+  brandName: string;
+  brandStory?: string;
+  socialLinks?: { platform: string; url: string }[];
+  showNewsletter: boolean;
+  showPaymentIcons: boolean;
+  copyrightYear?: number;
+}
+
+/** ヘッダー構成設定 */
+export interface HeaderConfig {
+  announcement: {
+    enabled: boolean;
+    text: string;
+    link?: string;
+  };
+  navigation: {
+    sectionId: string;        // "nav-elegant-dropdown" 等
+    menuHandle: string;       // "main-menu"（Menu テーブルの handle）
+    options: NavRenderOptions;
+  };
+  /** ページ種別ごとの上書き */
+  pageOverrides?: Partial<Record<PageType, {
+    additionalSections?: SectionRef[];
+    navigationOverride?: string;
+  }>>;
+}
+
+/** フッター構成設定 */
+export interface FooterConfig {
+  sectionId: string;          // "footer-elegant-columns" 等
+  menuHandles: string[];      // ["footer-shop", "footer-support", ...]
+  bottomMenuHandle?: string;  // "footer-legal"
+  options: FooterRenderOptions;
+}
+
+/** サイト全体の共通レイアウト設定 */
+export interface ThemeLayout {
+  id: string;
+  header: HeaderConfig;
+  footer: FooterConfig;
+  globalTokens: DesignTokenSet;
+  fonts: FontDef[];
+  /** Shopify カラースキーム定義 */
+  colorSchemes?: ColorScheme[];
+}
+
+/** Shopify カラースキーム */
+export interface ColorScheme {
+  id: string;
+  label: string;
+  colors: {
+    background: string;
+    text: string;
+    accent: string;
+    button: string;
+    buttonText: string;
+  };
+}
+
+// ============================================================
+// Gen-4: ナビゲーション/フッター セクション拡張
+// プレースホルダーベースではなく MenuData ベースの描画
+// ============================================================
+
+/** ナビゲーションセクションテンプレート */
+export interface NavigationSectionTemplate {
+  id: string;
+  category: "navigation";
+  variant: SectionVariant;
+  name: string;
+  nameJa: string;            // テーマエディタ用日本語名
+  description: string;
+  tones: DesignTone[];
+  css: string;
+  animations: AnimationDef[];
+  /** メニューデータからHTMLを生成 */
+  render: (menu: Menu, options: NavRenderOptions) => string;
+  /** モバイルメニューのHTML生成 */
+  renderMobile: (menu: Menu, options: NavRenderOptions) => string;
+  /** Shopifyテーマ書き出し用Liquidテンプレート */
+  liquidTemplate: string;
+  /** 能力 */
+  supportsMegaMenu: boolean;
+  maxDepth: number;           // 1=フラット, 2=ドロップダウン, 3=メガメニュー
+  supportsSearch: boolean;
+}
+
+/** フッターセクションテンプレート */
+export interface FooterSectionTemplate {
+  id: string;
+  category: "footer";
+  variant: SectionVariant;
+  name: string;
+  nameJa: string;
+  description: string;
+  tones: DesignTone[];
+  css: string;
+  animations: AnimationDef[];
+  /** フッターメニューからHTMLを生成 */
+  render: (menus: FooterMenus, options: FooterRenderOptions) => string;
+  /** Shopifyテーマ書き出し用Liquidテンプレート */
+  liquidTemplate: string;
+}
+
+/** セクション種別判別 */
+export function isNavigationSection(s: unknown): s is NavigationSectionTemplate {
+  return (
+    typeof s === "object" && s !== null &&
+    (s as Record<string, unknown>).category === "navigation" &&
+    typeof (s as Record<string, unknown>).render === "function"
+  );
+}
+
+export function isFooterSection(s: unknown): s is FooterSectionTemplate {
+  return (
+    typeof s === "object" && s !== null &&
+    (s as Record<string, unknown>).category === "footer" &&
+    typeof (s as Record<string, unknown>).render === "function"
+  );
+}
+
+// ============================================================
+// Gen-4: アセンブリ結果（3ゾーン分離）
+// ============================================================
+
+/** ページ組み立て結果 */
+export interface AssembledPage {
+  headerHtml: string;
+  headerCss: string;
+  contentHtml: string;
+  contentCss: string;
+  footerHtml: string;
+  footerCss: string;
+  /** 統合HTML（プレビュー用） */
+  fullHtml: string;
+  /** 統合CSS */
+  fullCss: string;
+  meta: ConversionMeta;
+}
+
+// ============================================================
+// Gen-4: Shopify テーマ互換性
+// ============================================================
+
+/** Shopifyセクションスキーマの enabled_on/disabled_on */
+export interface SectionAvailability {
+  /** セクションを有効にするテンプレート/グループ */
+  enabled_on?: {
+    templates?: string[];     // ["product", "collection"]
+    groups?: string[];        // ["header", "footer"]
+  };
+  /** セクションを無効にするテンプレート/グループ */
+  disabled_on?: {
+    templates?: string[];
+    groups?: string[];
+  };
+}
+
+/** Shopifyセクションスキーマのブロック定義 */
+export interface SectionBlockDef {
+  type: string;               // "@app", "@theme", またはカスタムブロックタイプ
+  name?: string;
+  settings?: SectionSchemaSetting[];
+  limit?: number;
+}
+
+/** Shopifyセクションスキーマの設定定義 */
+export interface SectionSchemaSetting {
+  type: string;               // "text", "image_picker", "color_scheme", "font_picker", "link_list" 等
+  id: string;
+  label: string;
+  default?: unknown;
+  info?: string;
+  allow_dynamic_source?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  options?: Array<{ value: string; label: string }>;
+}
+
+/** Liquid変換用のセクションメタ（拡張版） */
+export interface SectionLiquidMeta {
+  /** テーマエディタ表示名（日本語） */
+  schemaName: string;
+  /** セクションの有効範囲 */
+  availability?: SectionAvailability;
+  /** 受け入れるブロックタイプ */
+  blocks?: SectionBlockDef[];
+  /** 追加のスキーマ設定（color_scheme, font_picker等） */
+  extraSettings?: SectionSchemaSetting[];
+  /** Liquidテンプレート（メニュー連動ナビ等） */
+  liquidTemplate?: string;
+  /** セクション数制限 */
+  limit?: number;
+}
+
+/** デプロイモード */
+export type DeployMode =
+  | "full"                    // Aicataフルテーマ（theme.aicata.liquid 使用）
+  | "inject"                  // 既存テーマにセクション注入
+  | "template";               // テンプレート差し替え（ページ単位）
+
+/** デプロイ互換性情報 */
+export interface DeployCompatibility {
+  shopifyApiVersion: string;
+  themeBlocksUsed: boolean;
+  colorSchemesUsed: boolean;
+  appBlocksEnabled: boolean;
+  deployMode: DeployMode;
 }
 
 // ============================================================

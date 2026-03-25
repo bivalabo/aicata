@@ -45,15 +45,17 @@ export const GENERAL_BLOG: PageTemplate = {
       "--duration-fast": "0.15s",
     },
   },
+  // Original header/footer (now managed by ThemeLayout):
+  //   Navigation: nav-minimal-sticky
+  //   Footer: footer-minimal-centered
+
 
   sections: [
-    { sectionId: "nav-minimal-sticky", order: 0 },
-    { sectionId: "breadcrumb-simple-path", order: 1 },
-    { sectionId: "hero-minimal-centered", order: 2 },
-    { sectionId: "collection-filter-sidebar-accordion", order: 3 },
-    { sectionId: "gallery-lightbox-grid", order: 4 },
-    { sectionId: "cta-newsletter-minimal", order: 5 },
-    { sectionId: "footer-minimal-centered", order: 6 },
+    { sectionId: "breadcrumb-simple-path", order: 0},
+    { sectionId: "hero-minimal-centered", order: 1},
+    { sectionId: "collection-filter-sidebar-accordion", order: 2},
+    { sectionId: "gallery-lightbox-grid", order: 3},
+    { sectionId: "cta-newsletter-minimal", order: 4},
   ],
 
   fonts: [
