@@ -35,6 +35,10 @@ import {
 } from "@/lib/html-section-editor";
 import { buildFullHtml } from "../preview/LivePreview";
 import { getSectionLabel } from "@/lib/section-labels";
+import SectionSwapPanel from "./SectionSwapPanel";
+import { replaceSection } from "@/lib/html-section-editor";
+import type { DesignDNAPreferences } from "@/lib/ace-adis/types";
+import { getSectionById } from "@/lib/design-engine/knowledge/sections/registry";
 
 type ViewMode = "desktop" | "tablet" | "mobile";
 
@@ -91,6 +95,8 @@ export default function EditorView({
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [layersCollapsed, setLayersCollapsed] = useState(false);
+  const [showSwapPanel, setShowSwapPanel] = useState(false);
+  const [swapSectionId, setSwapSectionId] = useState<string | null>(null);
   const wasGeneratingRef = useRef(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -269,6 +275,34 @@ export default function EditorView({
       onSendAIMessage(`「${label}」セクションを改善してください`);
     }
   }, [onSendAIMessage]);
+
+  const handleSwapSection = useCallback((sectionId: string) => {
+    setSwapSectionId(sectionId);
+    setShowSwapPanel(true);
+  }, []);
+
+  const handleConfirmSwap = useCallback(
+    (newSectionId: string) => {
+      if (!swapSectionId || !onHtmlChange) return;
+
+      const newSection = getSectionById(newSectionId);
+      if (!newSection) return;
+
+      // 新しいセクションのHTMLを取得
+      const newSectionHtml = newSection.html;
+      const updatedHtml = replaceSection(html, swapSectionId, newSectionHtml);
+
+      if (updatedHtml !== html) {
+        onHtmlChange(updatedHtml);
+        setRefreshKey((k) => k + 1);
+      }
+
+      // パネルを閉じる
+      setShowSwapPanel(false);
+      setSwapSectionId(null);
+    },
+    [html, swapSectionId, onHtmlChange]
+  );
 
   return (
     <motion.div
@@ -506,6 +540,7 @@ export default function EditorView({
                       onMoveDown={onHtmlChange ? handleMoveDownSection : undefined}
                       onDeleteSection={onHtmlChange ? handleDeleteSection : undefined}
                       onChatEditSection={handleChatEditSection}
+                      onSwapSection={handleSwapSection}
                       zoom={zoom}
                     />
                   )}
@@ -543,8 +578,8 @@ export default function EditorView({
         </div>
 
         {/* ═══════ Properties Panel (right, contextual) ═══════ */}
-        <AnimatePresence>
-          {editingSectionId && editorEnabled && onHtmlChange && (
+        <AnimatePresence mode="wait">
+          {editingSectionId && editorEnabled && onHtmlChange && !showSwapPanel && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 300, opacity: 1 }}
@@ -561,6 +596,30 @@ export default function EditorView({
                 />
               </div>
             </motion.div>
+          )}
+
+          {/* Section Swap Panel */}
+          {showSwapPanel && swapSectionId && editorEnabled && (
+            <SectionSwapPanel
+              sectionId={swapSectionId}
+              targetDNA={{
+                minimalism: 0,
+                whitespace: 0,
+                contrast: 0,
+                animationIntensity: 0,
+                serifAffinity: 0,
+                colorSaturation: 0,
+                layoutComplexity: 0,
+                imageWeight: 0,
+                asymmetry: 0,
+                novelty: 0,
+              }}
+              onSwap={handleConfirmSwap}
+              onClose={() => {
+                setShowSwapPanel(false);
+                setSwapSectionId(null);
+              }}
+            />
           )}
         </AnimatePresence>
       </div>

@@ -9,9 +9,11 @@ import {
   ChevronDown,
   Trash2,
   X,
+  ArrowLeftRight,
 } from "lucide-react";
 import clsx from "clsx";
 import { SectionBounds } from "./useIframeSections";
+import SectionFeedbackButtons from "./SectionFeedbackButtons";
 
 interface SectionToolbarProps {
   sectionId: string;
@@ -23,6 +25,7 @@ interface SectionToolbarProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDelete: () => void;
+  onSwap?: () => void;
   onClose: () => void;
 }
 
@@ -40,6 +43,7 @@ export default function SectionToolbar({
   onMoveUp,
   onMoveDown,
   onDelete,
+  onSwap,
   onClose,
 }: SectionToolbarProps) {
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -110,6 +114,12 @@ export default function SectionToolbar({
           <Pencil className="w-3.5 h-3.5" />
         </button>
 
+        {/* フィードバックボタン */}
+        <div className="w-px h-4 bg-border/30" />
+        <SectionFeedbackButtons
+          sectionId={sectionId}
+        />
+
         <div className="w-px h-4 bg-border/30" />
 
         {/* 移動ボタン */}
@@ -133,6 +143,22 @@ export default function SectionToolbar({
         >
           <ChevronDown className="w-3.5 h-3.5" />
         </button>
+
+        <div className="w-px h-4 bg-border/30" />
+
+        {/* セクション置換 */}
+        {onSwap && (
+          <button
+            onClick={onSwap}
+            className={clsx(
+              "flex items-center justify-center w-7 h-7 rounded-lg transition-colors",
+              "text-muted-foreground hover:text-foreground hover:bg-black/5",
+            )}
+            title="セクションデザインを置換"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         <div className="w-px h-4 bg-border/30" />
 

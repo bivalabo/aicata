@@ -19,6 +19,8 @@ interface SectionOverlayProps {
   onChatEditSection?: (sectionId: string) => void;
   /** AIで自動改善（セクション単位） */
   onEnhanceSection?: (sectionId: string) => void;
+  /** セクションデザイン置換を開始 */
+  onSwapSection?: (sectionId: string) => void;
   /** EditorView の zoom レベル — セクション座標のスケーリング補正に使用 */
   zoom?: number;
 }
@@ -47,6 +49,7 @@ export default function SectionOverlay({
   onDeleteSection,
   onChatEditSection,
   onEnhanceSection,
+  onSwapSection,
   zoom = 1,
 }: SectionOverlayProps) {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
@@ -228,6 +231,9 @@ export default function SectionOverlay({
           onDelete={() => {
             onDeleteSection?.(selectedSectionId);
             setSelectedSectionId(null);
+          }}
+          onSwap={() => {
+            onSwapSection?.(selectedSectionId);
           }}
           onClose={() => setSelectedSectionId(null)}
         />

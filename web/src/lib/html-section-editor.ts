@@ -273,3 +273,26 @@ export function toggleSectionVisibility(
   }
   return serializeHtml(doc);
 }
+
+/**
+ * セクションをHTML要素で置き換える
+ * デザインDNA選択時の置換に使用
+ */
+export function replaceSection(
+  html: string,
+  sectionId: string,
+  newSectionHtml: string,
+): string {
+  const doc = parseHtml(html);
+  const sectionEl = doc.querySelector(`[data-section-id="${sectionId}"]`);
+  if (!sectionEl) return html;
+
+  // 新しいセクションHTMLをパース
+  const tempDoc = parseHtml(newSectionHtml);
+  const newEl = tempDoc.querySelector("[data-section-id]");
+  if (!newEl) return html;
+
+  // 既存セクションを新しいセクションで置き換え
+  sectionEl.replaceWith(newEl.cloneNode(true));
+  return serializeHtml(doc);
+}

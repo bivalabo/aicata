@@ -11,6 +11,9 @@ import {
   Sparkles,
   ChevronDown,
   ChevronRight,
+  FolderOpen,
+  Search,
+  Loader2,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -172,6 +175,161 @@ function TextEditor({
   );
 }
 
+// ============================================================
+// Media Picker (inline image gallery from Shopify CDN / Aicata assets)
+// ============================================================
+
+interface MediaImage {
+  url: string;
+  alt: string | null;
+}
+
+function MediaPickerInline({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (url: string, alt: string) => void;
+  onClose: () => void;
+}) {
+  const [images, setImages] = useState<MediaImage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchImages() {
+      setLoading(true);
+      try {
+        // Aicata assets (uploaded images)
+        const aicataRes = await fetch("/api/media/assets?limit=50");
+        const aicataImages: MediaImage[] = [];
+        if (aicataRes.ok) {
+          const data = await aicataRes.json();
+          const assets = data.assets || [];
+          for (const a of assets) {
+            const url = a.shopifyCdnUrl || a.sourceUrl;
+            if (url && (a.mimeType?.startsWith("image/") || url.match(/\.(png|jpg|jpeg|gif|webp|svg)/i))) {
+              aicataImages.push({ url, alt: a.alt || a.context || "" });
+            }
+          }
+        }
+
+        // Shopify files
+        const shopifyRes = await fetch("/api/shopify/media?first=50&mediaType=IMAGE");
+        const shopifyImages: MediaImage[] = [];
+        if (shopifyRes.ok) {
+          const data = await shopifyRes.json();
+          const files = data.files || [];
+          for (const f of files) {
+            if (f.url) {
+              shopifyImages.push({ url: f.url, alt: f.alt || "" });
+            }
+          }
+        }
+
+        if (!cancelled) {
+          // 重複URL除去
+          const seen = new Set<string>();
+          const merged: MediaImage[] = [];
+          for (const img of [...aicataImages, ...shopifyImages]) {
+            if (!seen.has(img.url)) {
+              seen.add(img.url);
+              merged.push(img);
+            }
+          }
+          setImages(merged);
+        }
+      } catch {
+        // Non-fatal
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchImages();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filtered = search
+    ? images.filter((img) =>
+        img.url.toLowerCase().includes(search.toLowerCase()) ||
+        (img.alt || "").toLowerCase().includes(search.toLowerCase())
+      )
+    : images;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      className="mt-2 rounded-lg border border-border/60 bg-gray-50 overflow-hidden"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/40 bg-white/60">
+        <span className="text-[11px] font-semibold text-muted-foreground">
+          メディアライブラリ
+        </span>
+        <button
+          onClick={onClose}
+          className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="px-2 py-1.5">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/40 bg-white/80">
+          <Search className="w-3 h-3 text-muted-foreground/50" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="画像を検索..."
+            className="flex-1 text-[11px] bg-transparent outline-none text-foreground placeholder:text-muted-foreground/40"
+          />
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div className="px-2 pb-2 max-h-[200px] overflow-y-auto">
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-4 text-[11px] text-muted-foreground/60">
+            {search ? "該当する画像がありません" : "画像がありません"}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-1.5">
+            {filtered.map((img, i) => (
+              <button
+                key={`${img.url}-${i}`}
+                onClick={() => onSelect(img.url, img.alt || "")}
+                className="relative group rounded-md overflow-hidden border border-border/30 hover:border-accent/50 hover:ring-1 hover:ring-accent/20 transition-all aspect-square"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.url}
+                  alt={img.alt || ""}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src =
+                      "https://placehold.co/100x100/e2e8f0/94a3b8?text=?";
+                  }}
+                />
+                <div className="absolute inset-0 bg-accent/0 group-hover:bg-accent/10 transition-colors flex items-center justify-center">
+                  <Check className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 drop-shadow-md transition-opacity" />
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 function ImageEditor({
   node,
   sectionId,
@@ -186,6 +344,7 @@ function ImageEditor({
   const [src, setSrc] = useState(node.src);
   const [alt, setAlt] = useState(node.alt);
   const [isDirty, setIsDirty] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   useEffect(() => {
     setSrc(node.src);
@@ -198,6 +357,13 @@ function ImageEditor({
     onHtmlChange(newHtml);
     setIsDirty(false);
   }, [html, sectionId, node.selector, src, alt, onHtmlChange]);
+
+  const handlePickerSelect = useCallback((url: string, imgAlt: string) => {
+    setSrc(url);
+    if (imgAlt) setAlt(imgAlt);
+    setIsDirty(true);
+    setShowPicker(false);
+  }, []);
 
   return (
     <div className="group">
@@ -231,6 +397,30 @@ function ImageEditor({
         placeholder="画像URL"
         className="w-full px-3 py-1.5 rounded-lg border border-border text-[12px] bg-white/80 text-foreground outline-none focus:border-accent/30 mb-1.5"
       />
+
+      {/* Media Library button */}
+      <button
+        onClick={() => setShowPicker((v) => !v)}
+        className={clsx(
+          "w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors mb-1.5",
+          showPicker
+            ? "bg-accent/10 text-accent border border-accent/20"
+            : "bg-gray-50 text-muted-foreground border border-border/40 hover:bg-accent/5 hover:text-accent hover:border-accent/20"
+        )}
+      >
+        <FolderOpen className="w-3 h-3" />
+        メディアライブラリから選択
+      </button>
+
+      {/* Inline Media Picker */}
+      <AnimatePresence>
+        {showPicker && (
+          <MediaPickerInline
+            onSelect={handlePickerSelect}
+            onClose={() => setShowPicker(false)}
+          />
+        )}
+      </AnimatePresence>
 
       <input
         type="text"
