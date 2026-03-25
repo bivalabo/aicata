@@ -7,7 +7,8 @@
 // ============================================================
 
 import { prisma } from "@/lib/db";
-import { requireStore } from "@/lib/api-auth";
+import { requireStore, AuthError } from "@/lib/api-auth";
+import { apiErrorResponse } from "@/lib/api-error";
 
 // ── GET: ストア一覧 ──
 
@@ -40,18 +41,10 @@ export async function GET() {
       count: stores.length,
     });
   } catch (error) {
-    console.error("[Stores] GET error:", error);
-    // Handle auth errors
-    if (error instanceof Error && error.message === "ストアが接続されていません") {
-      return Response.json(
-        { error: "ストアが接続されていません" },
-        { status: 401 },
-      );
+    if (error instanceof AuthError) {
+      return Response.json({ error: error.message }, { status: error.statusCode });
     }
-    return Response.json(
-      { error: "ストア一覧の取得に失敗しました" },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Stores GET");
   }
 }
 
@@ -107,17 +100,9 @@ export async function POST(request: Request) {
       storeName: store.name || store.shop,
     });
   } catch (error) {
-    console.error("[Stores] Switch error:", error);
-    // Handle auth errors
-    if (error instanceof Error && error.message === "ストアが接続されていません") {
-      return Response.json(
-        { error: "ストアが接続されていません" },
-        { status: 401 },
-      );
+    if (error instanceof AuthError) {
+      return Response.json({ error: error.message }, { status: error.statusCode });
     }
-    return Response.json(
-      { error: "ストア切り替えに失敗しました" },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Stores Switch");
   }
 }

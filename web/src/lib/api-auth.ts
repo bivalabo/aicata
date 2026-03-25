@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
+import { decryptToken } from "@/lib/token-encryption";
 
 /**
  * Represents an authenticated store context
@@ -43,7 +44,11 @@ export async function getActiveStore(): Promise<AuthStore | null> {
       accessToken: true,
     },
   });
-  return store as AuthStore | null;
+  if (!store) return null;
+  return {
+    ...store,
+    accessToken: decryptToken(store.accessToken),
+  } as AuthStore;
 }
 
 /**

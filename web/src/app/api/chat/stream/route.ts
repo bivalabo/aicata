@@ -14,6 +14,8 @@ import { runDDP } from "@/lib/ddp";
 import type { DDPInput } from "@/lib/ddp";
 import { prisma } from "@/lib/db";
 import { ChatStreamInputSchema, parseBody } from "@/lib/api-validators";
+import { checkRateLimit, AI_RATE_LIMIT, rateLimitResponse } from "@/lib/rate-limiter";
+import { apiErrorResponse } from "@/lib/api-error";
 
 // Next.js Route Segment Config — allow long-running streaming responses
 export const maxDuration = 300; // 5 minutes
@@ -105,6 +107,11 @@ class SSEWriter {
 }
 
 export async function POST(request: Request) {
+  // Rate limiting (IP-based)
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const rl = checkRateLimit(`chat:${ip}`, AI_RATE_LIMIT);
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   try {
     const rawBody = await request.json();
     const parsed = parseBody(ChatStreamInputSchema, rawBody);
@@ -653,13 +660,7 @@ export async function POST(request: Request) {
 
     return new Response(stream, { headers: SSE_HEADERS });
   } catch (error) {
-    console.error("[Stream API] Top-level error:", error);
-    return new Response(
-      JSON.stringify({
-        error: `AIの応答でエラーが発生しました: ${error instanceof Error ? error.message : "不明なエラー"}`,
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+    return apiErrorResponse(error, "Stream API");
   }
 }
 

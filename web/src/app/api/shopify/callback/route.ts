@@ -4,6 +4,7 @@
  */
 import { exchangeCodeForToken, verifyHmac, getShopInfo, sanitizeShop } from "@/lib/shopify";
 import { prisma } from "@/lib/db";
+import { encryptToken } from "@/lib/token-encryption";
 import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
   await prisma.store.upsert({
     where: { shop: sanitized },
     update: {
-      accessToken: tokenData.access_token,
+      accessToken: encryptToken(tokenData.access_token),
       scope: tokenData.scope,
       name: shopInfo?.name || "",
       email: shopInfo?.email || "",
@@ -75,7 +76,7 @@ export async function GET(request: Request) {
     },
     create: {
       shop: sanitized,
-      accessToken: tokenData.access_token,
+      accessToken: encryptToken(tokenData.access_token),
       scope: tokenData.scope,
       name: shopInfo?.name || "",
       email: shopInfo?.email || "",

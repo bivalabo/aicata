@@ -2,7 +2,11 @@
 // Aicata — Section Detector
 // data-section-id を持たないHTML（Shopify既存ページ等）に対して
 // セマンティックにセクションを検出し、IDを自動付与する
+//
+// node-html-parser を使用してサーバーサイドでもDOMベースの処理を実現
 // ============================================================
+
+import { parse as parseHtml, type HTMLElement } from "node-html-parser";
 
 /**
  * 検出されたセクション情報
@@ -101,6 +105,32 @@ function inferCategory(
   return { category: `section-${index + 1}`, label: `セクション ${index + 1}` };
 }
 
+// ── Section-level tags and selectors ──
+
+const SECTION_TAGS = new Set(["header", "nav", "section", "main", "footer", "article", "aside"]);
+
+function isSectionCandidate(el: HTMLElement): boolean {
+  const tag = el.tagName?.toLowerCase();
+  if (!tag) return false;
+
+  // Direct semantic section tags
+  if (SECTION_TAGS.has(tag)) return true;
+
+  // div with role or section-like class
+  if (tag === "div") {
+    const role = el.getAttribute("role")?.toLowerCase() || "";
+    if (["banner", "main", "contentinfo", "complementary", "navigation"].includes(role)) {
+      return true;
+    }
+    const cls = el.getAttribute("class")?.toLowerCase() || "";
+    if (/section|container|wrapper|block|module/.test(cls)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * HTMLにdata-section-idがなければ自動付与して返す
  * @returns { annotatedHtml, sections }
@@ -109,112 +139,118 @@ export function detectAndAnnotateSections(html: string): {
   annotatedHtml: string;
   sections: DetectedSection[];
 } {
-  // まず既にdata-section-idがあるか確認
-  const hasExistingIds = /data-section-id/.test(html);
+  const root = parseHtml(html, { comment: false });
 
-  if (hasExistingIds) {
-    // 既にIDがある場合は、既存のセクション情報だけ返す
+  // まず既にdata-section-idがあるか確認
+  const existingIds = root.querySelectorAll("[data-section-id]");
+  if (existingIds.length > 0) {
     return {
       annotatedHtml: html,
-      sections: extractExistingSections(html),
+      sections: extractExistingSections(root),
     };
   }
 
-  // サーバーサイドではDOMParser使えないので正規表現ベースで処理
+  // セクション候補を検出
   const sections: DetectedSection[] = [];
-  let sectionIndex = 0;
+  const candidates: HTMLElement[] = [];
 
-  // セクション候補: header, nav, section, main, footer, article, aside + div with role/class
-  const sectionRegex =
-    /<(header|nav|section|main|footer|article|aside)(\s[^>]*)?>|<div\s[^>]*(?:role=["'](?:banner|main|contentinfo|complementary|navigation)["']|class=["'][^"']*(?:section|container|wrapper|block|module)[^"']*["'])[^>]*>/gi;
-
-  let annotatedHtml = html;
-  const matches: Array<{ fullMatch: string; tag: string; attrs: string; index: number }> = [];
-
-  let match;
-  while ((match = sectionRegex.exec(html)) !== null) {
-    const fullMatch = match[0];
-    const tag = (match[1] || "div").toLowerCase();
-    const attrs = match[2] || "";
-    matches.push({ fullMatch, tag, attrs, index: match.index });
+  // 直下の子要素からセクション候補を収集
+  for (const child of root.childNodes) {
+    // node-html-parser: HTMLElement has tagName property
+    const el = child as HTMLElement;
+    if (el.tagName && isSectionCandidate(el)) {
+      candidates.push(el);
+    }
   }
 
-  // Process matches in reverse order to maintain indices
-  for (let i = matches.length - 1; i >= 0; i--) {
-    const m = matches[i];
+  // 直下に候補がなければ、全体からセクションタグを探す
+  if (candidates.length === 0) {
+    const allSections = root.querySelectorAll("header, nav, section, main, footer, article, aside");
+    for (const el of allSections) {
+      candidates.push(el);
+    }
+    // div with section-like classes
+    const divSections = root.querySelectorAll(
+      'div[role="banner"], div[role="main"], div[role="contentinfo"], ' +
+      'div[class*="section"], div[class*="container"], div[class*="wrapper"]'
+    );
+    for (const el of divSections) {
+      if (!candidates.includes(el)) {
+        candidates.push(el);
+      }
+    }
+  }
+
+  // セクションにIDを付与
+  let sectionIndex = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    const el = candidates[i];
+    const tag = el.tagName?.toLowerCase() || "div";
 
     // Skip if already has data-section-id
-    if (/data-section-id/.test(m.fullMatch)) continue;
+    if (el.getAttribute("data-section-id")) continue;
 
-    // Extract class and id
-    const classMatch = m.fullMatch.match(/class=["']([^"']*)["']/);
-    const idMatch = m.fullMatch.match(/id=["']([^"']*)["']/);
-    const classNames = classMatch?.[1] || "";
-    const existingId = idMatch?.[1] || "";
+    const classNames = el.getAttribute("class") || "";
+    const existingId = el.getAttribute("id") || "";
 
-    // Extract text content (simplified: look ahead for first heading or text)
-    const afterContent = html.slice(m.index, m.index + 500);
-    const headingMatch = afterContent.match(/<h[1-6][^>]*>([^<]+)</);
-    const primaryText = headingMatch?.[1]?.trim() || "";
+    // Extract primary text (first heading)
+    const heading = el.querySelector("h1, h2, h3, h4, h5, h6");
+    const primaryText = heading?.textContent?.trim() || "";
 
     // Check for images
-    const hasImages = /<img\s/.test(afterContent.slice(0, 500));
+    const hasImages = el.querySelectorAll("img").length > 0;
 
     // Infer category
     const { category, label } = inferCategory(
-      m.tag,
+      tag,
       classNames,
       existingId,
       primaryText,
       sectionIndex,
       i === 0,
-      i === matches.length - 1,
+      i === candidates.length - 1,
     );
 
     const sectionId = existingId
       ? `auto-${existingId}`
       : `auto-${category}-${sectionIndex}`;
 
-    sections.unshift({
+    sections.push({
       id: sectionId,
-      tag: m.tag,
+      tag,
       category,
       label,
       primaryText,
       hasImages,
     });
 
-    // Inject data-section-id
-    const injected = m.fullMatch.replace(
-      /^(<\w+)/,
-      `$1 data-section-id="${sectionId}"`,
-    );
-    annotatedHtml =
-      annotatedHtml.slice(0, m.index) +
-      injected +
-      annotatedHtml.slice(m.index + m.fullMatch.length);
-
+    // Inject data-section-id attribute
+    el.setAttribute("data-section-id", sectionId);
     sectionIndex++;
   }
 
-  return { annotatedHtml, sections };
+  return {
+    annotatedHtml: root.toString(),
+    sections,
+  };
 }
 
 /**
  * 既存のdata-section-idからセクション情報を抽出
  */
-function extractExistingSections(html: string): DetectedSection[] {
+function extractExistingSections(root: HTMLElement): DetectedSection[] {
   const sections: DetectedSection[] = [];
-  const regex = /data-section-id=["']([^"']+)["']/g;
-  let match;
+  const elements = root.querySelectorAll("[data-section-id]");
 
-  while ((match = regex.exec(html)) !== null) {
-    const id = match[1];
-    // Look for heading near this section
-    const afterContent = html.slice(match.index, match.index + 500);
-    const headingMatch = afterContent.match(/<h[1-6][^>]*>([^<]+)</);
-    const primaryText = headingMatch?.[1]?.trim() || "";
-    const hasImages = /<img\s/.test(afterContent.slice(0, 500));
+  for (const el of elements) {
+    const id = el.getAttribute("data-section-id") || "";
+
+    // Extract primary text (first heading)
+    const heading = el.querySelector("h1, h2, h3, h4, h5, h6");
+    const primaryText = heading?.textContent?.trim() || "";
+
+    // Check for images
+    const hasImages = el.querySelectorAll("img").length > 0;
 
     // Infer category from id
     let category = id;
@@ -229,7 +265,7 @@ function extractExistingSections(html: string): DetectedSection[] {
 
     sections.push({
       id,
-      tag: "section",
+      tag: el.tagName?.toLowerCase() || "section",
       category,
       label,
       primaryText,

@@ -6,6 +6,8 @@
 import { parse as parseHtml } from "node-html-parser";
 import type { PageType } from "@/lib/design-engine/types";
 import { validateExternalUrl } from "@/lib/url-validator";
+import { checkRateLimit, ANALYSIS_RATE_LIMIT, rateLimitResponse } from "@/lib/rate-limiter";
+import { apiErrorResponse } from "@/lib/api-error";
 
 export const maxDuration = 60; // 最大60秒
 
@@ -235,6 +237,11 @@ async function extractStoreName(baseUrl: string): Promise<string | undefined> {
 // ── Main handler ──
 
 export async function POST(request: Request) {
+  // Rate limiting (IP-based)
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const rl = checkRateLimit(`crawl:${ip}`, ANALYSIS_RATE_LIMIT);
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   try {
     const { url } = await request.json();
 
@@ -354,15 +361,6 @@ export async function POST(request: Request) {
 
     return Response.json(result);
   } catch (error) {
-    console.error("[Site Crawl] Error:", error);
-    return Response.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "サイトのクロールに失敗しました",
-      },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Site Crawl");
   }
 }

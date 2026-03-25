@@ -451,11 +451,15 @@ export function updateSectionMeta(
   const existing = META_MAP.get(sectionId);
   if (!existing) return false;
 
-  const updated = { ...existing, ...updates };
-  META_MAP.set(sectionId, updated);
+  // 単一オブジェクトを生成してから、MAP と LIST を同時に差し替え
+  // （片方だけ更新される中間状態を防ぐ）
+  const updated: SectionMeta = { ...existing, ...updates };
 
-  // SECTION_META_LIST も更新
+  // LIST のインデックスを先に確定
   const idx = SECTION_META_LIST.findIndex((m) => m.sectionId === sectionId);
+
+  // 同一オブジェクト参照を MAP と LIST の両方にセット
+  META_MAP.set(sectionId, updated);
   if (idx >= 0) {
     SECTION_META_LIST[idx] = updated;
   }

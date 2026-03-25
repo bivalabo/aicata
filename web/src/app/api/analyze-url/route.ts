@@ -14,8 +14,15 @@ import type {
 } from "@/lib/design-engine/types";
 import { cachedFetch, CACHE_PRESETS } from "@/lib/api-cache";
 import { validateExternalUrl } from "@/lib/url-validator";
+import { checkRateLimit, ANALYSIS_RATE_LIMIT, rateLimitResponse } from "@/lib/rate-limiter";
+import { apiErrorResponse } from "@/lib/api-error";
 
 export async function POST(request: Request) {
+  // Rate limiting (IP-based)
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const rl = checkRateLimit(`analyze:${ip}`, ANALYSIS_RATE_LIMIT);
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   try {
     const { url } = await request.json();
 
@@ -124,10 +131,7 @@ export async function POST(request: Request) {
 
     return Response.json(result);
   } catch (error) {
-    console.error("[URL Analysis] Error:", error);
-    const message =
-      error instanceof Error ? error.message : "URL解析中にエラーが発生しました";
-    return Response.json({ error: message }, { status: 500 });
+    return apiErrorResponse(error, "URL Analysis");
   }
 }
 

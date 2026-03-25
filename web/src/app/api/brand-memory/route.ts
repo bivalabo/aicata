@@ -9,6 +9,7 @@
 // ============================================================
 
 import { prisma } from "@/lib/db";
+import { apiErrorResponse } from "@/lib/api-error";
 
 // ── Helper: ストアが未接続の場合にデフォルトストアを作成 ──
 async function getOrCreateDefaultStore() {
@@ -88,11 +89,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error("[Brand Memory] GET error:", error);
-    return Response.json(
-      { error: "Brand Memoryの取得に失敗しました" },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Brand Memory GET");
   }
 }
 
@@ -239,16 +236,7 @@ export async function POST(request: Request) {
 
     return Response.json({ success: true, memory });
   } catch (error) {
-    console.error("[Brand Memory] POST error:", error);
-    return Response.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Brand Memoryの更新に失敗しました",
-      },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Brand Memory POST");
   }
 }
 

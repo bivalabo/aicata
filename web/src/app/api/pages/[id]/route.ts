@@ -5,6 +5,7 @@
  * DELETE /api/pages/[id] — ページ削除
  */
 import { prisma } from "@/lib/db";
+import { apiErrorResponse } from "@/lib/api-error";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -31,11 +32,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
     return Response.json({ page });
   } catch (error) {
-    console.error("Page fetch error:", error);
-    return Response.json(
-      { error: "ページの取得に失敗しました" },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Page GET");
   }
 }
 
@@ -80,11 +77,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return Response.json({ page });
   } catch (error) {
-    console.error("Page update error:", error);
-    return Response.json(
-      { error: "ページの更新に失敗しました" },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Page PATCH");
   }
 }
 
@@ -95,10 +88,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
     await prisma.page.delete({ where: { id } });
     return Response.json({ success: true });
   } catch (error) {
-    console.error("Page delete error:", error);
-    return Response.json(
-      { error: "ページの削除に失敗しました" },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Page DELETE");
   }
 }
