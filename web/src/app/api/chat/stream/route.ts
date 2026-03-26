@@ -185,8 +185,9 @@ export async function POST(request: Request) {
 
       const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
 
-      // Brand Memory 取得
+      // Brand Memory + Emotional DNA 取得
       let brandMemoryData;
+      let emotionalDnaData;
       try {
         const bm = await getActiveBrandMemory();
         if (bm) {
@@ -200,11 +201,18 @@ export async function POST(request: Request) {
             copyKeywords: bm.copyKeywords,
             avoidKeywords: bm.avoidKeywords,
           };
+          // Emotional DNA（感情の地層）を抽出
+          if (bm.emotionalDna) {
+            emotionalDnaData = bm.emotionalDna;
+          }
         }
       } catch { /* non-fatal */ }
 
       // DDPInput 構築
       const ddpInput = buildDDPInput(latestUserText, pageType, urlAnalysis, brandMemoryData);
+      if (emotionalDnaData) {
+        ddpInput.emotionalDna = emotionalDnaData;
+      }
       if (isSiteBuildRequest) ddpInput.pageType = "landing";
 
       // ── SSE ストリームを先に開き、DDP 進捗をリアルタイムで送信 ──

@@ -155,10 +155,45 @@ function buildDirectorUserPrompt(input: DDPInput): string {
     parts.push(`- キーワード: ${input.keywords.join("、")}`);
   }
 
-  // Brand Memory 情報
+  // Emotional DNA（感情の地層）— Brand Memoryの最深層
+  // ※ Brand Memoryより先に注入することで、感情がデザイン判断の土台になる
+  if (input.emotionalDna) {
+    const dna = input.emotionalDna;
+    parts.push(`\n## ブランドの感情の地層（Emotional DNA）`);
+    parts.push(``);
+    parts.push(`このストアのオーナーは以下の想いでビジネスを営んでいます。`);
+    parts.push(`デザインはこの想いから自然に立ち上がるものにしてください。`);
+    parts.push(``);
+    parts.push(`### オーナーの原点`);
+    parts.push(dna.originStory);
+    parts.push(``);
+    parts.push(`### 根底にある感情`);
+    parts.push(dna.coreEmotion);
+    parts.push(``);
+    parts.push(`### お客さんへの願い`);
+    parts.push(`- 最初の3秒で感じてほしいこと: ${dna.firstImpression}`);
+    parts.push(`- 商品を受け取った後に残ってほしい感覚: ${dna.afterFeeling}`);
+    parts.push(`- お客さんになってほしい表情: ${dna.customerFace}`);
+    parts.push(``);
+    parts.push(`### 目指す空気感`);
+    dna.atmosphere.forEach((a: string) => parts.push(`- ${a}`));
+    parts.push(``);
+    parts.push(`### 避けたい空気感`);
+    dna.antiAtmosphere.forEach((a: string) => parts.push(`- ${a}`));
+    parts.push(``);
+    parts.push(`### デザインの方向性（感情から導出）`);
+    parts.push(`- トーン: ${dna.derivedTones.join("、")}`);
+    parts.push(`- 色の方向性: ${dna.derivedColorMood}`);
+    parts.push(`- タイポグラフィの方向性: ${dna.derivedTypographyFeel}`);
+    parts.push(``);
+    parts.push(`### ブランドのエッセンス`);
+    parts.push(`「${dna.essencePhrase}」`);
+  }
+
+  // Brand Memory 情報（色・フォント・トーンの具体値）
   if (input.brandMemory) {
     const bm = input.brandMemory;
-    parts.push(`\n## ブランドメモリー（過去の学習済みブランド情報）`);
+    parts.push(`\n## ブランドメモリー（確定済みのブランド設定）`);
     if (bm.primaryColor) parts.push(`- メインカラー: ${bm.primaryColor}`);
     if (bm.secondaryColor) parts.push(`- サブカラー: ${bm.secondaryColor}`);
     if (bm.accentColor) parts.push(`- アクセントカラー: ${bm.accentColor}`);

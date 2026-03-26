@@ -205,6 +205,20 @@ export interface DDPInput {
     copyKeywords: string[];
     avoidKeywords: string[];
   };
+  /** Emotional DNA — オーナーの感情の地層（Brand Memoryの最深層） */
+  emotionalDna?: {
+    originStory: string;
+    coreEmotion: string;
+    firstImpression: string;
+    afterFeeling: string;
+    customerFace: string;
+    atmosphere: string[];
+    antiAtmosphere: string[];
+    derivedTones: string[];
+    derivedColorMood: string;
+    derivedTypographyFeel: string;
+    essencePhrase: string;
+  };
   /** ユーザーの自由テキスト指示 */
   userInstructions?: string;
   /** キーワード */

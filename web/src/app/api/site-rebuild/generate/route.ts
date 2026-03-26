@@ -47,6 +47,7 @@ function buildDDPInputFromPage(
   page: PageToGenerate,
   unified: UnifiedDesignContext,
   brandMemory?: any,
+  emotionalDna?: any,
 ): DDPInput {
   return {
     pageType: page.pageType || "landing",
@@ -66,6 +67,7 @@ function buildDDPInputFromPage(
       fonts: [...(page.fonts || []), ...(unified.fonts || [])],
     },
     brandMemory: brandMemory || undefined,
+    emotionalDna: emotionalDna || undefined,
   };
 }
 
@@ -105,7 +107,7 @@ export async function POST(request: Request) {
       rebuildConversationId = conversation.id;
     }
 
-    // Get Brand Memory once
+    // Get Brand Memory + Emotional DNA once
     let brandMemoryData: {
       primaryColor: string;
       secondaryColor: string;
@@ -115,6 +117,19 @@ export async function POST(request: Request) {
       voiceTone: string;
       copyKeywords: string[];
       avoidKeywords: string[];
+    } | undefined;
+    let emotionalDnaData: {
+      originStory: string;
+      coreEmotion: string;
+      firstImpression: string;
+      afterFeeling: string;
+      customerFace: string;
+      atmosphere: string[];
+      antiAtmosphere: string[];
+      derivedTones: string[];
+      derivedColorMood: string;
+      derivedTypographyFeel: string;
+      essencePhrase: string;
     } | undefined;
     try {
       const bm = await getActiveBrandMemory();
@@ -129,6 +144,9 @@ export async function POST(request: Request) {
           copyKeywords: bm.copyKeywords,
           avoidKeywords: bm.avoidKeywords,
         };
+        if (bm.emotionalDna) {
+          emotionalDnaData = bm.emotionalDna;
+        }
       }
     } catch { /* non-fatal */ }
 
@@ -186,6 +204,7 @@ export async function POST(request: Request) {
               page,
               unifiedContext,
               brandMemoryData,
+              emotionalDnaData,
             );
 
             const ddpResult = await runDDP(ddpInput, undefined, (event) => {
