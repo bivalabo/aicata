@@ -7,6 +7,7 @@ import {
   Search,
   Settings,
   Brain,
+  Fingerprint,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -17,9 +18,9 @@ interface MobileBottomNavProps {
 
 const NAV_ITEMS = [
   { id: "chat", icon: MessagesSquare, label: "制作" },
-  { id: "pages", icon: FileText, label: "ページ" },
   { id: "site", icon: Store, label: "サイト" },
-  { id: "seo", icon: Search, label: "SEO" },
+  { id: "pages", icon: FileText, label: "ページ" },
+  { id: "store-dna", icon: Fingerprint, label: "DNA" },
   { id: "settings", icon: Settings, label: "設定" },
 ];
 

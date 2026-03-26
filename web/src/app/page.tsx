@@ -56,6 +56,18 @@ const SettingsView = dynamic(
     ),
   },
 );
+const StoreDnaView = dynamic(
+  () => import("@/components/settings/StoreDnaView"),
+  {
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground text-sm">
+          読み込み中...
+        </div>
+      </div>
+    ),
+  },
+);
 const SeoView = dynamic(() => import("@/components/seo/SeoView"), {
   loading: () => (
     <div className="flex-1 flex items-center justify-center">
@@ -664,6 +676,10 @@ export default function Home() {
                   }}
                 />
               </ErrorBoundary>
+            ) : activeNav === "store-dna" ? (
+              <ErrorBoundary label="ストアDNA">
+                <StoreDnaView />
+              </ErrorBoundary>
             ) : activeNav === "site" ? (
               <ErrorBoundary label="サイト構築">
                 <SiteBuilderView />
@@ -702,6 +718,7 @@ function MobileHeader({
     chat: "ページ制作",
     site: "サイト構築",
     pages: "ページ管理",
+    "store-dna": "ストアDNA",
     seo: "SEO",
     admin: "Intelligence",
     settings: "設定",

@@ -251,7 +251,7 @@ export default function BrandMemoryView() {
             Brand Memory
           </h2>
           <p className="text-[15px] text-muted-foreground">
-            相方があなたのブランドを記憶し、すべてのページに一貫して反映します
+            Aicataがあなたのストアを記憶し、すべてのページに一貫して反映します
           </p>
         </div>
       </div>

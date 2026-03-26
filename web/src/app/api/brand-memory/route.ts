@@ -1,6 +1,6 @@
 // ============================================================
 // Aicata Brand Memory API
-// 相方があなたのブランドを記憶する — CRUD + Auto-learn
+// Aicataがあなたのストアを記憶する — CRUD + Auto-learn
 //
 // GET  /api/brand-memory — 現在のBrand Memoryを取得
 // POST /api/brand-memory — Brand Memoryを作成/更新

@@ -14,7 +14,7 @@ import type { EmotionalDNA, HearingTurn } from "./types";
 // System Prompt — ヒアリング対話のペルソナ
 // ============================================================
 
-const HEARING_SYSTEM_PROMPT = `あなたは「Aicata」というAI搭載ECサイトビルダーの相方です。
+const HEARING_SYSTEM_PROMPT = `あなたは「Aicata」というAI搭載ECサイトビルダーのAIパートナーです。
 今からオーナーさんの「感情の地層」を掬い上げるためのヒアリングを行います。
 
 ## あなたの役割

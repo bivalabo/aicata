@@ -19,6 +19,7 @@ import {
   Brain,
   Globe,
   AlertTriangle,
+  Fingerprint,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -44,6 +45,7 @@ const NAV_ITEMS = [
   { id: "chat", icon: MessagesSquare, label: "ページ制作" },
   { id: "site", icon: Store, label: "サイト構築" },
   { id: "pages", icon: FileText, label: "ページ管理" },
+  { id: "store-dna", icon: Fingerprint, label: "ストアDNA" },
   { id: "settings", icon: Settings, label: "設定" },
   { id: "admin", icon: Brain, label: "Intelligence" },
   { id: "seo", icon: Search, label: "SEO" },

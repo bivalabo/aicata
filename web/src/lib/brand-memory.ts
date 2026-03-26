@@ -83,7 +83,7 @@ export function buildBrandMemoryPrompt(
   parts.push("## Brand Memory — このストアのブランドアイデンティティ");
   parts.push("");
   parts.push(
-    "以下は相方（Aicata）が記憶しているこのストアのブランド情報です。すべてのページ生成でこのアイデンティティを一貫して反映してください。",
+    "以下はAicataが記憶しているこのストアのブランド情報です。すべてのページ生成でこのアイデンティティを一貫して反映してください。",
   );
   parts.push("");
 

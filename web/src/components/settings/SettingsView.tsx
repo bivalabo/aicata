@@ -11,9 +11,14 @@ import {
   Loader2,
   ShieldCheck,
   Zap,
+  CreditCard,
+  Globe,
+  Bell,
+  User,
+  FileText,
+  Sparkles,
 } from "lucide-react";
 import clsx from "clsx";
-import BrandMemoryView from "./BrandMemoryView";
 
 interface StoreInfo {
   id: string;
@@ -83,29 +88,19 @@ export default function SettingsView() {
       <div className="max-w-3xl mx-auto px-8 pt-16 pb-14">
         <h1 className="text-3xl font-bold text-foreground mb-2">設定</h1>
         <p className="text-[15px] text-muted-foreground mb-10">
-          Shopifyストアとの接続・Brand Memoryを管理します
+          Shopifyストアとの接続・アプリの各種設定を管理します
         </p>
 
-        {/* ━━━ Step 1: Shopifyストア接続（最上部・最優先） ━━━ */}
+        {/* ━━━ Shopifyストア接続 ━━━ */}
         {!connected ? (
           /* ── 未接続: オンボーディングカード ── */
           <div className="mb-10 rounded-2xl border-2 border-dashed border-[#7c5cfc]/30 bg-gradient-to-br from-[#7c5cfc]/[0.03] to-[#5b8def]/[0.05] overflow-hidden">
             <div className="px-8 pt-8 pb-6">
-              {/* ステップインジケーター */}
-              <div className="flex items-center gap-2 mb-5">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#7c5cfc] text-white text-[12px] font-bold">
-                  1
-                </span>
-                <span className="text-[13px] font-medium text-[#7c5cfc] tracking-wide uppercase">
-                  はじめに
-                </span>
-              </div>
-
               <h2 className="text-[22px] font-bold text-foreground mb-2">
                 Shopifyストアを接続しましょう
               </h2>
               <p className="text-[15px] text-muted-foreground leading-relaxed mb-6">
-                相方がストアのページを取得・作成・編集できるようになります。
+                Aicataがストアのページを取得・作成・編集できるようになります。
                 まずはストアのドメインを入力して接続してください。
               </p>
 
@@ -265,20 +260,146 @@ APP_URL=http://localhost:3000`}
           </div>
         )}
 
-        {/* ━━━ Step 2: Brand Memory ━━━ */}
-        <div className="mb-12">
-          {!connected && (
-            <div className="flex items-center gap-2 mb-4">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-gray-500 text-[12px] font-bold">
-                2
-              </span>
-              <span className="text-[13px] font-medium text-muted-foreground tracking-wide uppercase">
-                ブランド設定
-              </span>
+        {/* ━━━ サブスクリプション管理 ━━━ */}
+        <SettingsSection
+          icon={CreditCard}
+          title="サブスクリプション"
+          description="プランの確認・変更"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[14px] font-medium text-foreground">フリープラン</span>
+              <p className="text-[13px] text-muted-foreground mt-0.5">
+                基本機能をご利用いただけます
+              </p>
             </div>
-          )}
-          <BrandMemoryView />
+            <span className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground bg-black/[0.04] cursor-default">
+              近日公開
+            </span>
+          </div>
+        </SettingsSection>
+
+        {/* ━━━ AIモデル設定 ━━━ */}
+        <SettingsSection
+          icon={Sparkles}
+          title="AIモデル"
+          description="ページ生成に使用するAIモデルの設定"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[14px] font-medium text-foreground">Claude Sonnet 4</span>
+              <p className="text-[13px] text-muted-foreground mt-0.5">
+                高品質なデザイン生成（デフォルト）
+              </p>
+            </div>
+            <span className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground bg-black/[0.04] cursor-default">
+              近日公開
+            </span>
+          </div>
+        </SettingsSection>
+
+        {/* ━━━ 言語・ロケール ━━━ */}
+        <SettingsSection
+          icon={Globe}
+          title="言語・ロケール"
+          description="表示言語とコンテンツ生成の言語設定"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[14px] font-medium text-foreground">日本語</span>
+              <p className="text-[13px] text-muted-foreground mt-0.5">
+                インターフェースとコンテンツ生成の言語
+              </p>
+            </div>
+            <span className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground bg-black/[0.04] cursor-default">
+              近日公開
+            </span>
+          </div>
+        </SettingsSection>
+
+        {/* ━━━ 通知設定 ━━━ */}
+        <SettingsSection
+          icon={Bell}
+          title="通知"
+          description="メールやアプリ内通知の設定"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[14px] font-medium text-foreground">通知設定</span>
+              <p className="text-[13px] text-muted-foreground mt-0.5">
+                生成完了通知・更新のお知らせなど
+              </p>
+            </div>
+            <span className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground bg-black/[0.04] cursor-default">
+              近日公開
+            </span>
+          </div>
+        </SettingsSection>
+
+        {/* ━━━ アカウント情報 ━━━ */}
+        <SettingsSection
+          icon={User}
+          title="アカウント"
+          description="アカウント情報の確認・変更"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[14px] font-medium text-foreground">アカウント管理</span>
+              <p className="text-[13px] text-muted-foreground mt-0.5">
+                メールアドレス・パスワードの変更
+              </p>
+            </div>
+            <span className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground bg-black/[0.04] cursor-default">
+              近日公開
+            </span>
+          </div>
+        </SettingsSection>
+
+        {/* ━━━ 利用規約・プライバシー ━━━ */}
+        <div className="mt-10 pt-8 border-t border-black/[0.06]">
+          <div className="flex items-center gap-4 text-[13px] text-muted-foreground">
+            <a href="#" className="hover:text-foreground transition-colors flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" />
+              利用規約
+            </a>
+            <a href="#" className="hover:text-foreground transition-colors flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              プライバシーポリシー
+            </a>
+          </div>
+          <p className="text-[12px] text-muted-foreground/50 mt-3">
+            Aicata v0.1.0
+          </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsSection({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-6 rounded-2xl border border-black/[0.06] bg-white/60 overflow-hidden">
+      <div className="px-6 py-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-black/[0.04] flex items-center justify-center">
+            <Icon className="w-4.5 h-4.5 text-foreground/60" />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+            <p className="text-[12px] text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        {children}
       </div>
     </div>
   );
