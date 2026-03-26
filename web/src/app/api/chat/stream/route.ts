@@ -12,6 +12,8 @@ import {
 import { saveMessage } from "@/lib/services/conversation-service";
 import { runDDP } from "@/lib/ddp";
 import type { DDPInput } from "@/lib/ddp";
+import { runDDPNextPipeline } from "@/lib/ddp-next";
+import type { DDPNextInput } from "@/lib/ddp-next";
 import { prisma } from "@/lib/db";
 import { ChatStreamInputSchema, parseBody } from "@/lib/api-validators";
 import { checkRateLimit, AI_RATE_LIMIT, rateLimitResponse } from "@/lib/rate-limiter";
@@ -179,8 +181,8 @@ export async function POST(request: Request) {
     const isVercelHobby = process.env.VERCEL === "1" && !process.env.VERCEL_PRO;
     const skipDDP = isVercelHobby || process.env.SKIP_DDP === "1";
 
-    // ── DDP パイプライン（新規ページ生成時のみ。Enhanceモードはレガシーパスへ） ──
-    if (isPageGenerationRequest && !linkedPage && !skipDDP) {
+    // ── DDP パイプライン（新規ページ生成 & Enhanceモード両対応） ──
+    if (isPageGenerationRequest && !skipDDP) {
       log.info("[Stream API] Using DDP pipeline for page generation");
 
       const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
@@ -215,8 +217,38 @@ export async function POST(request: Request) {
       }
       if (isSiteBuildRequest) ddpInput.pageType = "landing";
 
+      // Enhance モード: 既存ページのコンテキストを注入
+      if (linkedPage) {
+        ddpInput.pageType = linkedPage.pageType || ddpInput.pageType;
+        ddpInput.userInstructions = `【既存ページ改善モード】\nページ「${linkedPage.title}」を改善してください。\n既存のコンテンツを活かしつつ、デザインとUXを向上させてください。\n\nユーザーの指示: ${latestUserText}`;
+      }
+
+      // DDPNextInput 構築（キュレーション型生成用）
+      const store = await prisma.store.findFirst({ orderBy: { updatedAt: "desc" } }).catch(() => null);
+      const ddpNextInput: DDPNextInput = {
+        pageType: ddpInput.pageType as any,
+        industry: ddpInput.industry as any,
+        brandName: ddpInput.brandName,
+        tones: ddpInput.tones as any[],
+        userInstructions: ddpInput.userInstructions,
+        urlAnalysis: ddpInput.urlAnalysis as any,
+        brandMemory: brandMemoryData ? {
+          brandName: ddpInput.brandName,
+          industry: ddpInput.industry,
+          tones: ddpInput.tones,
+          colors: {
+            primary: brandMemoryData.primaryColor,
+            secondary: brandMemoryData.secondaryColor,
+            accent: brandMemoryData.accentColor,
+          },
+          fonts: [brandMemoryData.primaryFont, brandMemoryData.bodyFont].filter(Boolean),
+        } : undefined,
+        emotionalDna: emotionalDnaData || undefined,
+        storeId: store?.id,
+      };
+
       // ── SSE ストリームを先に開き、DDP 進捗をリアルタイムで送信 ──
-      // DDP 失敗時はストリーム内でレガシーパスにフォールバック（C-2修正改善版）
+      // DDP-Next → DDP v1 → レガシーの3段フォールバック
       const stream = new ReadableStream({
         async start(controller) {
           const sse = new SSEWriter(controller);
@@ -228,6 +260,67 @@ export async function POST(request: Request) {
               sse.sendText("承知しました！サイト全体を構築していきますね。\n\n");
               sse.sendText("まずはトップページから作成していきます。\n\n");
             }
+
+            // ── DDP-Next（キュレーション型）を最初に試行 ──
+            let ddpNextSuccess = false;
+            if (!isSiteBuildRequest) {
+              try {
+                sse.sendText("🎨 テンプレートからデザインを選定中...\n\n");
+                const nextResult = await runDDPNextPipeline(ddpNextInput, (event) => {
+                  if (sse.isClosed) return;
+                  if (event.phase === "personalize") {
+                    sse.sendText("✍️ コンテンツをパーソナライズ中...\n");
+                  } else if (event.phase === "done") {
+                    sse.sendText("✅ パーソナライズ完了\n\n");
+                  }
+                });
+
+                if (nextResult?.fullDocument) {
+                  ddpNextSuccess = true;
+                  sse.sendText("✅ キュレーションデザイン完成\n\n");
+                  sse.sendText(`---PAGE_START---\n`);
+                  sse.sendText(nextResult.fullDocument);
+                  sse.sendText(`\n---PAGE_END---\n`);
+
+                  sse.sendDone({ model: modelId });
+                  sse.close();
+
+                  // DB保存
+                  if (conversationId) {
+                    try {
+                      await saveMessage(conversationId, "assistant", sse.accumulated, { model: modelId });
+                      if (linkedPage) {
+                        await prisma.page.update({
+                          where: { id: linkedPage.id },
+                          data: { html: nextResult.html, css: nextResult.css, status: "draft" },
+                        });
+                      } else {
+                        await prisma.page.create({
+                          data: {
+                            title: "DDP-Next生成ページ",
+                            slug: "",
+                            html: nextResult.html,
+                            css: nextResult.css,
+                            status: "draft",
+                            source: "aicata",
+                            version: 1,
+                            conversationId,
+                            pageType: ddpInput.pageType || "landing",
+                          },
+                        });
+                      }
+                    } catch (e) {
+                      log.error("[Stream API] Failed to save DDP-Next page:", e);
+                    }
+                  }
+                }
+              } catch (nextErr) {
+                log.warn("[Stream API] DDP-Next failed, falling back to DDP v1:", nextErr);
+              }
+            }
+
+            // ── DDP-Next が失敗した場合は DDP v1（AI生成型）にフォールバック ──
+            if (!ddpNextSuccess) {
             sse.sendText("🎨 デザインを設計中...\n\n");
 
             // DDP パイプラインをリアルタイムプログレス付きで実行
@@ -296,20 +389,38 @@ export async function POST(request: Request) {
 
               // ── DDP 生成ページを Page テーブルに保存 ──
               try {
-                const pageTitle = ddpResult.spec?.designPhilosophy?.slice(0, 50) || "DDP生成ページ";
-                await prisma.page.create({
-                  data: {
-                    title: pageTitle,
-                    slug: "",
-                    html: ddpResult.html,
-                    css: ddpResult.css,
-                    status: "draft",
-                    source: "aicata",
-                    version: 1,
-                    conversationId,
-                    pageType: ddpInput.pageType || "landing",
-                  },
-                });
+                if (linkedPage) {
+                  // Enhance モード: 既存ページを更新
+                  await prisma.page.update({
+                    where: { id: linkedPage.id },
+                    data: {
+                      html: ddpResult.html,
+                      css: ddpResult.css,
+                      status: "draft",
+                      version: { increment: 1 },
+                    },
+                  });
+                  log.info("[Stream API] DDP enhanced page updated in DB", {
+                    pageId: linkedPage.id,
+                    htmlLength: ddpResult.html.length,
+                  });
+                } else {
+                  // 新規生成: 新しいページを作成
+                  const pageTitle = ddpResult.spec?.designPhilosophy?.slice(0, 50) || "DDP生成ページ";
+                  await prisma.page.create({
+                    data: {
+                      title: pageTitle,
+                      slug: "",
+                      html: ddpResult.html,
+                      css: ddpResult.css,
+                      status: "draft",
+                      source: "aicata",
+                      version: 1,
+                      conversationId,
+                      pageType: ddpInput.pageType || "landing",
+                    },
+                  });
+                }
                 log.info("[Stream API] DDP page saved to DB", {
                   conversationId,
                   pageType: ddpInput.pageType,
@@ -320,6 +431,7 @@ export async function POST(request: Request) {
                 log.error("[Stream API] Failed to save DDP page to DB:", e);
               }
             }
+            } // end if (!ddpNextSuccess)
           } catch (ddpError) {
             // ── DDP 失敗: ストリーム内でレガシーパスにフォールバック ──
             log.error("[Stream API] DDP failed, falling back to legacy within stream:", ddpError);

@@ -4,8 +4,6 @@ import { useState, useCallback } from "react";
 import { ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
-import { updateHQSFromFeedback } from "@/lib/ddp-next/evolution";
-import type { SectionFeedback } from "@/lib/ddp-next/evolution";
 
 interface SectionFeedbackButtonsProps {
   sectionId: string;
@@ -36,16 +34,16 @@ export default function SectionFeedbackButtons({
       setFeedbackState("pending");
 
       try {
-        const feedback: SectionFeedback = {
-          sectionId,
-          action,
-          context: {
-            precedingSectionId,
-            followingSectionId,
-          },
-        };
-
-        const result = updateHQSFromFeedback(feedback);
+        const res = await fetch("/api/section-feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sectionId,
+            action,
+            context: { precedingSectionId, followingSectionId },
+          }),
+        });
+        const result = await res.json();
 
         if (result.updated) {
           setLastScore(result.newComposite);
