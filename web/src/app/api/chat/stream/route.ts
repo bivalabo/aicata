@@ -10,8 +10,6 @@ import {
   buildBrandMemoryPrompt,
 } from "@/lib/brand-memory";
 import { saveMessage } from "@/lib/services/conversation-service";
-import { runDDP } from "@/lib/ddp";
-import type { DDPInput } from "@/lib/ddp";
 import { runDDPNextPipeline } from "@/lib/ddp-next";
 import type { DDPNextInput } from "@/lib/ddp-next";
 import { prisma } from "@/lib/db";
@@ -174,15 +172,10 @@ export async function POST(request: Request) {
       ? true
       : detectPageGenerationRequest(latestUserText, pageType);
 
-    // ── Vercel Hobby プラン検出 ──
-    // Vercel Hobby プランは60秒のハードタイムアウトがある。
-    // DDP パイプラインは複数のAI呼び出しを行い60秒以上かかるため、
-    // Hobby プランではDDPをスキップしてレガシーストリーミングを使用する。
-    const isVercelHobby = process.env.VERCEL === "1" && !process.env.VERCEL_PRO;
-    const skipDDP = isVercelHobby || process.env.SKIP_DDP === "1";
-
-    // ── DDP パイプライン（新規ページ生成 & Enhanceモード両対応） ──
-    if (isPageGenerationRequest && !skipDDP) {
+    // ── DDP Next パイプライン（唯一のデザインエンジン） ──
+    // DDP Next: 人が評価した部品をAIが組み立てるキュレーション型エンジン
+    // AI使用は Phase 4（コピーライティング）のみ — 高速・低コスト・高品質
+    if (isPageGenerationRequest) {
       log.info("[Stream API] Using DDP pipeline for page generation");
 
       const isSiteBuildRequest = detectSiteBuildRequest(latestUserText);
@@ -194,6 +187,9 @@ export async function POST(request: Request) {
         const bm = await getActiveBrandMemory();
         if (bm) {
           brandMemoryData = {
+            brandName: bm.brandName || undefined,
+            industry: bm.industry || undefined,
+            tones: bm.tones || undefined,
             primaryColor: bm.primaryColor,
             secondaryColor: bm.secondaryColor,
             accentColor: bm.accentColor,
@@ -210,32 +206,25 @@ export async function POST(request: Request) {
         }
       } catch { /* non-fatal */ }
 
-      // DDPInput 構築
-      const ddpInput = buildDDPInput(latestUserText, pageType, urlAnalysis, brandMemoryData);
-      if (emotionalDnaData) {
-        ddpInput.emotionalDna = emotionalDnaData;
-      }
-      if (isSiteBuildRequest) ddpInput.pageType = "landing";
+      // DDPNextInput 構築
+      const detectedPageType = isSiteBuildRequest ? "landing" : (linkedPage?.pageType || pageType || "landing");
+      const detectedIndustry = brandMemoryData?.industry || detectIndustry(latestUserText) || "general";
+      const userInstructions = linkedPage
+        ? `【既存ページ改善モード】\nページ「${linkedPage.title}」を改善してください。\n既存のコンテンツを活かしつつ、デザインとUXを向上させてください。\n\nユーザーの指示: ${latestUserText}`
+        : latestUserText;
 
-      // Enhance モード: 既存ページのコンテキストを注入
-      if (linkedPage) {
-        ddpInput.pageType = linkedPage.pageType || ddpInput.pageType;
-        ddpInput.userInstructions = `【既存ページ改善モード】\nページ「${linkedPage.title}」を改善してください。\n既存のコンテンツを活かしつつ、デザインとUXを向上させてください。\n\nユーザーの指示: ${latestUserText}`;
-      }
-
-      // DDPNextInput 構築（キュレーション型生成用）
       const store = await prisma.store.findFirst({ orderBy: { updatedAt: "desc" } }).catch(() => null);
       const ddpNextInput: DDPNextInput = {
-        pageType: ddpInput.pageType as any,
-        industry: ddpInput.industry as any,
-        brandName: ddpInput.brandName,
-        tones: ddpInput.tones as any[],
-        userInstructions: ddpInput.userInstructions,
-        urlAnalysis: ddpInput.urlAnalysis as any,
+        pageType: detectedPageType as any,
+        industry: detectedIndustry as any,
+        brandName: brandMemoryData?.brandName || undefined,
+        tones: (brandMemoryData?.tones || ["modern"]) as any[],
+        userInstructions,
+        urlAnalysis: urlAnalysis as any,
         brandMemory: brandMemoryData ? {
-          brandName: ddpInput.brandName,
-          industry: ddpInput.industry,
-          tones: ddpInput.tones,
+          brandName: brandMemoryData.brandName,
+          industry: detectedIndustry,
+          tones: brandMemoryData.tones || ["modern"],
           colors: {
             primary: brandMemoryData.primaryColor,
             secondary: brandMemoryData.secondaryColor,
@@ -247,8 +236,7 @@ export async function POST(request: Request) {
         storeId: store?.id,
       };
 
-      // ── SSE ストリームを先に開き、DDP 進捗をリアルタイムで送信 ──
-      // DDP-Next → DDP v1 → レガシーの3段フォールバック
+      // ── SSE ストリームを先に開き、DDP Next 進捗をリアルタイムで送信 ──
       const stream = new ReadableStream({
         async start(controller) {
           const sse = new SSEWriter(controller);
@@ -261,110 +249,25 @@ export async function POST(request: Request) {
               sse.sendText("まずはトップページから作成していきます。\n\n");
             }
 
-            // ── DDP-Next（キュレーション型）を最初に試行 ──
-            let ddpNextSuccess = false;
-            if (!isSiteBuildRequest) {
-              try {
-                sse.sendText("🎨 テンプレートからデザインを選定中...\n\n");
-                const nextResult = await runDDPNextPipeline(ddpNextInput, (event) => {
-                  if (sse.isClosed) return;
-                  if (event.phase === "personalize") {
-                    sse.sendText("✍️ コンテンツをパーソナライズ中...\n");
-                  } else if (event.phase === "done") {
-                    sse.sendText("✅ パーソナライズ完了\n\n");
-                  }
-                });
-
-                if (nextResult?.fullDocument) {
-                  ddpNextSuccess = true;
-                  sse.sendText("✅ キュレーションデザイン完成\n\n");
-                  sse.sendText(`---PAGE_START---\n`);
-                  sse.sendText(nextResult.fullDocument);
-                  sse.sendText(`\n---PAGE_END---\n`);
-
-                  sse.sendDone({ model: modelId });
-                  sse.close();
-
-                  // DB保存
-                  if (conversationId) {
-                    try {
-                      await saveMessage(conversationId, "assistant", sse.accumulated, { model: modelId });
-                      if (linkedPage) {
-                        await prisma.page.update({
-                          where: { id: linkedPage.id },
-                          data: { html: nextResult.html, css: nextResult.css, status: "draft" },
-                        });
-                      } else {
-                        await prisma.page.create({
-                          data: {
-                            title: "DDP-Next生成ページ",
-                            slug: "",
-                            html: nextResult.html,
-                            css: nextResult.css,
-                            status: "draft",
-                            source: "aicata",
-                            version: 1,
-                            conversationId,
-                            pageType: ddpInput.pageType || "landing",
-                          },
-                        });
-                      }
-                    } catch (e) {
-                      log.error("[Stream API] Failed to save DDP-Next page:", e);
-                    }
-                  }
-                }
-              } catch (nextErr) {
-                log.warn("[Stream API] DDP-Next failed, falling back to DDP v1:", nextErr);
-              }
-            }
-
-            // ── DDP-Next が失敗した場合は DDP v1（AI生成型）にフォールバック ──
-            if (!ddpNextSuccess) {
-            sse.sendText("🎨 デザインを設計中...\n\n");
-
-            // DDP パイプラインをリアルタイムプログレス付きで実行
-            const ddpResult = await runDDP(ddpInput, undefined, (event) => {
+            // ── DDP Next（キュレーション型エンジン）でページ生成 ──
+            sse.sendText("🎨 テンプレートからデザインを選定中...\n\n");
+            const nextResult = await runDDPNextPipeline(ddpNextInput, (event) => {
               if (sse.isClosed) return;
-
-              if (event.stage === "spec" && event.status === "complete") {
-                const spec = "spec" in event ? event.spec : null;
-                if (spec) {
-                  sse.sendText(`✅ デザイン設計完了\n`);
-                  sse.sendText(`**デザイン方針**: ${spec.designPhilosophy}\n`);
-                  sse.sendText(`**配色**: ${spec.colors.reasoning}\n`);
-                  sse.sendText(`**セクション構成**: ${spec.sections.length}セクション\n\n`);
-                  sse.sendText(`🔨 セクションを生成中...\n`);
-                }
-              } else if (event.stage === "section" && event.status === "start") {
-                const id = "sectionId" in event ? event.sectionId : "?";
-                const idx = "index" in event ? (event as any).index : 0;
-                const total = "total" in event ? (event as any).total : 0;
-                sse.sendText(`  ⚙️ セクション ${idx + 1}/${total}: ${id}...\n`);
-              } else if (event.stage === "section" && event.status === "complete") {
-                const id = "sectionId" in event ? event.sectionId : "?";
-                sse.sendText(`  ✅ ${id} 完了\n`);
-              } else if (event.stage === "section" && event.status === "failed") {
-                const id = "sectionId" in event ? event.sectionId : "?";
-                sse.sendText(`  ⚠️ ${id} — リトライ中...\n`);
-              } else if (event.stage === "assembly" && event.status === "start") {
-                sse.sendText(`\n🧩 ページを組み立て中...\n`);
-              } else if (event.stage === "assembly" && event.status === "complete") {
-                sse.sendText(`✅ ページ組み立て完了\n`);
+              if (event.phase === "compose") {
+                sse.sendText("🧩 最適なセクションを組み合わせ中...\n");
+              } else if (event.phase === "personalize") {
+                sse.sendText("✍️ コンテンツをパーソナライズ中...\n");
+              } else if (event.phase === "done") {
+                sse.sendText("✅ デザイン完成\n\n");
               }
             });
 
-            // DDP 成功 — 完成 HTML を PAGE_START/PAGE_END で送信
-            sse.sendText(`\n🔍 品質チェック完了。プレビューを生成中...\n\n`);
+            if (!nextResult?.fullDocument) {
+              throw new Error("ページの生成に失敗しました");
+            }
 
             sse.sendText(`---PAGE_START---\n`);
-            const doc = ddpResult.fullDocument;
-            const chunkSize = 500;
-            for (let i = 0; i < doc.length; i += chunkSize) {
-              if (sse.isClosed) break;
-              sse.sendText(doc.slice(i, i + chunkSize));
-              await new Promise((r) => setTimeout(r, 3));
-            }
+            sse.sendText(nextResult.fullDocument);
             sse.sendText(`\n---PAGE_END---\n`);
 
             if (isSiteBuildRequest) {
@@ -379,133 +282,47 @@ export async function POST(request: Request) {
             sse.sendDone({ model: modelId });
             sse.close();
 
-            // DB保存（ストリーム完了後に非同期）
+            // DB保存
             if (conversationId) {
               try {
                 await saveMessage(conversationId, "assistant", sse.accumulated, { model: modelId });
-              } catch (e) {
-                log.error("[Stream API] Failed to save DDP assistant message:", e);
-              }
-
-              // ── DDP 生成ページを Page テーブルに保存 ──
-              try {
                 if (linkedPage) {
-                  // Enhance モード: 既存ページを更新
                   await prisma.page.update({
                     where: { id: linkedPage.id },
-                    data: {
-                      html: ddpResult.html,
-                      css: ddpResult.css,
-                      status: "draft",
-                      version: { increment: 1 },
-                    },
-                  });
-                  log.info("[Stream API] DDP enhanced page updated in DB", {
-                    pageId: linkedPage.id,
-                    htmlLength: ddpResult.html.length,
+                    data: { html: nextResult.html, css: nextResult.css, status: "draft", version: { increment: 1 } },
                   });
                 } else {
-                  // 新規生成: 新しいページを作成
-                  const pageTitle = ddpResult.spec?.designPhilosophy?.slice(0, 50) || "DDP生成ページ";
                   await prisma.page.create({
                     data: {
-                      title: pageTitle,
+                      title: `Aicata生成ページ (${nextResult.templateId})`,
                       slug: "",
-                      html: ddpResult.html,
-                      css: ddpResult.css,
+                      html: nextResult.html,
+                      css: nextResult.css,
                       status: "draft",
                       source: "aicata",
                       version: 1,
                       conversationId,
-                      pageType: ddpInput.pageType || "landing",
+                      pageType: detectedPageType || "landing",
                     },
                   });
                 }
-                log.info("[Stream API] DDP page saved to DB", {
-                  conversationId,
-                  pageType: ddpInput.pageType,
-                  htmlLength: ddpResult.html.length,
-                  cssLength: ddpResult.css.length,
-                });
               } catch (e) {
-                log.error("[Stream API] Failed to save DDP page to DB:", e);
+                log.error("[Stream API] Failed to save page:", e);
               }
             }
-            } // end if (!ddpNextSuccess)
-          } catch (ddpError) {
-            // ── DDP 失敗: ストリーム内でレガシーパスにフォールバック ──
-            log.error("[Stream API] DDP failed, falling back to legacy within stream:", ddpError);
-
-            // 既に送信した進捗テキストをリセットはできないが、
-            // ユーザーにフォールバックを通知してからレガシー生成を続行
-            sse.sendText("\n\n---\n⚡ 高速生成に切り替えています...\n\n");
-
-            try {
-              // レガシーシステムプロンプト構築
-              let legacySystemPrompt: string;
-              try {
-                const result = buildSystemPrompt(latestUserText, conversationTexts, urlAnalysis, pageType);
-                legacySystemPrompt = result.prompt;
-              } catch {
-                legacySystemPrompt = "あなたはAicata — ShopifyストアのAIページビルダーです。ユーザーの要望に応じてHTML+CSSでページを生成してください。生成コードは ---PAGE_START--- と ---PAGE_END--- で囲んでください。HTMLを先に、最後に<style>タグでCSSをまとめてください。";
-              }
-
-              // Brand Memory をレガシープロンプトにも注入
-              try {
-                const brandMemory = await getActiveBrandMemory();
-                if (brandMemory) {
-                  const brandPrompt = buildBrandMemoryPrompt(brandMemory);
-                  if (brandPrompt) legacySystemPrompt = `${legacySystemPrompt}\n\n${brandPrompt}`;
-                }
-              } catch { /* non-fatal */ }
-
-              const aiMessages = (messages as IncomingMessage[]).map(
-                (msg): ModelMessage => {
-                  if (typeof msg.content === "string") {
-                    return { role: msg.role as "user" | "assistant", content: msg.content } as ModelMessage;
-                  }
-                  return {
-                    role: msg.role as "user",
-                    content: msg.content.map((block) => {
-                      if (block.type === "text") return { type: "text" as const, text: block.text };
-                      return { type: "image" as const, image: block.source.data, mimeType: block.source.media_type };
-                    }),
-                  } as ModelMessage;
-                },
-              );
-
-              const aiResult = streamText({
-                model: anthropic(modelId),
-                system: legacySystemPrompt,
-                messages: aiMessages,
-                maxOutputTokens: DEFAULT_MAX_TOKENS,
-              });
-
-              for await (const chunk of aiResult.textStream) {
-                if (sse.isClosed) break;
-                sse.sendText(chunk);
-              }
-
-              const usage = await aiResult.usage;
-              const hasPageMarker = sse.accumulated.includes("---PAGE_START---");
-              const isIncomplete = hasPageMarker && !sse.accumulated.includes("---PAGE_END---");
-              sse.sendDone({ model: modelId, usage, incomplete: isIncomplete });
-            } catch (legacyError) {
-              log.error("[Stream API] Legacy fallback also failed:", legacyError);
-              sse.sendError(
-                legacyError instanceof Error ? legacyError.message : "ページ生成に失敗しました",
-                true,
-              );
-            }
-
+          } catch (err) {
+            log.error("[Stream API] DDP Next failed:", err);
+            sse.sendError(
+              "ページ生成に失敗しました。しばらく時間をおいて再度お試しください。",
+              true,
+            );
             sse.close();
 
-            // DB保存
             if (conversationId && sse.accumulated) {
               try {
                 await saveMessage(conversationId, "assistant", sse.accumulated, { model: modelId });
               } catch (e) {
-                log.error("[Stream API] Failed to save fallback assistant message:", e);
+                log.error("[Stream API] Failed to save error message:", e);
               }
             }
           }
@@ -516,10 +333,7 @@ export async function POST(request: Request) {
       return new Response(stream, { headers: SSE_HEADERS });
     }
 
-    // ── レガシー: Vercel AI SDK ストリーミング ──
-    if (skipDDP && isPageGenerationRequest && !linkedPage) {
-      log.info("[Stream API] DDP skipped (Vercel Hobby/SKIP_DDP) — using legacy streaming for page generation");
-    }
+    // ── 非ページ生成リクエスト: チャット応答（Vercel AI SDK ストリーミング） ──
 
     let systemPrompt: string;
     let designContext;
@@ -862,83 +676,15 @@ function detectSiteBuildRequest(text: string): boolean {
   return siteBuildKeywords.some((kw) => text.includes(kw));
 }
 
-/**
- * ユーザーの入力からDDPInput を構築
- */
-function buildDDPInput(
-  userText: string,
-  pageType?: string,
-  urlAnalysis?: any,
-  brandMemory?: any,
-): DDPInput {
-  // ページ種別の推定
-  const detectedPageType = pageType || detectPageType(userText);
-
-  // 業種の推定
-  const industry = detectIndustry(userText);
-
-  // トーンの推定
-  const tones = detectTones(userText);
-
-  // ブランド名の推定
-  const brandName = detectBrandName(userText);
-
-  const input: DDPInput = {
-    pageType: detectedPageType,
-    industry,
-    brandName,
-    tones,
-    keywords: extractKeywords(userText),
-    userInstructions: userText,
-  };
-
-  // URL解析結果
-  if (urlAnalysis) {
-    input.urlAnalysis = {
-      url: urlAnalysis.url || "",
-      title: urlAnalysis.title || "",
-      headings: (urlAnalysis.texts || [])
-        .filter((t: any) => t.role === "heading" || t.role === "subheading")
-        .map((t: any) => t.content),
-      bodyTexts: (urlAnalysis.texts || [])
-        .filter((t: any) => t.role === "body")
-        .map((t: any) => t.content),
-      images: urlAnalysis.images || [],
-      colors: urlAnalysis.colors || [],
-      fonts: urlAnalysis.fonts || [],
-    };
-  }
-
-  // Brand Memory
-  if (brandMemory) {
-    input.brandMemory = brandMemory;
-  }
-
-  return input;
-}
-
-function detectPageType(text: string): string {
-  const lower = text.toLowerCase();
-  if (lower.includes("トップ") || lower.includes("ランディング") || lower.includes("lp") || lower.includes("ホーム")) return "landing";
-  if (lower.includes("商品") || lower.includes("プロダクト") || lower.includes("product")) return "product";
-  if (lower.includes("コレクション") || lower.includes("カテゴリ") || lower.includes("collection")) return "collection";
-  if (lower.includes("ブログ") || lower.includes("記事") || lower.includes("blog")) return "blog";
-  if (lower.includes("お問い合わせ") || lower.includes("コンタクト") || lower.includes("contact")) return "contact";
-  if (lower.includes("about") || lower.includes("会社概要") || lower.includes("ブランドストーリー")) return "about";
-  if (lower.includes("カート") || lower.includes("cart")) return "cart";
-  if (lower.includes("検索") || lower.includes("search")) return "search";
-  if (lower.includes("404")) return "404";
-  return "landing"; // デフォルト
-}
-
 function detectIndustry(text: string): string {
   const lower = text.toLowerCase();
-  if (lower.includes("美容") || lower.includes("コスメ") || lower.includes("化粧品") || lower.includes("スキンケア") || lower.includes("beauty")) return "beauty";
-  if (lower.includes("ファッション") || lower.includes("アパレル") || lower.includes("服") || lower.includes("fashion")) return "fashion";
-  if (lower.includes("食品") || lower.includes("グルメ") || lower.includes("フード") || lower.includes("food")) return "food";
-  if (lower.includes("テック") || lower.includes("ガジェット") || lower.includes("tech")) return "tech";
-  if (lower.includes("健康") || lower.includes("ヘルス") || lower.includes("サプリ") || lower.includes("health")) return "health";
-  if (lower.includes("インテリア") || lower.includes("家具") || lower.includes("ライフスタイル") || lower.includes("lifestyle")) return "lifestyle";
+  if (lower.includes("美容") || lower.includes("コスメ") || lower.includes("化粧品") || lower.includes("スキンケア") || lower.includes("beauty") || lower.includes("サロン") || lower.includes("美容室") || lower.includes("エステ") || lower.includes("メイク") || lower.includes("ネイル") || lower.includes("ヘアサロン")) return "beauty";
+  if (lower.includes("ファッション") || lower.includes("アパレル") || lower.includes("服") || lower.includes("fashion") || lower.includes("コーデ") || lower.includes("衣料") || lower.includes("ブティック") || lower.includes("アクセサリー") || lower.includes("ジュエリー")) return "fashion";
+  if (lower.includes("食品") || lower.includes("グルメ") || lower.includes("フード") || lower.includes("food") || lower.includes("カフェ") || lower.includes("cafe") || lower.includes("レストラン") || lower.includes("料理") || lower.includes("ベーカリー") || lower.includes("パン") || lower.includes("スイーツ") || lower.includes("コーヒー") || lower.includes("居酒屋") || lower.includes("ラーメン") || lower.includes("寿司") || lower.includes("ワイン") || lower.includes("バー")) return "food";
+  if (lower.includes("テック") || lower.includes("ガジェット") || lower.includes("tech") || lower.includes("IT") || lower.includes("ソフトウェア") || lower.includes("デジタル") || lower.includes("アプリ") || lower.includes("SaaS")) return "tech";
+  if (lower.includes("健康") || lower.includes("ヘルス") || lower.includes("サプリ") || lower.includes("health") || lower.includes("フィットネス") || lower.includes("ジム") || lower.includes("ヨガ") || lower.includes("ウェルネス") || lower.includes("ピラティス")) return "health";
+  if (lower.includes("インテリア") || lower.includes("家具") || lower.includes("ライフスタイル") || lower.includes("lifestyle") || lower.includes("雑貨") || lower.includes("キッチン") || lower.includes("ホーム") || lower.includes("ガーデン")) return "lifestyle";
+  if (lower.includes("教育") || lower.includes("スクール") || lower.includes("学習") || lower.includes("レッスン") || lower.includes("塾") || lower.includes("教室")) return "education";
   return "general";
 }
 
@@ -956,22 +702,6 @@ function detectTones(text: string): string[] {
   if (lower.includes("クール") || lower.includes("cool")) tones.push("cool");
   if (lower.includes("和風") || lower.includes("伝統")) tones.push("traditional");
   return tones.length > 0 ? tones : ["modern"]; // デフォルト
-}
-
-function detectBrandName(text: string): string | undefined {
-  // 「ブランド名」や「ストア名」の後に続くテキストを抽出
-  const brandMatch = text.match(/(?:ブランド名|ストア名|ブランド)[：:「]?([^」\s、。]+)/);
-  if (brandMatch) return brandMatch[1];
-  return undefined;
-}
-
-function extractKeywords(text: string): string[] {
-  // 【】内のキーワードを抽出
-  const bracketMatches = text.match(/【([^】]+)】/g);
-  if (bracketMatches) {
-    return bracketMatches.map((m) => m.replace(/[【】]/g, ""));
-  }
-  return [];
 }
 
 /**
