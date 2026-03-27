@@ -1,9 +1,12 @@
 // ============================================================
-// DDP Next — Pipeline Orchestrator
-// Phase 1→2→3→4 を統括し、SSE進行イベントを通知
+// DDP Next — Pipeline Orchestrator (完全体)
+// Phase 0→1→1.5→2→2.5→3→3.5→4→5→5.5 を統括し、SSE進行イベントを通知
 //
-// AI使用箇所: Phase 4 のみ（コピーライティング）
-// それ以外は完全に決定的処理
+// AI使用箇所:
+//   Phase 1.5 — AI Template Advisor（confidence < 0.4 時のみ、~20%）
+//   Phase 4   — コピーライティング（常時）
+//   Phase 5.5 — AI Quality Review（HQS < 3.0 時のみ、~10%）
+// それ以外は決定的処理 + ルールベース最適化
 // ============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -25,6 +28,20 @@ import {
   setCleanupIndustry,
 } from "./personalizer";
 import { fineTunePage } from "./fine-tuner";
+import {
+  enrichDDPNextInput,
+  applyMediaStrategyToAssembledPage,
+} from "./ace-adis-bridge";
+import {
+  needsAITemplateAdvisor,
+  getAITemplateAdvice,
+} from "./ai-template-advisor";
+import {
+  needsAIQualityReview,
+  reviewAndPatchQuality,
+  applyCSSPatches,
+} from "./ai-quality-reviewer";
+import { computeHQSComposite } from "./types";
 import { prisma } from "@/lib/db";
 
 // ── ThemeLayout → Assembly Options ──
@@ -89,6 +106,15 @@ export async function runDDPNextPipeline(
 
   const totalStart = performance.now();
 
+  // ── Phase 0: ACE-ADIS 入力拡張（userDNA自動ロード + Vision統合）──
+  onProgress?.({
+    phase: "intent",
+    message: "Design DNA を読み込んでいます...",
+    progress: 5,
+  });
+
+  const enrichedInput = await enrichDDPNextInput(input);
+
   // ── Phase 1: Intent Analysis（決定的、<1ms）──
   onProgress?.({
     phase: "intent",
@@ -99,13 +125,14 @@ export async function runDDPNextPipeline(
   const t1 = performance.now();
   let intent: IntentAnalysis;
   try {
-    intent = analyzeIntent(input);
+    intent = analyzeIntent(enrichedInput);
     timing.intentAnalysis = performance.now() - t1;
 
     console.log("[DDP Next] Phase 1 complete:", {
       confidence: intent.confidence,
       industry: intent.contentRequirements.industry,
       tones: intent.contentRequirements.tones,
+      hasUserDNA: !!enrichedInput.userDNA,
       ms: Math.round(timing.intentAnalysis),
     });
   } catch (err) {
@@ -115,6 +142,43 @@ export async function runDDPNextPipeline(
       progress: 10,
     });
     throw err;
+  }
+
+  // ── Phase 1.5: AI Template Advisor（条件的、confidence < 0.4 時のみ）──
+  if (anthropicClient && needsAITemplateAdvisor(intent.confidence)) {
+    try {
+      onProgress?.({
+        phase: "compose",
+        message: "AIがテンプレート選定を補助しています...",
+        progress: 20,
+      });
+
+      const advice = await getAITemplateAdvice(
+        intent,
+        enrichedInput.userInstructions,
+        anthropicClient,
+      );
+
+      if (advice) {
+        // AIの推奨でintentを補強（トーンと業種を上書き）
+        if (advice.recommendedTones.length > 0) {
+          intent.contentRequirements.tones = advice.recommendedTones as any;
+        }
+        if (advice.recommendedIndustry) {
+          intent.contentRequirements.industry = advice.recommendedIndustry as any;
+        }
+        // 信頼度を引き上げ（AI補助済み）
+        intent.confidence = Math.max(intent.confidence, 0.5);
+
+        console.log("[DDP Next] Phase 1.5 AI Advisor:", {
+          recommendedTemplate: advice.recommendedTemplateId,
+          tones: advice.recommendedTones,
+          reasoning: advice.reasoning.slice(0, 80),
+        });
+      }
+    } catch (err) {
+      console.warn("[DDP Next] Phase 1.5 AI Advisor failed (non-fatal):", err);
+    }
   }
 
   // ── Phase 2: Template & Section Selection（決定的、<10ms）──
@@ -135,6 +199,7 @@ export async function runDDPNextPipeline(
       templateScore: plan.templateScore,
       sectionCount: plan.sections.length,
       reasons: plan.reasons,
+      aiAssisted: needsAITemplateAdvisor(intent.confidence),
       ms: Math.round(timing.composition),
     });
 
@@ -187,6 +252,20 @@ export async function runDDPNextPipeline(
       placeholderCount: assembled.placeholders.length,
       ms: Math.round(timing.assembly),
     });
+
+    // ── Phase 3.5: Media Strategy（ACE-ADIS、決定的）──
+    if (enrichedInput.urlAnalysis) {
+      const { fullDocument: mediaEnhanced, mediaStrategy } =
+        applyMediaStrategyToAssembledPage(
+          assembled.fullDocument,
+          enrichedInput.urlAnalysis,
+          enrichedInput.industry,
+        );
+      if (mediaStrategy) {
+        assembled.fullDocument = mediaEnhanced;
+        console.log("[DDP Next] Phase 3.5 Media Strategy:", mediaStrategy.stats);
+      }
+    }
   } catch (err) {
     onProgress?.({
       phase: "error",
@@ -212,7 +291,7 @@ export async function runDDPNextPipeline(
         intent.contentRequirements,
         anthropicClient,
         undefined, // model
-        input.emotionalDna,
+        enrichedInput.emotionalDna,
       );
       // トークン推定（入力文字数/3 + 出力文字数/3）
       const inputChars = JSON.stringify(intent.contentRequirements).length;
@@ -246,7 +325,7 @@ export async function runDDPNextPipeline(
   }
 
   // ── 残留プレースホルダーのクリーンアップ（業種別画像を使用）──
-  setCleanupIndustry(intent.contentRequirements.industry || input.industry || "general");
+  setCleanupIndustry(intent.contentRequirements.industry || enrichedInput.industry || "general");
   personalized.fullDocument = cleanupRemainingPlaceholders(personalized.fullDocument);
 
   // ── Phase 5: Fine-tuning & Brand Fit（決定的、<5ms）──
@@ -260,9 +339,9 @@ export async function runDDPNextPipeline(
   const fineTuned = fineTunePage({
     fullDocument: personalized.fullDocument,
     requirements: intent.contentRequirements,
-    brandMemory: input.brandMemory ? {
-      colors: input.brandMemory.colors,
-      fonts: input.brandMemory.fonts,
+    brandMemory: enrichedInput.brandMemory ? {
+      colors: enrichedInput.brandMemory.colors,
+      fonts: enrichedInput.brandMemory.fonts,
     } : undefined,
   });
   personalized.fullDocument = fineTuned.fullDocument;
@@ -273,6 +352,44 @@ export async function runDDPNextPipeline(
       details: fineTuned.adjustments.map((a) => `${a.variable}: ${a.from} → ${a.to}`),
       ms: Math.round(performance.now() - t5),
     });
+  }
+
+  // ── Phase 5.5: AI Quality Review（条件的、HQS < 3.0 時のみ）──
+  if (anthropicClient && plan.sections.length > 0) {
+    // テンプレートのHQSコンポジットを計算
+    const avgHQS = plan.sections.reduce((sum, s) => sum + s.hqsComposite, 0) / plan.sections.length;
+
+    if (needsAIQualityReview(avgHQS)) {
+      try {
+        onProgress?.({
+          phase: "personalize",
+          message: "AIが品質チェックを実施中...",
+          progress: 95,
+        });
+
+        const reviewResult = await reviewAndPatchQuality(
+          personalized.fullDocument,
+          intent.contentRequirements,
+          avgHQS,
+          anthropicClient,
+        );
+
+        if (reviewResult.reviewed && reviewResult.cssPatches) {
+          personalized.fullDocument = applyCSSPatches(
+            personalized.fullDocument,
+            reviewResult.cssPatches,
+          );
+
+          console.log("[DDP Next] Phase 5.5 AI Quality Review:", {
+            avgHQS: avgHQS.toFixed(2),
+            improvements: reviewResult.improvements,
+            estimatedAfter: reviewResult.estimatedScoreAfter.toFixed(2),
+          });
+        }
+      } catch (err) {
+        console.warn("[DDP Next] Phase 5.5 AI Review failed (non-fatal):", err);
+      }
+    }
   }
 
   // ── 完了 ──
