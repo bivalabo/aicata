@@ -327,55 +327,6 @@ function computeConfidence(input: DDPNextInput): number {
 }
 
 // ============================================================
-// Public: テキストから業種・トーンを検出（簡易キーワードマッチ）
-// plan/route.ts 等で DDPNextInput 構築前に使用
-// ============================================================
-
-const INDUSTRY_KEYWORDS: Record<string, string[]> = {
-  beauty: ["美容", "コスメ", "スキンケア", "化粧", "beauty", "skincare", "メイク"],
-  fashion: ["ファッション", "アパレル", "服", "fashion", "衣料", "コーデ"],
-  food: ["食品", "フード", "食べ", "グルメ", "food", "レストラン", "カフェ", "料理"],
-  health: ["健康", "サプリ", "ウェルネス", "health", "フィットネス"],
-  tech: ["テック", "ガジェット", "IT", "tech", "デジタル", "ソフトウェア"],
-  lifestyle: ["ライフスタイル", "インテリア", "雑貨", "家具", "lifestyle"],
-  education: ["教育", "スクール", "学習", "レッスン", "education"],
-};
-
-const TONE_KEYWORDS: Record<string, string[]> = {
-  modern: ["モダン", "現代的", "modern"],
-  luxury: ["高級", "ラグジュアリー", "luxury", "プレミアム"],
-  minimal: ["ミニマル", "シンプル", "minimal", "clean"],
-  warm: ["温かい", "温もり", "warm", "ナチュラル"],
-  bold: ["大胆", "インパクト", "bold", "ダイナミック"],
-  elegant: ["エレガント", "上品", "elegant", "洗練"],
-  playful: ["ポップ", "楽しい", "カジュアル", "playful"],
-  professional: ["プロフェッショナル", "ビジネス", "信頼", "professional"],
-};
-
-/** テキストから業種を推定（キーワードマッチ） */
-export function detectIndustry(text: string): IndustryType | null {
-  const lower = text.toLowerCase();
-  for (const [industry, keywords] of Object.entries(INDUSTRY_KEYWORDS)) {
-    if (keywords.some((kw) => lower.includes(kw.toLowerCase()))) {
-      return industry as IndustryType;
-    }
-  }
-  return null;
-}
-
-/** テキストからデザイントーンを推定（キーワードマッチ） */
-export function detectTones(text: string): DesignTone[] | null {
-  const detected: DesignTone[] = [];
-  const lower = text.toLowerCase();
-  for (const [tone, keywords] of Object.entries(TONE_KEYWORDS)) {
-    if (keywords.some((kw) => lower.includes(kw.toLowerCase()))) {
-      detected.push(tone as DesignTone);
-    }
-  }
-  return detected.length > 0 ? detected : null;
-}
-
-// ============================================================
 // DNA演算ヘルパー
 // ============================================================
 
