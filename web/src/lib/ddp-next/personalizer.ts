@@ -552,10 +552,22 @@ export function cleanupRemainingPlaceholders(html: string): string {
   const usedIndices = new Map<string, number>();
 
   // 画像系プレースホルダー → 業種別の多様な Unsplash 画像
-  // 広い正規表現パターンで、IMAGE, IMG, SRC, PHOTO, BACKGROUND, BANNER, HERO_IMAGE 等すべてキャッチ
+  // 属性内（src="{{...}}"）の場合はURLのみ、テキストノードの場合は<img>タグで囲む
   html = html.replace(
-    /\{\{(?:[A-Z0-9_]*(?:IMAGE|IMG|SRC|PHOTO|BACKGROUND|BANNER|ICON|LOGO|THUMBNAIL|AVATAR)[A-Z0-9_]*)\}\}/gi,
-    (match) => selectImageForPlaceholder(match, industry, usedIndices),
+    /(\w+=["'])?\{\{(?:[A-Z0-9_]*(?:IMAGE|IMG|SRC|PHOTO|BACKGROUND|BANNER|ICON|LOGO|THUMBNAIL|AVATAR)[A-Z0-9_]*)\}\}/gi,
+    (match, attrPrefix) => {
+      const url = selectImageForPlaceholder(match, industry, usedIndices);
+      if (attrPrefix) {
+        // src="{{HERO_IMAGE}}" → src="https://..." (属性値内)
+        return attrPrefix + url;
+      }
+      // テキストノード: {{LOGO}} → <img> タグで囲む (LOGOの場合は小さく表示)
+      const isLogo = /LOGO/i.test(match);
+      if (isLogo) {
+        return `<img src="${url}" alt="ロゴ" style="height:40px;width:auto;object-fit:contain;" />`;
+      }
+      return `<img src="${url}" alt="イメージ画像" style="width:100%;height:auto;display:block;object-fit:cover;" />`;
+    },
   );
 
   // ALT テキスト → 意味のあるデフォルト値（アクセシビリティ確保）
@@ -731,10 +743,21 @@ export function cleanupRemainingPlaceholders(html: string): string {
 
   // ── Step 5: 生URLテキストの修復 ──
   // HTMLタグの外（テキストノードとして）に露出している画像URLを検出し、<img>タグに変換
+  // https:// と https: (//が欠落した場合) の両方に対応
   html = html.replace(
-    /(?<![="'])(https:\/\/images\.unsplash\.com\/[^\s<>"']+)/g,
+    /(?<![="'])(https?:\/?\/?images\.unsplash\.com\/?\S*photo[^\s<>"']+)/g,
     (_match, url) => {
-      return `<img src="${url}" alt="イメージ画像" style="width:100%;height:auto;display:block;object-fit:cover;" />`;
+      // URLを正規化（https:images... → https://images...）
+      const normalizedUrl = url.replace(/^https?:\/?\/?/, "https://");
+      return `<img src="${normalizedUrl}" alt="イメージ画像" style="width:100%;height:auto;display:block;object-fit:cover;" />`;
+    },
+  );
+  // 汎用パターン: 任意の unsplash URL がテキストとして露出している場合
+  html = html.replace(
+    /(?<![="'])(\bhttps?:\/?\/?[^\s<>"']*unsplash\.com[^\s<>"']+)/g,
+    (_match, url) => {
+      const normalizedUrl = url.replace(/^https?:\/?\/?/, "https://");
+      return `<img src="${normalizedUrl}" alt="イメージ画像" style="width:100%;height:auto;display:block;object-fit:cover;" />`;
     },
   );
 
