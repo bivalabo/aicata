@@ -42,12 +42,34 @@ export function extractPageData(text: string): PageData | null {
 
   if (!block) return null;
 
+  // fullDocument（完全なHTML文書）の場合、body内容だけを抽出
+  // DDP Next パイプラインは <!DOCTYPE html>...<body>...</body></html> を出力する
+  let processBlock = block;
+  const bodyMatch = block.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch) {
+    // <head> 内の <style> も抽出する
+    const headStyleRegex = /<head[^>]*>[\s\S]*?<\/head>/i;
+    const headMatch = block.match(headStyleRegex);
+    const headStyles: string[] = [];
+    if (headMatch) {
+      const headStyleMatches = [...headMatch[0].matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)];
+      for (const m of headStyleMatches) {
+        headStyles.push(m[1].trim());
+      }
+    }
+    // body内容 + head内のstyleを再構成
+    processBlock = bodyMatch[1].trim();
+    if (headStyles.length > 0) {
+      processBlock = `<style>${headStyles.join("\n")}</style>\n${processBlock}`;
+    }
+  }
+
   // 完了した <style>...</style> を抽出（複数対応）
   const completedStyleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
-  const styleMatches = [...block.matchAll(completedStyleRegex)];
+  const styleMatches = [...processBlock.matchAll(completedStyleRegex)];
 
   let css = "";
-  let html = block;
+  let html = processBlock;
 
   // 完了した style タグからCSSを抽出
   for (const match of styleMatches) {
@@ -79,7 +101,15 @@ export function extractPageData(text: string): PageData | null {
     }
   }
 
-  html = html.trim();
+  // ドキュメントレベルのタグ残骸を除去（fullDocument由来の場合）
+  html = html
+    .replace(/<!DOCTYPE[^>]*>/gi, "")
+    .replace(/<\/?html[^>]*>/gi, "")
+    .replace(/<\/?head[^>]*>/gi, "")
+    .replace(/<\/?body[^>]*>/gi, "")
+    .replace(/<meta[^>]*>/gi, "")
+    .replace(/<title[^>]*>[\s\S]*?<\/title>/gi, "")
+    .trim();
   css = css.trim();
 
   if (!html && !css) return null;
