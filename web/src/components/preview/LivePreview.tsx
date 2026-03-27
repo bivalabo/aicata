@@ -88,6 +88,41 @@ export function buildFullHtml(html: string, css: string, enableSectionEditor: bo
 
   const sectionDetectionScript = enableSectionEditor ? getSectionDetectionScript() : "";
 
+  // 画像読み込みエラーハンドリングスクリプト
+  // srcdoc iframe 内で外部画像が読み込めない場合にプレースホルダーを表示
+  const imageErrorScript = `
+(function(){
+  function handleBrokenImage(img){
+    img.onerror=null;
+    var p=document.createElement('div');
+    var w=img.getAttribute('width')||img.style.width||'100%';
+    var h=img.getAttribute('height')||img.style.height||'200px';
+    p.style.cssText='width:'+w+';height:'+h+';min-height:120px;background:linear-gradient(135deg,#f5f5f5 0%,#e8e8e8 100%);display:flex;align-items:center;justify-content:center;color:#aaa;font-size:13px;border-radius:4px;';
+    p.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>';
+    if(img.parentNode){img.parentNode.replaceChild(p,img);}
+  }
+  document.querySelectorAll('img').forEach(function(img){
+    img.onerror=function(){handleBrokenImage(this);};
+    if(img.complete && img.naturalWidth===0 && img.src){handleBrokenImage(img);}
+  });
+  new MutationObserver(function(mutations){
+    mutations.forEach(function(m){
+      m.addedNodes.forEach(function(n){
+        if(n.tagName==='IMG'){
+          n.onerror=function(){handleBrokenImage(this);};
+          if(n.complete && n.naturalWidth===0 && n.src){handleBrokenImage(n);}
+        }
+        if(n.querySelectorAll){
+          n.querySelectorAll('img').forEach(function(img){
+            img.onerror=function(){handleBrokenImage(this);};
+            if(img.complete && img.naturalWidth===0 && img.src){handleBrokenImage(img);}
+          });
+        }
+      });
+    });
+  }).observe(document.body,{childList:true,subtree:true});
+})();`;
+
   const hasContent = body.trim().length > 0;
 
   // DDP 出力は :root CSS 変数と独自リセットを含む — 二重リセットを回避
@@ -123,6 +158,15 @@ ${needsGoogleFonts ? `  <link rel="preconnect" href="https://fonts.googleapis.co
 ${links ? `  ${links}` : ""}
   <style>
 ${baseResetCss}
+/* === Broken Image Fallback === */
+img {
+  font-size: 0;
+  color: transparent;
+}
+img::before {
+  content: '';
+  display: block;
+}
   </style>
   <style id="aicata-ai-css">
 /* === AI Generated CSS === */
@@ -132,6 +176,7 @@ ${css}
 <body>
 ${hasContent ? body : `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#999;font-size:14px;">ページを構築中...</div>`}
 </body>
+<script>${imageErrorScript}</script>
 ${sectionDetectionScript ? `<script>${sectionDetectionScript}</script>` : ""}
 </html>`;
 }
