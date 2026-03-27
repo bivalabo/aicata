@@ -407,11 +407,22 @@ export function cleanupRemainingPlaceholders(html: string): string {
     },
   );
 
-  // URL系 → #
-  html = html.replace(/\{\{(?:[A-Z0-9_]*(?:URL|LINK|HREF)[A-Z0-9_]*)\}\}/gi, "#");
+  // URL系 → javascript:void(0) (# だとページトップに飛ぶため)
+  html = html.replace(/\{\{(?:[A-Z0-9_]*(?:URL|LINK|HREF)[A-Z0-9_]*)\}\}/gi, "javascript:void(0)");
 
   // 残りのテキスト系プレースホルダー → 空文字
   html = html.replace(/\{\{[A-Z][A-Z0-9_]*\}\}/g, "");
+
+  // ── 生URLテキストの修復 ──
+  // HTMLタグの外（テキストノードとして）に露出している画像URLを検出し、<img>タグに変換
+  // パターン: タグの外に出現する https://images.unsplash.com/... のURL
+  html = html.replace(
+    /(?<![="'])(https:\/\/images\.unsplash\.com\/[^\s<>"']+)/g,
+    (match, url) => {
+      // すでに src= 等の属性値内にある場合はスキップ（lookbehindで一部カバー）
+      return `<img src="${url}" alt="イメージ画像" style="width:100%;height:auto;display:block;object-fit:cover;" />`;
+    },
+  );
 
   return html;
 }
@@ -428,8 +439,8 @@ export function personalizeContentFallback(
   const generatedContent: Record<string, string> = {};
   let replacedCount = 0;
 
-  // ブランド名の直接置換
-  const brandName = requirements.brandName || "Brand";
+  // ブランド名の直接置換（"Brand" ではなく日本語のデフォルトを使用）
+  const brandName = requirements.brandName || "My Store";
   const brandPlaceholders = ["{{BRAND_NAME}}", "{{SHOP_NAME}}", "{{STORE_NAME}}"];
 
   for (const bp of brandPlaceholders) {
@@ -503,6 +514,20 @@ export function personalizeContentFallback(
     "{{CONTACT_TEXT}}": "お気軽にお問い合わせください",
     "{{EMAIL_ADDRESS}}": "info@example.com",
     "{{PHONE_NUMBER}}": "03-1234-5678",
+    // Footer links（テンプレートで使われる様々なパターン）
+    "{{FOOTER_LINK_1}}": "ショップ",
+    "{{FOOTER_LINK_2}}": "私たちについて",
+    "{{FOOTER_LINK_3}}": "お問い合わせ",
+    "{{FOOTER_LINK_4}}": "プライバシーポリシー",
+    "{{FOOTER_LINK_5}}": "特定商取引法に基づく表記",
+    "{{FOOTER_LINK_6}}": "利用規約",
+    "{{FOOTER_CATEGORY_1}}": "ショップ",
+    "{{FOOTER_CATEGORY_2}}": "サポート",
+    "{{FOOTER_CATEGORY_3}}": "会社情報",
+    // Mega menu / navigation fallbacks
+    "{{MEGA_CATEGORY_1}}": "カテゴリ",
+    "{{MEGA_CATEGORY_2}}": "新着",
+    "{{MEGA_CATEGORY_3}}": "セール",
   };
 
   for (const [placeholder, value] of Object.entries(FALLBACK_VALUES)) {
