@@ -348,6 +348,11 @@ const STATEMENTS: { label: string; sql: string }[] = [
   { label: "BuildSection sort index", sql: `CREATE INDEX IF NOT EXISTS "BuildSection_buildId_sortOrder_idx" ON "BuildSection"("buildId", "sortOrder")` },
   { label: "BuildSection status index", sql: `CREATE INDEX IF NOT EXISTS "BuildSection_status_idx" ON "BuildSection"("status")` },
 
+  // ── BrandMemory: 不足カラム追加（初回マイグレーションでテーブルが不完全に作成された場合） ──
+  { label: "BrandMemory emotionalDna column", sql: `ALTER TABLE "BrandMemory" ADD COLUMN IF NOT EXISTS "emotionalDna" TEXT NOT NULL DEFAULT ''` },
+  { label: "BrandMemory hearingSession column", sql: `ALTER TABLE "BrandMemory" ADD COLUMN IF NOT EXISTS "hearingSession" TEXT NOT NULL DEFAULT ''` },
+  { label: "BrandMemory hearingStatus column", sql: `ALTER TABLE "BrandMemory" ADD COLUMN IF NOT EXISTS "hearingStatus" TEXT NOT NULL DEFAULT 'none'` },
+
   // ── Page: 不足カラム追加 ──
   { label: "Page pageType column", sql: `ALTER TABLE "Page" ADD COLUMN IF NOT EXISTS "pageType" TEXT NOT NULL DEFAULT 'general'` },
   { label: "Page templateId column", sql: `ALTER TABLE "Page" ADD COLUMN IF NOT EXISTS "templateId" TEXT` },
