@@ -5,7 +5,7 @@
 // SSE ストリーミングで進捗を返す
 // ============================================================
 
-import { crawlSite } from "@/lib/ddp-next/site-crawler";
+import { crawlSite } from "@/lib/ddp/site-crawler";
 
 export const maxDuration = 120; // 2 minutes
 

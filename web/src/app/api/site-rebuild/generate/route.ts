@@ -1,18 +1,13 @@
 // ============================================================
-// Aicata — Site Rebuild Generator (v3 with DDP Next)
-// 解析済みページを DDP Next パイプラインで順次生成し、
+// Aicata — Site Rebuild Generator (v2 with DDP)
+// 解析済みページを DDP パイプラインで順次AI生成し、
 // ストリーミングで進捗を返す
-//
-// DDP Next: 人が評価した部品をAIが組み立てるキュレーション型エンジン
-// AI使用は Phase 4（コピーライティング）のみ — コスト効率が大幅に向上
 // ============================================================
 
-import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
-import { runDDPNextPipeline } from "@/lib/ddp-next";
-import type { DDPNextInput } from "@/lib/ddp-next";
+import { runDDP } from "@/lib/ddp";
+import type { DDPInput } from "@/lib/ddp";
 import { getActiveBrandMemory } from "@/lib/brand-memory";
-import type { IndustryType, DesignTone, PageType } from "@/lib/design-engine/types";
 
 export const maxDuration = 300; // 5 minutes
 
@@ -46,64 +41,32 @@ interface GenerateRequest {
   conversationId?: string;
 }
 
-// ── Build DDPNextInput from page analysis ──
+// ── Build DDPInput from page analysis ──
 
-function buildDDPNextInputFromPage(
+function buildDDPInputFromPage(
   page: PageToGenerate,
   unified: UnifiedDesignContext,
   brandMemory?: any,
   emotionalDna?: any,
-): DDPNextInput {
-  const industry = detectIndustryFromKeywords(unified.industryKeywords);
-  const tones = unified.tones.length > 0 ? unified.tones : ["modern"];
-
+): DDPInput {
   return {
-    pageType: (page.pageType || "landing") as PageType,
-    industry: industry as IndustryType,
+    pageType: page.pageType || "landing",
+    industry: detectIndustryFromKeywords(unified.industryKeywords),
     brandName: unified.siteName || undefined,
-    tones: tones as DesignTone[],
+    tones: unified.tones.length > 0 ? unified.tones : ["modern"],
     targetAudience: undefined,
-    referenceUrl: page.url,
+    keywords: unified.industryKeywords || [],
+    userInstructions: `「${page.title || page.path}」のページをリビルドしてください。既存コンテンツを活かしつつ、デザインを最新のトレンドに合わせて一新してください。`,
     urlAnalysis: {
       url: page.url,
       title: page.title,
-      description: page.description || "",
-      industry: industry as IndustryType,
-      tones: tones as DesignTone[],
-      sections: (page.headings || []).map((h, i) => ({
-        tag: "section",
-        category: "content" as any,
-        textContent: h,
-        order: i,
-      })),
-      texts: [
-        ...(page.headings || []).map((h) => ({ content: h, role: "heading" as const, selector: "" })),
-        ...(page.textSnippets || []).map((t) => ({ content: t, role: "body" as const, selector: "" })),
-      ],
-      images: (page.images || []).map((img) => ({
-        src: img.src,
-        alt: img.alt,
-        width: 0,
-        height: 0,
-        context: img.context || "",
-      })),
+      headings: page.headings || [],
+      bodyTexts: page.textSnippets || [],
+      images: page.images || [],
       colors: [...(page.colors || []), ...(unified.dominantColors || [])],
       fonts: [...(page.fonts || []), ...(unified.fonts || [])],
-    } as any,
-    userInstructions: `「${page.title || page.path}」のページをリビルドしてください。既存コンテンツを活かしつつ、デザインを最新のトレンドに合わせて一新してください。`,
-    brandMemory: brandMemory
-      ? {
-          brandName: brandMemory.brandName || unified.siteName,
-          industry,
-          tones,
-          colors: {
-            primary: brandMemory.primaryColor,
-            secondary: brandMemory.secondaryColor,
-            accent: brandMemory.accentColor,
-          },
-          fonts: [brandMemory.primaryFont, brandMemory.bodyFont].filter(Boolean),
-        }
-      : undefined,
+    },
+    brandMemory: brandMemory || undefined,
     emotionalDna: emotionalDna || undefined,
   };
 }
@@ -112,13 +75,13 @@ function detectIndustryFromKeywords(keywords: string[]): string {
   const joined = keywords.join(" ").toLowerCase();
   if (joined.includes("beauty") || joined.includes("cosmetic") || joined.includes("skin")) return "beauty";
   if (joined.includes("fashion") || joined.includes("apparel") || joined.includes("clothing")) return "fashion";
-  if (joined.includes("food") || joined.includes("gourmet") || joined.includes("organic") || joined.includes("spice")) return "food";
+  if (joined.includes("food") || joined.includes("gourmet") || joined.includes("organic")) return "food";
   if (joined.includes("tech") || joined.includes("gadget") || joined.includes("electronic")) return "tech";
   if (joined.includes("health") || joined.includes("wellness") || joined.includes("supplement")) return "health";
   return "general";
 }
 
-// ── Main handler: SSE streaming with DDP Next ──
+// ── Main handler: SSE streaming with DDP ──
 
 export async function POST(request: Request) {
   try {
@@ -145,13 +108,33 @@ export async function POST(request: Request) {
     }
 
     // Get Brand Memory + Emotional DNA once
-    let brandMemoryData: any;
-    let emotionalDnaData: any;
+    let brandMemoryData: {
+      primaryColor: string;
+      secondaryColor: string;
+      accentColor: string;
+      primaryFont: string;
+      bodyFont: string;
+      voiceTone: string;
+      copyKeywords: string[];
+      avoidKeywords: string[];
+    } | undefined;
+    let emotionalDnaData: {
+      originStory: string;
+      coreEmotion: string;
+      firstImpression: string;
+      afterFeeling: string;
+      customerFace: string;
+      atmosphere: string[];
+      antiAtmosphere: string[];
+      derivedTones: string[];
+      derivedColorMood: string;
+      derivedTypographyFeel: string;
+      essencePhrase: string;
+    } | undefined;
     try {
       const bm = await getActiveBrandMemory();
       if (bm) {
         brandMemoryData = {
-          brandName: bm.brandName || unifiedContext.siteName,
           primaryColor: bm.primaryColor,
           secondaryColor: bm.secondaryColor,
           accentColor: bm.accentColor,
@@ -166,11 +149,6 @@ export async function POST(request: Request) {
         }
       }
     } catch { /* non-fatal */ }
-
-    // Anthropic client for Phase 4 personalization (only AI step)
-    const anthropicClient = process.env.ANTHROPIC_API_KEY
-      ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-      : undefined;
 
     // SSE stream for progress
     const encoder = new TextEncoder();
@@ -198,15 +176,14 @@ export async function POST(request: Request) {
           pageId: string;
           title: string;
           status: "ok" | "error";
-          templateId?: string;
-          timingMs?: number;
+          attempts: number;
           error?: string;
         }> = [];
 
         let successCount = 0;
         let failedCount = 0;
 
-        // ── Generate each page with DDP Next ──
+        // ── Generate each page with DDP ──
         for (let i = 0; i < pages.length; i++) {
           if (streamClosed) break;
 
@@ -218,35 +195,28 @@ export async function POST(request: Request) {
             current: i + 1,
             total: pages.length,
             title,
-            path: page.path,
-            pageType: page.pageType,
             succeeded: successCount,
             failed: failedCount,
           });
 
           try {
-            const ddpNextInput = buildDDPNextInputFromPage(
+            const ddpInput = buildDDPInputFromPage(
               page,
               unifiedContext,
               brandMemoryData,
               emotionalDnaData,
             );
 
-            const result = await runDDPNextPipeline(
-              ddpNextInput,
-              (event) => {
-                if (streamClosed) return;
-                send({
-                  type: "ddp_progress",
-                  pageIndex: i,
-                  title,
-                  phase: event.phase,
-                  message: event.message,
-                  progress: event.progress,
-                });
-              },
-              anthropicClient,
-            );
+            const ddpResult = await runDDP(ddpInput, undefined, (event) => {
+              if (streamClosed) return;
+              send({
+                type: "ddp_progress",
+                pageIndex: i,
+                title,
+                stage: event.stage,
+                ...("status" in event ? { status: event.status } : {}),
+              });
+            });
 
             // Save to DB
             let pageId = "";
@@ -255,8 +225,8 @@ export async function POST(request: Request) {
                 data: {
                   title: title,
                   slug: "",
-                  html: result.html,
-                  css: result.css,
+                  html: ddpResult.html,
+                  css: ddpResult.css,
                   status: "draft",
                   source: "aicata",
                   version: 1,
@@ -270,9 +240,9 @@ export async function POST(request: Request) {
                 data: {
                   pageId: savedPage.id,
                   version: 1,
-                  html: result.html,
-                  css: result.css,
-                  prompt: `DDP Next rebuild: ${title} (template: ${result.templateId})`,
+                  html: ddpResult.html,
+                  css: ddpResult.css,
+                  prompt: `DDP rebuild: ${title}`,
                 },
               });
             } catch (dbErr) {
@@ -284,8 +254,7 @@ export async function POST(request: Request) {
               pageId,
               title,
               status: "ok",
-              templateId: result.templateId,
-              timingMs: Math.round(result.timing.total),
+              attempts: 1,
             });
 
             send({
@@ -293,20 +262,18 @@ export async function POST(request: Request) {
               index: i,
               pageId,
               title,
-              pageType: page.pageType,
               status: "ok",
-              templateId: result.templateId,
-              timingMs: Math.round(result.timing.total),
+              attempts: 1,
+              validation: ddpResult.validation,
             });
           } catch (err) {
             failedCount++;
             const errorMsg = err instanceof Error ? err.message : "不明なエラー";
-            console.error(`[Site Rebuild] Page "${title}" failed:`, errorMsg);
-
             results.push({
               pageId: "",
               title,
               status: "error",
+              attempts: 1,
               error: errorMsg,
             });
 
@@ -315,8 +282,8 @@ export async function POST(request: Request) {
               index: i,
               pageId: "",
               title,
-              pageType: page.pageType,
               status: "error",
+              attempts: 1,
               error: errorMsg,
             });
           }
