@@ -407,19 +407,152 @@ export function cleanupRemainingPlaceholders(html: string): string {
     },
   );
 
-  // URL系 → javascript:void(0) (# だとページトップに飛ぶため)
-  html = html.replace(/\{\{(?:[A-Z0-9_]*(?:URL|LINK|HREF)[A-Z0-9_]*)\}\}/gi, "javascript:void(0)");
+  // ── Step 1: href/src 属性内の URL プレースホルダー → javascript:void(0) ──
+  // href="{{NAV_URL}}" のように属性値として使われている場合のみ void(0) にする
+  html = html.replace(
+    /(?:href|src|action)=["']\{\{[A-Z0-9_]+\}\}["']/gi,
+    (match) => {
+      return match.replace(/\{\{[A-Z0-9_]+\}\}/, "javascript:void(0)");
+    },
+  );
 
-  // 残りのテキスト系プレースホルダー → 空文字
-  html = html.replace(/\{\{[A-Z][A-Z0-9_]*\}\}/g, "");
+  // ── Step 2: テキストコンテキストの LINK/URL/HREF プレースホルダー → 読めるラベル ──
+  // Step 1 で属性内のものは処理済みなので、残りはテキストノード内のもの
+  html = html.replace(
+    /\{\{([A-Z0-9_]*(?:URL|LINK|HREF)[A-Z0-9_]*)\}\}/gi,
+    (_match, name: string) => {
+      const n = name.toUpperCase();
+      // ナビゲーション系リンクテキスト
+      if (n.includes("NAV")) {
+        if (n.includes("HOME")) return "ホーム";
+        if (n.includes("SHOP") || n.includes("PRODUCT")) return "ショップ";
+        if (n.includes("ABOUT")) return "私たちについて";
+        if (n.includes("CONTACT")) return "お問い合わせ";
+        if (n.includes("BLOG")) return "ブログ";
+        if (n.includes("CART")) return "カート";
+        // NAV_LINK_1, NAV_LINK_2 等 → 番号ベースのデフォルト
+        const numMatch = n.match(/(\d+)/);
+        if (numMatch) {
+          const labels = ["ホーム", "ショップ", "私たちについて", "お問い合わせ", "ブログ"];
+          const idx = parseInt(numMatch[1]) - 1;
+          return labels[idx] || "メニュー";
+        }
+        return "メニュー";
+      }
+      // フッター系リンクテキスト
+      if (n.includes("FOOTER")) {
+        const numMatch = n.match(/(\d+)/);
+        if (numMatch) {
+          const labels = ["ショップ", "私たちについて", "お問い合わせ", "プライバシーポリシー", "利用規約", "特定商取引法に基づく表記"];
+          const idx = parseInt(numMatch[1]) - 1;
+          return labels[idx] || "リンク";
+        }
+        return "リンク";
+      }
+      // SNS リンク
+      if (n.includes("SOCIAL") || n.includes("TWITTER") || n.includes("INSTAGRAM") || n.includes("FACEBOOK")) {
+        return "";  // SNSリンクはアイコンのみが一般的
+      }
+      // それ以外の URL/HREF は空文字（テキストとしては不要）
+      if (n.includes("URL") || n.includes("HREF")) return "";
+      // LINK を含むがテキスト用途のもの → ラベルとして扱う
+      return "リンク";
+    },
+  );
 
-  // ── 生URLテキストの修復 ──
+  // ── Step 3: 残りのテキスト系プレースホルダー → コンテキスト推定で埋める ──
+  html = html.replace(/\{\{([A-Z][A-Z0-9_]*)\}\}/g, (_match, name: string) => {
+    const n = name.toUpperCase();
+    // 見出し系 → セクション名を推定
+    if (n.includes("HEADING") || n.includes("TITLE")) {
+      if (n.includes("HERO")) return "ようこそ";
+      if (n.includes("ABOUT") || n.includes("STORY")) return "ブランドストーリー";
+      if (n.includes("SERVICE")) return "サービス";
+      if (n.includes("PRODUCT")) return "おすすめ商品";
+      if (n.includes("FEATURE")) return "特徴";
+      if (n.includes("TESTIMONIAL") || n.includes("REVIEW")) return "お客様の声";
+      if (n.includes("CONTACT")) return "お問い合わせ";
+      if (n.includes("CTA")) return "今すぐチェック";
+      if (n.includes("NEWSLETTER")) return "ニュースレター";
+      if (n.includes("FAQ")) return "よくあるご質問";
+      if (n.includes("GALLERY")) return "ギャラリー";
+      if (n.includes("TEAM")) return "チーム";
+      if (n.includes("BLOG")) return "ブログ";
+      if (n.includes("SECTION")) return "セクション";
+      return "見出し";
+    }
+    // サブタイトル/タグライン
+    if (n.includes("TAGLINE") || n.includes("SUBTITLE") || n.includes("SUBHEADING")) {
+      if (n.includes("HERO")) return "上質な暮らしをお届けします";
+      return "こだわりの品質をお届け";
+    }
+    // CTA / ボタン
+    if (n.includes("CTA") || n.includes("BUTTON")) {
+      if (n.includes("PRIMARY") || n.includes("MAIN")) return "詳しく見る";
+      if (n.includes("SECONDARY")) return "もっと見る";
+      if (n.includes("CONTACT")) return "お問い合わせ";
+      if (n.includes("SHOP")) return "ショップへ";
+      return "詳しく見る";
+    }
+    // 説明テキスト
+    if (n.includes("DESCRIPTION") || n.includes("TEXT") || n.includes("BODY") || n.includes("CONTENT")) {
+      if (n.includes("HERO")) return "私たちは品質とデザインにこだわった商品をお届けしています。";
+      if (n.includes("ABOUT") || n.includes("STORY")) return "ひとつひとつの製品に想いを込めて、お客様の日常を豊かにする商品を提供しています。";
+      if (n.includes("FEATURE")) return "厳選された素材と確かな技術で作られています。";
+      if (n.includes("CONTACT")) return "お気軽にお問い合わせください。";
+      return "";
+    }
+    // カテゴリ名
+    if (n.includes("CATEGORY") || n.includes("COLLECTION")) {
+      const numMatch = n.match(/(\d+)/);
+      if (numMatch) {
+        const labels = ["コレクション", "新着", "セール", "限定", "人気"];
+        const idx = parseInt(numMatch[1]) - 1;
+        return labels[idx] || "カテゴリ";
+      }
+      return "カテゴリ";
+    }
+    // 価格
+    if (n.includes("PRICE")) return "¥4,980";
+    // 著者/名前
+    if (n.includes("AUTHOR") || n.includes("NAME")) {
+      if (n.includes("TESTIMONIAL") || n.includes("REVIEW")) return "お客様";
+      return "";
+    }
+    // デフォルト: 空文字（不明なプレースホルダーは非表示に）
+    return "";
+  });
+
+  // ── Step 4: 空の見出しタグを検出してデフォルトテキストを挿入 ──
+  html = html.replace(
+    /<(h[1-6])([^>]*)>\s*<\/\1>/gi,
+    (_match, tag: string, attrs: string) => {
+      // クラス名からコンテキストを推定
+      const cls = (attrs || "").toLowerCase();
+      let text = "";
+      if (cls.includes("hero")) text = "ようこそ";
+      else if (cls.includes("story") || cls.includes("about")) text = "ブランドストーリー";
+      else if (cls.includes("service")) text = "サービス";
+      else if (cls.includes("product") || cls.includes("collection")) text = "おすすめ商品";
+      else if (cls.includes("feature")) text = "特徴";
+      else if (cls.includes("cta") || cls.includes("action")) text = "今すぐチェック";
+      else if (cls.includes("contact") || cls.includes("form")) text = "お問い合わせ";
+      else if (cls.includes("testimonial") || cls.includes("review")) text = "お客様の声";
+      else if (cls.includes("faq")) text = "よくあるご質問";
+      else if (cls.includes("newsletter")) text = "ニュースレター";
+      else if (cls.includes("footer")) text = "";
+      else text = "";
+
+      if (!text) return `<${tag}${attrs}></${tag}>`;
+      return `<${tag}${attrs}>${text}</${tag}>`;
+    },
+  );
+
+  // ── Step 5: 生URLテキストの修復 ──
   // HTMLタグの外（テキストノードとして）に露出している画像URLを検出し、<img>タグに変換
-  // パターン: タグの外に出現する https://images.unsplash.com/... のURL
   html = html.replace(
     /(?<![="'])(https:\/\/images\.unsplash\.com\/[^\s<>"']+)/g,
-    (match, url) => {
-      // すでに src= 等の属性値内にある場合はスキップ（lookbehindで一部カバー）
+    (_match, url) => {
       return `<img src="${url}" alt="イメージ画像" style="width:100%;height:auto;display:block;object-fit:cover;" />`;
     },
   );
