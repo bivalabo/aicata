@@ -45,7 +45,7 @@ export function extractPageData(text: string): PageData | null {
   // fullDocument（完全なHTML文書）の場合、body内容だけを抽出
   // DDP Next パイプラインは <!DOCTYPE html>...<body>...</body></html> を出力する
   let processBlock = block;
-  const bodyMatch = block.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  const bodyMatch = block.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
   if (bodyMatch) {
     // <head> 内の <style> も抽出する
     const headStyleRegex = /<head[^>]*>[\s\S]*?<\/head>/i;
@@ -102,12 +102,11 @@ export function extractPageData(text: string): PageData | null {
   }
 
   // ドキュメントレベルのタグ残骸を除去（fullDocument由来の場合）
-  // 注意: <head> は <header> にマッチしないよう、正確なタグ名のみ除去
   html = html
     .replace(/<!DOCTYPE[^>]*>/gi, "")
-    .replace(/<\/?html(?:\s[^>]*)?\s*>/gi, "")
-    .replace(/<\/?head(?:\s[^>]*)?\s*>/gi, "")
-    .replace(/<\/?body(?:\s[^>]*)?\s*>/gi, "")
+    .replace(/<\/?html[^>]*>/gi, "")
+    .replace(/<\/?head[^>]*>/gi, "")
+    .replace(/<\/?body[^>]*>/gi, "")
     .replace(/<meta[^>]*>/gi, "")
     .replace(/<title[^>]*>[\s\S]*?<\/title>/gi, "")
     .trim();

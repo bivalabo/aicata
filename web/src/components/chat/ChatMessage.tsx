@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, User, Copy, Check, ChevronRight, Code2, Palette, Puzzle, Pen, CheckCircle2, Loader2, AlertTriangle, Search, Wrench } from "lucide-react";
+import { Sparkles, User, Copy, Check, ChevronRight, Code2 } from "lucide-react";
 import { useState, memo, useMemo } from "react";
 import { COPY_FEEDBACK_DURATION_MS } from "@/lib/constants";
 import clsx from "clsx";
@@ -12,66 +12,6 @@ interface ChatMessageProps {
   content: string;
   isStreaming?: boolean;
   attachments?: Attachment[];
-}
-
-// ── Progress Step Detection ──
-const PROGRESS_EMOJI_MAP: Record<string, { icon: typeof Palette; color: string; label: string }> = {
-  "🎨": { icon: Palette, color: "text-purple-500", label: "デザイン" },
-  "🧩": { icon: Puzzle, color: "text-blue-500", label: "組み立て" },
-  "✍️": { icon: Pen, color: "text-amber-500", label: "パーソナライズ" },
-  "✅": { icon: CheckCircle2, color: "text-emerald-500", label: "完了" },
-  "🔨": { icon: Wrench, color: "text-orange-500", label: "生成" },
-  "⚙️": { icon: Loader2, color: "text-slate-500", label: "処理" },
-  "⚠️": { icon: AlertTriangle, color: "text-amber-500", label: "注意" },
-  "🔍": { icon: Search, color: "text-indigo-500", label: "検証" },
-};
-
-function isProgressLine(line: string): boolean {
-  const trimmed = line.trim();
-  return Object.keys(PROGRESS_EMOJI_MAP).some((emoji) => trimmed.startsWith(emoji));
-}
-
-function getProgressInfo(line: string) {
-  const trimmed = line.trim();
-  for (const [emoji, info] of Object.entries(PROGRESS_EMOJI_MAP)) {
-    if (trimmed.startsWith(emoji)) {
-      const text = trimmed.replace(emoji, "").trim();
-      const isComplete = emoji === "✅";
-      return { ...info, text, isComplete, emoji };
-    }
-  }
-  return null;
-}
-
-function ProgressStep({ line, index }: { line: string; index: number }) {
-  const info = getProgressInfo(line);
-  if (!info) return null;
-
-  const Icon = info.icon;
-  const isComplete = info.isComplete;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.2, delay: index * 0.05 }}
-      className={clsx(
-        "flex items-center gap-2.5 py-1.5 px-3 rounded-xl text-[13px]",
-        isComplete
-          ? "bg-emerald-50/80 text-emerald-700"
-          : "bg-white/40 text-foreground/80",
-      )}
-    >
-      <div className={clsx("shrink-0", info.color)}>
-        {isComplete ? (
-          <CheckCircle2 className="w-3.5 h-3.5" />
-        ) : (
-          <Icon className={clsx("w-3.5 h-3.5", !isComplete && "animate-pulse")} />
-        )}
-      </div>
-      <span className={isComplete ? "font-medium" : ""}>{info.text}</span>
-    </motion.div>
-  );
 }
 
 function formatContent(content: string) {
@@ -92,10 +32,6 @@ function formatTextContent(content: string, baseKey: number) {
     return (
       <div key={`${baseKey}-${i}`} className="space-y-1.5">
         {part.split("\n").map((line, j) => {
-          // Progress step lines (emoji-prefixed progress messages)
-          if (isProgressLine(line)) {
-            return <ProgressStep key={j} line={line} index={j} />;
-          }
           if (line.startsWith("### ")) {
             return (
               <h4
@@ -332,15 +268,14 @@ export default memo(function ChatMessage({
           )}
           {/* Waiting indicator */}
           {isStreaming && !content && (
-            <div className="flex items-center gap-3 py-1.5">
-              <div className="relative w-5 h-5 shrink-0">
-                <div
-                  className="absolute inset-0 rounded-full border-2 border-transparent border-t-accent border-r-accent/40 animate-spin"
-                  style={{ animationDuration: "0.8s" }}
-                />
+            <div className="flex items-center gap-3 py-1">
+              <div className="flex gap-1 items-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce [animation-delay:300ms]" />
               </div>
-              <span className="text-[13px] text-muted">
-                デザインを準備しています...
+              <span className="text-[13px] text-muted animate-pulse">
+                考えています...
               </span>
             </div>
           )}

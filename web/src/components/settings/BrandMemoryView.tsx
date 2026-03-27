@@ -192,7 +192,6 @@ export default function BrandMemoryView() {
         setError(data.error);
       } else {
         setSaved(true);
-        setUserHasEdited(false);
         setTimeout(() => setSaved(false), 3000);
         fetchMemory();
       }
@@ -206,7 +205,6 @@ export default function BrandMemoryView() {
   const updateDraft = (key: string, value: any) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
     setSaved(false);
-    setUserHasEdited(true);
   };
 
   const toggleTone = (tone: string) => {
@@ -222,25 +220,16 @@ export default function BrandMemoryView() {
   };
 
   // 未保存の変更があるかどうかを検出
-  // ユーザーが実際に値を変更した場合のみ true にする
-  const [userHasEdited, setUserHasEdited] = useState(false);
   const hasChanges = useMemo(() => {
-    if (!userHasEdited) return false; // ユーザーがまだ何も編集していない
-    if (!memory && !draft.brandName) return false;
-    if (!memory) return true;
-    // BrandMemoryData のキーのみ比較（API の追加フィールドは無視）
-    const compareKeys: (keyof BrandMemoryData)[] = [
-      "brandName", "brandStory", "industry", "targetAudience",
-      "primaryColor", "secondaryColor", "accentColor",
-      "primaryFont", "bodyFont", "tones", "voiceTone",
-      "copyKeywords", "avoidKeywords",
-    ];
-    return compareKeys.some((key) => {
+    if (!memory && !draft.brandName) return false; // 初期状態
+    if (!memory) return true; // 新規作成
+    const keys = Object.keys(draft) as (keyof BrandMemoryData)[];
+    return keys.some((key) => {
       const draftVal = JSON.stringify(draft[key] ?? "");
       const memVal = JSON.stringify(memory[key] ?? "");
       return draftVal !== memVal;
     });
-  }, [draft, memory, userHasEdited]);
+  }, [draft, memory]);
 
   if (loading) {
     return (
