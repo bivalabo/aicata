@@ -209,6 +209,7 @@ export default function ChatView({
 
   // ── Rebuild Flow Modal ──
   const [showRebuildFlow, setShowRebuildFlow] = useState(false);
+  const [rebuildInitialUrl, setRebuildInitialUrl] = useState<string | undefined>(undefined);
 
   // ── Onboarding state ──
   const [onboardingType, setOnboardingType] = useState<string | null>(null);
@@ -396,6 +397,7 @@ export default function ChatView({
         setOnboardingType("site-build");
       } else if (mode === "rebuild") {
         // サイト全体リビルド → ビジュアルサイトマップフローを開く
+        setRebuildInitialUrl(url);
         setShowRebuildFlow(true);
       } else if (mode === "page-rebuild" && url) {
         // 既存ページをリビルド → URL解析してプロンプト送信
@@ -640,8 +642,12 @@ export default function ChatView({
       {/* ── SiteRebuildFlow モーダル ── */}
       {showRebuildFlow && (
         <SiteRebuildFlow
-          onClose={() => setShowRebuildFlow(false)}
+          onClose={() => {
+            setShowRebuildFlow(false);
+            setRebuildInitialUrl(undefined);
+          }}
           onComplete={handleRebuildComplete}
+          initialUrl={rebuildInitialUrl}
         />
       )}
     </div>

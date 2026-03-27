@@ -1,149 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { assembleAndValidate } from "@/lib/ddp/stage3-harmony-assembler";
-import type { DesignSpec, RenderedSection } from "@/lib/ddp/types";
 
-export const maxDuration = 10; // 組み立ては決定的処理のみ（AI不要）
+export const maxDuration = 10;
 
 /**
  * POST /api/build/assemble
  *
- * Step 3: ページ組み立て（DDP Stage 3）
- * - 全セクションを結合してフルページHTML/CSSを生成
- * - AIは使わない（決定的処理のみ）
- * - BuildJobにフルドキュメントを保存
+ * [DEPRECATED] DDP Next では不要。
+ * plan エンドポイントがテンプレート組み立て（Phase 3）まで完了する。
+ * 後方互換性のためスタブとして残す。
  */
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { buildId } = body;
-
-    if (!buildId) {
-      return NextResponse.json(
-        { error: "buildId は必須です" },
-        { status: 400 },
-      );
-    }
-
-    // BuildJob と全セクションを取得
-    const buildJob = await prisma.buildJob.findUnique({
-      where: { id: buildId },
-      include: {
-        sections: {
-          orderBy: { sortOrder: "asc" },
-        },
-      },
-    });
-
-    if (!buildJob) {
-      return NextResponse.json(
-        { error: `ビルドジョブ ${buildId} が見つかりません` },
-        { status: 404 },
-      );
-    }
-
-    if (!buildJob.designSpec) {
-      return NextResponse.json(
-        { error: "DesignSpecが見つかりません。先にplanを実行してください。" },
-        { status: 400 },
-      );
-    }
-
-    // DesignSpec を復元（安全にパース）
-    let designSpec: DesignSpec;
-    try {
-      designSpec = JSON.parse(buildJob.designSpec);
-    } catch (parseErr) {
-      return NextResponse.json(
-        { error: "DesignSpec のパースに失敗しました" },
-        { status: 400 },
-      );
-    }
-
-    // セクション型定義（Prisma Client 未生成環境でも型安全に）
-    type SectionRecord = {
-      id: string;
-      sectionId: string;
-      html: string | null;
-      css: string | null;
-      status: string;
-      error: string | null;
-      sortOrder: number;
-    };
-    const sections: SectionRecord[] = buildJob.sections;
-
-    // セクション完了状況をチェック
-    const completedSections = sections.filter(
-      (s: SectionRecord) => s.status === "complete" && s.html,
-    );
-    const failedSections = sections.filter(
-      (s: SectionRecord) => s.status === "failed",
-    );
-    const pendingSections = sections.filter(
-      (s: SectionRecord) => s.status === "pending" || s.status === "generating",
-    );
-
-    console.log("[Build/Assemble] Section status:", {
-      total: buildJob.sections.length,
-      completed: completedSections.length,
-      failed: failedSections.length,
-      pending: pendingSections.length,
-    });
-
-    // pending がある場合は警告（ただし組み立ては可能）
-    if (pendingSections.length > 0) {
-      console.warn(
-        `[Build/Assemble] ${pendingSections.length} sections still pending`,
-      );
-    }
-
-    // RenderedSection[] に変換
-    const renderedSections: RenderedSection[] = sections.map((s: SectionRecord) => ({
-      id: s.sectionId,
-      html: s.html || `<section data-section-id="${s.sectionId}"><p>（セクション未生成）</p></section>`,
-      css: s.css || "",
-      status: (s.status === "complete" ? "success" : "failed") as "success" | "failed",
-      error: s.error || undefined,
-    }));
-
-    // Stage 3: Harmony Assembler（決定的処理 — AI不使用）
-    const result = assembleAndValidate(designSpec, renderedSections);
-
-    console.log("[Build/Assemble] Assembly complete:", {
-      htmlLength: result.html.length,
-      cssLength: result.css.length,
-      valid: result.validation.isValid,
-      autoFixed: result.validation.autoFixedIssues.length,
-    });
-
-    // BuildJobを更新
-    await prisma.buildJob.update({
-      where: { id: buildId },
-      data: {
-        assembledHtml: result.html,
-        assembledCss: result.css,
-        fullDocument: result.fullDocument,
-        status: "complete",
-      },
-    });
-
-    return NextResponse.json({
-      buildId,
-      fullDocument: result.fullDocument,
-      html: result.html,
-      css: result.css,
-      validation: result.validation,
-      stats: {
-        totalSections: sections.length,
-        completedSections: completedSections.length,
-        failedSections: failedSections.length,
-      },
-    });
-  } catch (error) {
-    console.error("[Build/Assemble] Error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "ページ組み立てに失敗しました" },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json(
+    {
+      error: "このエンドポイントは廃止されました。DDP Next では /api/build/plan がテンプレート組み立てまで一括実行します。",
+      deprecated: true,
+      migration: "Use POST /api/build/plan instead — it returns the assembled page (html, css, fullDocument) in a single call.",
+    },
+    { status: 410 },
+  );
 }
