@@ -1,3 +1,9 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/admin/trend-tracker",
+      "schedule": "0 3 * * 1"
+    }
+  ]
 }

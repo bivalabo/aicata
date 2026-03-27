@@ -16,6 +16,8 @@ import { cachedFetch, CACHE_PRESETS } from "@/lib/api-cache";
 import { validateExternalUrl } from "@/lib/url-validator";
 import { checkRateLimit, ANALYSIS_RATE_LIMIT, rateLimitResponse } from "@/lib/rate-limiter";
 import { apiErrorResponse } from "@/lib/api-error";
+import { analyzeWithVision } from "@/lib/ace-adis/curator-vision";
+import { enrichUrlAnalysisWithVision } from "@/lib/ddp-next/ace-adis-bridge";
 
 export async function POST(request: Request) {
   // Rate limiting (IP-based)
@@ -114,7 +116,7 @@ export async function POST(request: Request) {
           fonts,
         };
 
-        console.log("[URL Analysis] Complete:", {
+        console.log("[URL Analysis] HTML analysis complete:", {
           title,
           industry: analysisResult.industry,
           tones: analysisResult.tones,
@@ -123,6 +125,40 @@ export async function POST(request: Request) {
           texts: analysisResult.texts.length,
           colors: analysisResult.colors.length,
         });
+
+        // ── Curator Vision 自動トリガー（OG画像がある場合）──
+        // OG画像をスクリーンショット代替として使い、
+        // Claude VisionでデザインパターンやDNA座標を抽出
+        const ogImageUrl = root
+          .querySelector('meta[property="og:image"]')
+          ?.getAttribute("content");
+
+        if (ogImageUrl && process.env.ANTHROPIC_API_KEY) {
+          try {
+            const fullOgUrl = new URL(ogImageUrl, parsedUrl).href;
+            console.log("[URL Analysis] Running Curator Vision with OG image:", fullOgUrl);
+
+            const visionResult = await analyzeWithVision({
+              url: parsedUrl.href,
+              screenshotUrl: fullOgUrl,
+            });
+
+            if (visionResult.success) {
+              // Vision結果でHTML分析を拡張（色・フォント・トーンの精度向上）
+              const enriched = enrichUrlAnalysisWithVision(analysisResult, visionResult);
+              console.log("[URL Analysis] Curator Vision enriched:", {
+                layoutPattern: visionResult.layoutPattern,
+                designTones: visionResult.designTones,
+                detectedPatterns: visionResult.detectedPatterns?.slice(0, 3),
+                overallRating: visionResult.overallRating,
+              });
+              return enriched;
+            }
+          } catch (visionErr) {
+            // Vision失敗は非致命的 — HTML分析結果をそのまま返す
+            console.warn("[URL Analysis] Curator Vision failed (non-fatal):", visionErr);
+          }
+        }
 
         return analysisResult;
       },
