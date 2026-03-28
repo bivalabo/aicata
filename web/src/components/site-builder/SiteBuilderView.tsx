@@ -129,7 +129,7 @@ export default function SiteBuilderView() {
   }
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col">
+    <div className="h-full overflow-hidden flex flex-col">
       {/* Header */}
       <div className="shrink-0 px-8 pt-14 pb-6">
         <div className="flex items-center justify-between mb-5">

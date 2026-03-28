@@ -14,81 +14,32 @@ import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { useViewport } from "@/hooks/useViewport";
 import clsx from "clsx";
 
+const DynamicLoading = () => (
+  <div className="flex-1 flex items-center justify-center">
+    <div className="animate-pulse text-muted-foreground text-sm">
+      読み込み中...
+    </div>
+  </div>
+);
+
 const AdminDashboard = dynamic(
   () => import("@/components/admin/AdminDashboard"),
-  {
-    loading: () => (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground text-sm">
-          読み込み中...
-        </div>
-      </div>
-    ),
-  },
+  { loading: DynamicLoading },
 );
 const EditorView = dynamic(() => import("@/components/editor/EditorView"), {
-  loading: () => (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground text-sm">
-        読み込み中...
-      </div>
-    </div>
-  ),
-});
-const SiteMapView = dynamic(() => import("@/components/pages/SiteMapView"), {
-  loading: () => (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground text-sm">
-        読み込み中...
-      </div>
-    </div>
-  ),
+  loading: DynamicLoading,
 });
 const SettingsView = dynamic(
   () => import("@/components/settings/SettingsView"),
-  {
-    loading: () => (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground text-sm">
-          読み込み中...
-        </div>
-      </div>
-    ),
-  },
+  { loading: DynamicLoading },
 );
-const StoreDnaView = dynamic(
-  () => import("@/components/settings/StoreDnaView"),
-  {
-    loading: () => (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground text-sm">
-          読み込み中...
-        </div>
-      </div>
-    ),
-  },
+const StudioView = dynamic(
+  () => import("@/components/studio/StudioView"),
+  { loading: DynamicLoading },
 );
-const SeoView = dynamic(() => import("@/components/seo/SeoView"), {
-  loading: () => (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground text-sm">
-        読み込み中...
-      </div>
-    </div>
-  ),
-});
-const SiteBuilderView = dynamic(
-  () => import(/* webpackChunkName: "site-builder-v3" */ "@/components/site-builder/SiteBuilderView"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground text-sm">
-          読み込み中...
-        </div>
-      </div>
-    ),
-  },
+const BrandView = dynamic(
+  () => import("@/components/brand/BrandView"),
+  { loading: DynamicLoading },
 );
 import type { PageData } from "@/lib/page-parser";
 import { buildSectionEditPrompt } from "@/lib/section-labels";
@@ -112,7 +63,7 @@ export default function Home() {
   >(null);
   const [pageData, setPageData] = useState<PageData | null>(null);
   const [isTemplatePreview, setIsTemplatePreview] = useState(false);
-  const [activeNav, setActiveNav] = useState("chat");
+  const [activeNav, setActiveNav] = useState("create");
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const [savedPageId, setSavedPageId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(
@@ -183,7 +134,7 @@ export default function Home() {
     setSavedPageId(null);
     setSaveState("idle");
     setIsStreaming(false);
-    setActiveNav("chat");
+    setActiveNav("create");
     setMobilePanel("chat");
     setChatSessionKey((k) => k + 1);
   }, []);
@@ -499,7 +450,7 @@ export default function Home() {
 
           {/* ── モバイル: チャット/プレビュー切り替えタブ ── */}
           {viewport.isMobileOrTablet &&
-            activeNav === "chat" &&
+            activeNav === "create" &&
             showPreview &&
             !isFullPreview && (
               <MobilePanelSwitcher
@@ -512,7 +463,7 @@ export default function Home() {
 
           {/* ── コンテンツ ── */}
           <div className="flex-1 overflow-hidden flex">
-            {activeNav === "chat" ? (
+            {activeNav === "create" ? (
               viewport.isDesktop ? (
                 /* ===== デスクトップレイアウト: サイドバイサイド ===== */
                 <>
@@ -622,26 +573,16 @@ export default function Home() {
                   )}
                 </>
               )
-            ) : activeNav === "settings" ? (
-              <ErrorBoundary label="設定">
-                <SettingsView />
-              </ErrorBoundary>
-            ) : activeNav === "admin" ? (
-              <ErrorBoundary label="Intelligence Dashboard">
-                <AdminDashboard />
-              </ErrorBoundary>
-            ) : activeNav === "pages" ? (
-              <ErrorBoundary label="サイトマップ">
-                <SiteMapView
-                  onNavigateToChat={() => {
-                    setActiveNav("chat");
+            ) : activeNav === "studio" ? (
+              <ErrorBoundary label="Studio">
+                <StudioView
+                  onNavigateToCreate={() => {
+                    setActiveNav("create");
                     handleNewChat();
                   }}
                   onCreatePageByType={(pageType) => {
-                    setActiveNav("chat");
+                    setActiveNav("create");
                     handleNewChat();
-                    // ページタイプに対応したオンボーディングを直接開始
-                    // ChatViewがマウントされた後にonboardingTypeをセットするため少し遅延
                     setTimeout(() => {
                       const event = new CustomEvent("aicata:start-onboarding", {
                         detail: { pageType },
@@ -650,7 +591,7 @@ export default function Home() {
                     }, 100);
                   }}
                   onEditPage={(conversationId) => {
-                    setActiveNav("chat");
+                    setActiveNav("create");
                     handleSelectConversation(conversationId);
                   }}
                   onEnhancePage={async (pageId) => {
@@ -664,29 +605,25 @@ export default function Home() {
                         alert(data.error);
                         return;
                       }
-                      // Navigate to chat with the new/existing conversation
-                      // handleSelectConversation が DB からページデータと savedPageId を自動復元する
-                      setActiveNav("chat");
+                      setActiveNav("create");
                       await handleSelectConversation(data.conversationId);
-                      // handleSelectConversation が pageData と savedPageId を
-                      // 既にセットしているため、追加のフェッチは不要
                     } catch {
                       alert("ページの改善準備に失敗しました");
                     }
                   }}
                 />
               </ErrorBoundary>
-            ) : activeNav === "store-dna" ? (
-              <ErrorBoundary label="ストアDNA">
-                <StoreDnaView />
+            ) : activeNav === "brand" ? (
+              <ErrorBoundary label="Brand">
+                <BrandView />
               </ErrorBoundary>
-            ) : activeNav === "site" ? (
-              <ErrorBoundary label="サイト構築">
-                <SiteBuilderView />
+            ) : activeNav === "settings" ? (
+              <ErrorBoundary label="設定">
+                <SettingsView />
               </ErrorBoundary>
-            ) : activeNav === "seo" ? (
-              <ErrorBoundary label="SEO分析">
-                <SeoView />
+            ) : activeNav === "admin" ? (
+              <ErrorBoundary label="Intelligence Dashboard">
+                <AdminDashboard />
               </ErrorBoundary>
             ) : null}
           </div>
@@ -715,13 +652,11 @@ function MobileHeader({
   activeNav: string;
 }) {
   const NAV_LABEL_MAP: Record<string, string> = {
-    chat: "ページ制作",
-    site: "サイト構築",
-    pages: "ページ管理",
-    "store-dna": "ストアDNA",
-    seo: "SEO",
-    admin: "Intelligence",
+    create: "Create",
+    studio: "Studio",
+    brand: "Brand",
     settings: "設定",
+    admin: "Intelligence",
   };
   const label = NAV_LABEL_MAP[activeNav] ?? activeNav;
 
@@ -736,7 +671,7 @@ function MobileHeader({
         </span>
       </div>
 
-      {activeNav === "chat" && (
+      {activeNav === "create" && (
         <button
           onClick={onNewChat}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-medium bg-gradient-to-r from-[#7c5cfc] to-[#5b8def] text-white shadow-sm active:scale-[0.97] transition-transform"

@@ -20,6 +20,9 @@ import {
   Globe,
   AlertTriangle,
   Fingerprint,
+  Palette,
+  Layers,
+  Heart,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -42,13 +45,10 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { id: "chat", icon: MessagesSquare, label: "ページ制作" },
-  { id: "site", icon: Store, label: "サイト構築" },
-  { id: "pages", icon: FileText, label: "ページ管理" },
-  { id: "store-dna", icon: Fingerprint, label: "ストアDNA" },
+  { id: "create", icon: Sparkles, label: "Create" },
+  { id: "studio", icon: Layers, label: "Studio" },
+  { id: "brand", icon: Heart, label: "Brand" },
   { id: "settings", icon: Settings, label: "設定" },
-  { id: "admin", icon: Brain, label: "Intelligence" },
-  { id: "seo", icon: Search, label: "SEO" },
 ];
 
 function formatRelativeDate(dateStr: string): string {
@@ -165,11 +165,11 @@ export default function Sidebar({
                 <item.icon className="w-5 h-5 shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
               </button>
-              {/* ページ制作の横に新規作成ボタン */}
-              {item.id === "chat" && !collapsed && (
+              {/* Createの横に新規作成ボタン */}
+              {item.id === "create" && !collapsed && (
                 <button
                   onClick={() => {
-                    onNavigate("chat");
+                    onNavigate("create");
                     onNewChat();
                   }}
                   className="p-2 rounded-lg text-muted-foreground/50 hover:text-accent hover:bg-accent/5 transition-colors"
@@ -189,7 +189,7 @@ export default function Sidebar({
       <div className="mx-4 h-px bg-black/[0.04]" />
 
       {/* History */}
-      {!collapsed && activeNav === "chat" && (
+      {!collapsed && activeNav === "create" && (
         <ProjectHistory
           conversations={conversations}
           activeConversationId={activeConversationId}

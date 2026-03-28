@@ -616,21 +616,19 @@ export default function ChatView({
         </div>
       )}
 
-      {/* Input — hide during onboarding */}
-      {!showOnboarding && (
+      {/* Input — hide during onboarding and welcome screen */}
+      {!showOnboarding && !showWelcome && (
         <div className="max-w-2xl mx-auto w-full">
           <ChatInput
             onSend={handleSend}
             onStop={isStreaming ? stopStreaming : undefined}
             disabled={(showStreamingIndicator ?? false) || isAnalyzingUrl}
             placeholder={
-              messages.length === 0
-                ? "Shopifyストアについて何でも相談してください..."
-                : isAnalyzingUrl
-                  ? "サイトを分析中..."
-                  : isStreaming
-                    ? "Aicataが応答中..."
-                    : "メッセージを入力..."
+              isAnalyzingUrl
+                ? "サイトを分析中..."
+                : isStreaming
+                  ? "Aicataが応答中..."
+                  : "メッセージを入力..."
             }
             prefillMessage={pendingMessage}
             onPrefillConsumed={onPendingMessageConsumed}

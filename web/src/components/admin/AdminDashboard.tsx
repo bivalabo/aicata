@@ -43,12 +43,13 @@ import {
 } from "@/lib/ace-adis/types";
 import { dedupFetch } from "@/lib/api-dedup";
 import DesignRegistryTab from "./DesignRegistryTab";
+import HarvestTab from "./HarvestTab";
 
 // ============================================================
 // Types
 // ============================================================
 
-type AdminTab = "overview" | "ace" | "adis" | "curator" | "trends" | "registry";
+type AdminTab = "overview" | "ace" | "adis" | "curator" | "trends" | "registry" | "harvest";
 
 interface MetricCard {
   label: string;
@@ -1273,6 +1274,7 @@ const TABS: { id: AdminTab; label: string; icon: typeof Brain; color: string }[]
   { id: "curator", label: "キュレーション", icon: Eye, color: "text-amber-400" },
   { id: "trends", label: "トレンド", icon: TrendingUp, color: "text-cyan-400" },
   { id: "registry", label: "デザイン登録", icon: Palette, color: "text-emerald-400" },
+  { id: "harvest", label: "ハーベスト", icon: Globe, color: "text-orange-400" },
 ];
 
 export default function AdminDashboard() {
@@ -1357,6 +1359,7 @@ export default function AdminDashboard() {
           )}
           {activeTab === "trends" && <TrendsTab patterns={patterns} refetch={refetch} />}
           {activeTab === "registry" && <DesignRegistryTab />}
+          {activeTab === "harvest" && <HarvestTab />}
         </div>
       </div>
     </div>

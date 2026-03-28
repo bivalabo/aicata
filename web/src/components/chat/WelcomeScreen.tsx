@@ -5,8 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
   Layout,
-  Search,
-  TrendingUp,
   Palette,
   Store,
   ShoppingBag,
@@ -18,6 +16,7 @@ import {
   Loader2,
   Rocket,
   RefreshCw,
+  TrendingUp,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -40,15 +39,6 @@ interface PageAction {
   title: string;
   description: string;
   pageType: string;
-  prompt: string;
-  iconBg: string;
-}
-
-/** ユーティリティ系 */
-interface UtilityItem {
-  icon: React.ElementType;
-  title: string;
-  description: string;
   prompt: string;
   iconBg: string;
 }
@@ -106,25 +96,6 @@ const INDIVIDUAL_PAGE_ACTIONS: PageAction[] = [
     pageType: "cart",
     prompt: "カートページのデザインを改善したいです。",
     iconBg: "bg-emerald-500",
-  },
-];
-
-/** ユーティリティアクション */
-const UTILITY_ACTIONS: UtilityItem[] = [
-  {
-    icon: Search,
-    title: "SEO・運営の相談",
-    description: "検索対策やストア運営のアドバイス",
-    prompt: "ストアのSEOについて相談したいです。",
-    iconBg: "bg-amber-500",
-  },
-  {
-    icon: TrendingUp,
-    title: "既存ページを改善",
-    description: "コンバージョン向上の提案と修正",
-    prompt:
-      "既存のページを改善したいです。スクリーンショットを共有するので、見てもらえますか？",
-    iconBg: "bg-sky-500",
   },
 ];
 
@@ -448,7 +419,7 @@ export default function WelcomeScreen({
                     <div className="text-[14px] font-semibold text-foreground">
                       {action.title}
                     </div>
-                    <div className="text-[12px] text-muted mt-1">
+                    <div className="text-[13px] text-muted mt-1">
                       {action.description}
                     </div>
                   </div>
@@ -533,7 +504,7 @@ export default function WelcomeScreen({
                   <div className="text-[15px] font-bold text-foreground mb-1">
                     新しいサイトを作成
                   </div>
-                  <div className="text-[12px] text-muted leading-relaxed">
+                  <div className="text-[13px] text-muted leading-relaxed">
                     サイト全体をゼロから構築
                   </div>
                 </div>
@@ -559,7 +530,7 @@ export default function WelcomeScreen({
                   <div className="text-[15px] font-bold text-foreground mb-1">
                     新しいページを作成
                   </div>
-                  <div className="text-[12px] text-muted leading-relaxed">
+                  <div className="text-[13px] text-muted leading-relaxed">
                     1ページずつ個別に作成
                   </div>
                 </div>
@@ -585,7 +556,7 @@ export default function WelcomeScreen({
                   <div className="text-[15px] font-bold text-foreground mb-1">
                     既存サイトをリビルド
                   </div>
-                  <div className="text-[12px] text-muted leading-relaxed">
+                  <div className="text-[13px] text-muted leading-relaxed">
                     サイト全体を解析して再構築
                   </div>
                 </div>
@@ -611,64 +582,13 @@ export default function WelcomeScreen({
                   <div className="text-[15px] font-bold text-foreground mb-1">
                     既存ページをリビルド
                   </div>
-                  <div className="text-[12px] text-muted leading-relaxed">
+                  <div className="text-[13px] text-muted leading-relaxed">
                     1ページを解析してリビルド
                   </div>
                 </div>
               </motion.button>
             </motion.div>
 
-            {/* ── ユーティリティアクション ── */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-              className="w-full"
-            >
-              <div className="grid grid-cols-2 gap-3">
-                {UTILITY_ACTIONS.map((action, i) => (
-                  <motion.button
-                    key={action.title}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.35 + i * 0.04 }}
-                    onClick={() => onSelectTemplate(action.prompt)}
-                    className={clsx(
-                      "group flex items-center gap-3 p-4 rounded-xl text-left",
-                      "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
-                      "transition-all duration-200 hover:shadow-sm",
-                    )}
-                  >
-                    <div
-                      className={clsx(
-                        "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                        action.iconBg,
-                      )}
-                    >
-                      <action.icon className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[14px] font-semibold text-foreground">
-                        {action.title}
-                      </div>
-                      <div className="text-[12px] text-muted mt-0.5">
-                        {action.description}
-                      </div>
-                    </div>
-                  </motion.button>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Footer hint */}
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="mt-8 text-[13px] text-muted-foreground"
-            >
-              または入力欄に自由にメッセージを送ってください
-            </motion.p>
           </motion.div>
         )}
       </AnimatePresence>
