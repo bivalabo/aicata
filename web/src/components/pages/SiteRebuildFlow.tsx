@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   Globe,
   Loader2,
@@ -80,14 +80,17 @@ interface SiteRebuildFlowProps {
     analyzedPages: PageAnalysis[],
     context: UnifiedDesignContext,
   ) => void;
+  /** 外部（WelcomeScreenなど）から渡されたURL — 指定時はwelcome/inputステップをスキップ */
+  initialUrl?: string;
 }
 
 export default function SiteRebuildFlow({
   onClose,
   onComplete,
+  initialUrl,
 }: SiteRebuildFlowProps) {
-  const [step, setStep] = useState<FlowStep>("welcome");
-  const [siteUrl, setSiteUrl] = useState("");
+  const [step, setStep] = useState<FlowStep>(initialUrl ? "crawling" : "welcome");
+  const [siteUrl, setSiteUrl] = useState(initialUrl || "");
   const [error, setError] = useState<string | null>(null);
 
   // Crawl state
@@ -124,6 +127,9 @@ export default function SiteRebuildFlow({
   // Preview state — track which pages the user wants to keep
   const [previewSelections, setPreviewSelections] = useState<Record<string, boolean>>({});
   const [previewExpanded, setPreviewExpanded] = useState<string | null>(null);
+
+  // ── Auto-start crawl when initialUrl is provided ──
+  const initialCrawlTriggered = useRef(false);
 
   // ── Step 1: Crawl ──
   const handleCrawl = useCallback(async () => {
@@ -240,6 +246,14 @@ export default function SiteRebuildFlow({
     }
   }, [siteUrl]);
 
+  // ── Auto-start deep crawl when initialUrl is provided ──
+  useEffect(() => {
+    if (initialUrl && !initialCrawlTriggered.current) {
+      initialCrawlTriggered.current = true;
+      handleDeepCrawl();
+    }
+  }, [initialUrl, handleDeepCrawl]);
+
   // ── Step 2: Toggle page selection ──
   const togglePage = useCallback((index: number) => {
     setDiscoveredPages((prev) => {
@@ -331,6 +345,8 @@ export default function SiteRebuildFlow({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let receivedDone = false;
+      let lastError = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -351,6 +367,9 @@ export default function SiteRebuildFlow({
               );
               setGenerateCurrent(data.title || data.path || "");
             } else if (data.type === "page_complete") {
+              if (data.status === "error" && data.error) {
+                lastError = data.error;
+              }
               setGeneratedPages((prev) => [
                 ...prev,
                 {
@@ -362,17 +381,32 @@ export default function SiteRebuildFlow({
                 },
               ]);
             } else if (data.type === "done") {
+              receivedDone = true;
               setGenerateProgress(100);
-              // Go to preview step instead of complete
-              setStep("preview");
+              if (data.successCount === 0 && data.failedCount > 0) {
+                setError("すべてのページの生成に失敗しました。しばらく時間をおいて再度お試しください。");
+                setStep("review");
+              } else {
+                setStep("preview");
+              }
+            } else if (data.type === "error") {
+              lastError = data.error || "";
             }
           } catch {
             // Skip malformed SSE lines
           }
         }
       }
+
+      // Stream ended without "done" event
+      if (!receivedDone) {
+        setError(
+          "生成が途中で中断されました。しばらく時間をおいて再度お試しください。",
+        );
+        setStep("review");
+      }
     } catch (err) {
-      setError("ページ生成中にエラーが発生しました");
+      setError("ページ生成中にエラーが発生しました。しばらく時間をおいて再度お試しください。");
       setStep("review");
     }
   }, [analyzedPages, unifiedContext, onComplete]);
@@ -711,7 +745,10 @@ export default function SiteRebuildFlow({
                       {page.status === "ok" ? (
                         <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                       ) : (
-                        <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                        <div className="flex items-center gap-1 shrink-0" title={page.error || "ページの解析に失敗しました"}>
+                          <XCircle className="w-4 h-4 text-red-400" />
+                          <span className="text-[10px] text-red-500 font-medium">解析失敗</span>
+                        </div>
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] text-foreground truncate">
@@ -742,6 +779,12 @@ export default function SiteRebuildFlow({
           {/* ── STEP: Generating ── */}
           {step === "generating" && (
             <div className="space-y-5">
+              {error && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200/40">
+                  <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <p className="text-[13px] text-red-700">{error}</p>
+                </div>
+              )}
               <div className="flex flex-col items-center py-4">
                 <div className="w-full max-w-sm mb-4">
                   <div className="flex items-center justify-between mb-2">
@@ -777,7 +820,10 @@ export default function SiteRebuildFlow({
                       {gp.status === "ok" ? (
                         <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                       ) : (
-                        <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                        <div className="flex items-center gap-1 shrink-0" title="デザイン生成に失敗しました">
+                          <XCircle className="w-4 h-4 text-red-400" />
+                          <span className="text-[10px] text-red-500 font-medium">生成失敗</span>
+                        </div>
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] text-foreground truncate">

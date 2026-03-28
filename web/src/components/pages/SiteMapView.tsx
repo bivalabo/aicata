@@ -82,6 +82,8 @@ interface SiteMapViewProps {
   onEditPage?: (conversationId: string) => void;
   /** AIで改善: ページIDからconversation作成→チャットへ遷移 */
   onEnhancePage?: (pageId: string) => void;
+  /** StudioView内に埋め込まれている場合 true — 独自ヘッダーをコンパクト化 */
+  embedded?: boolean;
 }
 
 // ── View modes ──
@@ -98,6 +100,7 @@ export default function SiteMapView({
   onCreatePageByType,
   onEditPage,
   onEnhancePage,
+  embedded = false,
 }: SiteMapViewProps) {
   const [pages, setPages] = useState<PageItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -419,19 +422,21 @@ export default function SiteMapView({
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* ── Header ── */}
-      <div className="shrink-0 px-8 pt-14 pb-4">
+      <div className={clsx("shrink-0 px-8 pb-4", embedded ? "pt-4" : "pt-14")}>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-2xl font-bold text-foreground mb-1">
-              サイトマップ
-            </h1>
-            <p className="text-[15px] text-muted-foreground">
+            {!embedded && (
+              <h1 className="text-2xl font-bold text-foreground mb-1">
+                サイトマップ
+              </h1>
+            )}
+            <p className={clsx("text-muted-foreground", embedded ? "text-[13px]" : "text-[15px]")}>
               {filteredPages.length === pages.length
                 ? `${pages.length}件のページ`
                 : `${filteredPages.length} / ${pages.length}件のページ`}
-              {" "}— カテゴリごとにサイト構成を俯瞰
+              {!embedded && " — カテゴリごとにサイト構成を俯瞰"}
             </p>
           </div>
           <div className="flex items-center gap-2">

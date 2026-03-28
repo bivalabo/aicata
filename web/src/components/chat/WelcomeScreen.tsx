@@ -5,11 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
   Layout,
-  Search,
-  TrendingUp,
   Palette,
   Store,
-  ArrowRight,
   ShoppingBag,
   Grid3X3,
   ShoppingCart,
@@ -19,6 +16,7 @@ import {
   Loader2,
   Rocket,
   RefreshCw,
+  TrendingUp,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -29,7 +27,7 @@ import clsx from "clsx";
 interface WelcomeScreenProps {
   onSelectTemplate: (prompt: string, pageType?: string) => void;
   /** サイト全体構築フローを開始 */
-  onStartSiteBuild?: (mode: "new" | "rebuild", url?: string) => void;
+  onStartSiteBuild?: (mode: "new" | "rebuild" | "page-rebuild", url?: string) => void;
   /** Brand Memoryが有効かどうか */
   hasBrandMemory?: boolean;
   brandName?: string;
@@ -45,15 +43,6 @@ interface PageAction {
   iconBg: string;
 }
 
-/** ユーティリティ系 */
-interface UtilityItem {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  prompt: string;
-  iconBg: string;
-}
-
 // ============================================================
 // Action Definitions
 // ============================================================
@@ -64,7 +53,7 @@ const INDIVIDUAL_PAGE_ACTIONS: PageAction[] = [
     icon: Store,
     title: "トップページ",
     description: "ストアのホームページ",
-    pageType: "landing",
+    pageType: "top",
     prompt: "Shopifyストアのトップページを作成してください。",
     iconBg: "bg-violet-500",
   },
@@ -107,25 +96,6 @@ const INDIVIDUAL_PAGE_ACTIONS: PageAction[] = [
     pageType: "cart",
     prompt: "カートページのデザインを改善したいです。",
     iconBg: "bg-emerald-500",
-  },
-];
-
-/** ユーティリティアクション */
-const UTILITY_ACTIONS: UtilityItem[] = [
-  {
-    icon: Search,
-    title: "SEO・運営の相談",
-    description: "検索対策やストア運営のアドバイス",
-    prompt: "ストアのSEOについて相談したいです。",
-    iconBg: "bg-amber-500",
-  },
-  {
-    icon: TrendingUp,
-    title: "既存ページを改善",
-    description: "コンバージョン向上の提案と修正",
-    prompt:
-      "既存のページを改善したいです。スクリーンショットを共有するので、見てもらえますか？",
-    iconBg: "bg-sky-500",
   },
 ];
 
@@ -237,6 +207,110 @@ function UrlImportForm({
   );
 }
 
+/** 既存ページをリビルド — 単一ページURL入力フォーム */
+function PageUrlImportForm({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (url: string) => void;
+  onCancel: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [isValidating, setIsValidating] = useState(false);
+
+  const handleSubmit = useCallback(() => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    try {
+      new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+    } catch {
+      return;
+    }
+    setIsValidating(true);
+    onSubmit(trimmed);
+  }, [url, onSubmit]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      className="w-full max-w-md"
+    >
+      <div className="text-center mb-8">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-500 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-sky-500/15">
+          <Globe className="w-7 h-7 text-white" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground mb-2">
+          既存ページをリビルド
+        </h2>
+        <p className="text-[15px] text-muted leading-relaxed">
+          改善したいページのURLを入力してください。
+          <br />
+          デザインと構造を解析してリビルドします。
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <div className="relative">
+          <Link2 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+            placeholder="https://example.com/products/item"
+            className={clsx(
+              "w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-white/70",
+              "text-[14px] text-foreground placeholder:text-muted-foreground/50",
+              "outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/10",
+              "transition-all duration-200",
+            )}
+            autoFocus
+          />
+        </div>
+
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={handleSubmit}
+          disabled={!url.trim() || isValidating}
+          className={clsx(
+            "w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl",
+            "bg-gradient-to-r from-sky-500 to-cyan-500",
+            "text-white text-[14px] font-semibold",
+            "shadow-lg shadow-sky-500/25 hover:shadow-xl hover:shadow-sky-500/30",
+            "transition-all duration-200",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+          )}
+        >
+          {isValidating ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Sparkles className="w-4 h-4" />
+          )}
+          {isValidating ? "分析中..." : "ページをリビルドする"}
+        </motion.button>
+
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-1.5 mx-auto text-[13px] text-muted hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          戻る
+        </button>
+      </div>
+
+      <div className="mt-8 p-4 rounded-xl bg-black/[0.02] border border-border/30">
+        <p className="text-[12px] text-muted-foreground leading-relaxed text-center">
+          商品ページ、ランディングページ、ブランドページなど
+          <br />
+          1ページ単位でデザインを解析・リビルドします
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
 // ============================================================
 // Main Component
 // ============================================================
@@ -247,7 +321,7 @@ export default function WelcomeScreen({
   hasBrandMemory = false,
   brandName,
 }: WelcomeScreenProps) {
-  const [mode, setMode] = useState<"main" | "url-import" | "individual-pages">("main");
+  const [mode, setMode] = useState<"main" | "url-import" | "page-url-import" | "individual-pages">("main");
 
   /** URL入力モードのサブミット — サイトリビルドフローへ */
   const handleUrlSubmit = useCallback(
@@ -273,6 +347,19 @@ export default function WelcomeScreen({
     }
   }, [onSelectTemplate, onStartSiteBuild]);
 
+  /** 「既存ページをリビルド」— 単一ページURL入力後 */
+  const handlePageUrlSubmit = useCallback(
+    (url: string) => {
+      if (onStartSiteBuild) {
+        onStartSiteBuild("page-rebuild", url);
+      } else {
+        const prompt = `以下のページを分析して、Shopifyテーマのページとしてリビルドしたいです。\n\nURL: ${url}\n\nこのページのデザイントーン、配色、レイアウト構造を解析し、同等以上のクオリティでリビルドしてください。`;
+        onSelectTemplate(prompt, "landing");
+      }
+    },
+    [onSelectTemplate, onStartSiteBuild],
+  );
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 max-w-2xl mx-auto">
       <AnimatePresence mode="wait">
@@ -280,6 +367,12 @@ export default function WelcomeScreen({
           <UrlImportForm
             key="url-import"
             onSubmit={handleUrlSubmit}
+            onCancel={() => setMode("main")}
+          />
+        ) : mode === "page-url-import" ? (
+          <PageUrlImportForm
+            key="page-url-import"
+            onSubmit={handlePageUrlSubmit}
             onCancel={() => setMode("main")}
           />
         ) : mode === "individual-pages" ? (
@@ -326,7 +419,7 @@ export default function WelcomeScreen({
                     <div className="text-[14px] font-semibold text-foreground">
                       {action.title}
                     </div>
-                    <div className="text-[12px] text-muted mt-1">
+                    <div className="text-[13px] text-muted mt-1">
                       {action.description}
                     </div>
                   </div>
@@ -384,12 +477,12 @@ export default function WelcomeScreen({
               )}
             </motion.div>
 
-            {/* ── 2つのメインアクション ── */}
+            {/* ── 4つのメインアクション（2×2グリッド） ── */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.15 }}
-              className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8"
+              className="w-full grid grid-cols-2 gap-4 mb-8"
             >
               {/* 新しいサイトを作成 */}
               <motion.button
@@ -397,24 +490,48 @@ export default function WelcomeScreen({
                 whileTap={{ scale: 0.99 }}
                 onClick={handleNewSiteBuild}
                 className={clsx(
-                  "group flex flex-col items-center gap-4 p-7 rounded-2xl text-center",
+                  "group flex flex-col items-center gap-4 p-6 rounded-2xl text-center",
                   "bg-gradient-to-b from-white/70 to-white/40 backdrop-blur-[10px]",
                   "border-2 border-[#7c5cfc]/20 hover:border-[#7c5cfc]/40",
                   "shadow-[0_2px_8px_rgba(124,92,252,0.06)] hover:shadow-[0_4px_16px_rgba(124,92,252,0.12)]",
                   "transition-all duration-300",
                 )}
               >
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] flex items-center justify-center shadow-lg shadow-[#7c5cfc]/20 group-hover:shadow-xl group-hover:shadow-[#7c5cfc]/25 transition-shadow">
-                  <Rocket className="w-7 h-7 text-white" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#7c5cfc] to-[#5b8def] flex items-center justify-center shadow-lg shadow-[#7c5cfc]/20 group-hover:shadow-xl group-hover:shadow-[#7c5cfc]/25 transition-shadow">
+                  <Rocket className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <div className="text-[16px] font-bold text-foreground mb-1">
+                  <div className="text-[15px] font-bold text-foreground mb-1">
                     新しいサイトを作成
                   </div>
                   <div className="text-[13px] text-muted leading-relaxed">
-                    業種やブランドの雰囲気をヒアリング。
-                    <br />
-                    トップページからサイト全体を構築します。
+                    サイト全体をゼロから構築
+                  </div>
+                </div>
+              </motion.button>
+
+              {/* 新しいページを作成 */}
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => setMode("individual-pages")}
+                className={clsx(
+                  "group flex flex-col items-center gap-4 p-6 rounded-2xl text-center",
+                  "bg-gradient-to-b from-white/70 to-white/40 backdrop-blur-[10px]",
+                  "border-2 border-emerald-500/15 hover:border-emerald-500/35",
+                  "shadow-[0_2px_8px_rgba(16,185,129,0.04)] hover:shadow-[0_4px_16px_rgba(16,185,129,0.10)]",
+                  "transition-all duration-300",
+                )}
+              >
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/15 group-hover:shadow-xl group-hover:shadow-emerald-500/20 transition-shadow">
+                  <Layout className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className="text-[15px] font-bold text-foreground mb-1">
+                    新しいページを作成
+                  </div>
+                  <div className="text-[13px] text-muted leading-relaxed">
+                    1ページずつ個別に作成
                   </div>
                 </div>
               </motion.button>
@@ -425,105 +542,53 @@ export default function WelcomeScreen({
                 whileTap={{ scale: 0.99 }}
                 onClick={() => setMode("url-import")}
                 className={clsx(
-                  "group flex flex-col items-center gap-4 p-7 rounded-2xl text-center",
+                  "group flex flex-col items-center gap-4 p-6 rounded-2xl text-center",
                   "bg-gradient-to-b from-white/70 to-white/40 backdrop-blur-[10px]",
                   "border-2 border-indigo-500/15 hover:border-indigo-500/35",
                   "shadow-[0_2px_8px_rgba(99,102,241,0.04)] hover:shadow-[0_4px_16px_rgba(99,102,241,0.10)]",
                   "transition-all duration-300",
                 )}
               >
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/15 group-hover:shadow-xl group-hover:shadow-indigo-500/20 transition-shadow">
-                  <RefreshCw className="w-7 h-7 text-white" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/15 group-hover:shadow-xl group-hover:shadow-indigo-500/20 transition-shadow">
+                  <RefreshCw className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <div className="text-[16px] font-bold text-foreground mb-1">
+                  <div className="text-[15px] font-bold text-foreground mb-1">
                     既存サイトをリビルド
                   </div>
                   <div className="text-[13px] text-muted leading-relaxed">
-                    URLを入力してデザインを解析。
-                    <br />
-                    Shopifyテーマとして再構築します。
+                    サイト全体を解析して再構築
+                  </div>
+                </div>
+              </motion.button>
+
+              {/* 既存ページをリビルド */}
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => setMode("page-url-import")}
+                className={clsx(
+                  "group flex flex-col items-center gap-4 p-6 rounded-2xl text-center",
+                  "bg-gradient-to-b from-white/70 to-white/40 backdrop-blur-[10px]",
+                  "border-2 border-sky-500/15 hover:border-sky-500/35",
+                  "shadow-[0_2px_8px_rgba(14,165,233,0.04)] hover:shadow-[0_4px_16px_rgba(14,165,233,0.10)]",
+                  "transition-all duration-300",
+                )}
+              >
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-sky-500/15 group-hover:shadow-xl group-hover:shadow-sky-500/20 transition-shadow">
+                  <Globe className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className="text-[15px] font-bold text-foreground mb-1">
+                    既存ページをリビルド
+                  </div>
+                  <div className="text-[13px] text-muted leading-relaxed">
+                    1ページを解析してリビルド
                   </div>
                 </div>
               </motion.button>
             </motion.div>
 
-            {/* ── 個別ページ作成 + ユーティリティ ── */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-              className="w-full"
-            >
-              {/* 個別ページリンク */}
-              <button
-                onClick={() => setMode("individual-pages")}
-                className={clsx(
-                  "w-full flex items-center gap-3 p-4 rounded-xl text-left mb-4",
-                  "bg-white/30 border border-white/20",
-                  "hover:bg-white/50 hover:border-accent/20",
-                  "transition-all duration-200",
-                )}
-              >
-                <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <Layout className="w-4.5 h-4.5 text-gray-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium text-foreground">
-                    個別ページだけ作成する
-                  </div>
-                  <div className="text-[12px] text-muted mt-0.5">
-                    トップページ、商品ページなど1ページずつ作成
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-muted shrink-0" />
-              </button>
-
-              {/* ユーティリティ行 */}
-              <div className="grid grid-cols-2 gap-3">
-                {UTILITY_ACTIONS.map((action, i) => (
-                  <motion.button
-                    key={action.title}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.35 + i * 0.04 }}
-                    onClick={() => onSelectTemplate(action.prompt)}
-                    className={clsx(
-                      "group flex items-center gap-3 p-4 rounded-xl text-left",
-                      "bg-white/40 backdrop-blur-[10px] border border-white/30 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:bg-white/70",
-                      "transition-all duration-200 hover:shadow-sm",
-                    )}
-                  >
-                    <div
-                      className={clsx(
-                        "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                        action.iconBg,
-                      )}
-                    >
-                      <action.icon className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[14px] font-semibold text-foreground">
-                        {action.title}
-                      </div>
-                      <div className="text-[12px] text-muted mt-0.5">
-                        {action.description}
-                      </div>
-                    </div>
-                  </motion.button>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Footer hint */}
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="mt-8 text-[13px] text-muted-foreground"
-            >
-              または入力欄に自由にメッセージを送ってください
-            </motion.p>
           </motion.div>
         )}
       </AnimatePresence>

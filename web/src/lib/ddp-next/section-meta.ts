@@ -473,3 +473,79 @@ export const getSectionsByCategory = getSectionMetaByCategory;
 
 // Import for computeHQSComposite
 import { computeHQSComposite } from "./types";
+
+// ============================================================
+// Dynamic Meta Registry — ハーベストブロック用
+// 既存の静的47セクションと共存し、DDP Compose フェーズで
+// 統合的にスコアリング・選択される
+// ============================================================
+
+/** ハーベストブロック用の動的メタデータレジストリ */
+const dynamicMeta = new Map<string, SectionMeta>();
+
+/**
+ * ハーベストブロックのメタデータを登録する
+ * sectionId は "harvest-{blockId}" の形式
+ */
+export function registerDynamicMeta(
+  blockId: string,
+  meta: Omit<SectionMeta, "sectionId">,
+): void {
+  const sectionId = `harvest-${blockId}`;
+  dynamicMeta.set(sectionId, { sectionId, ...meta });
+}
+
+/**
+ * 動的メタデータを取得する
+ */
+export function getDynamicMeta(sectionId: string): SectionMeta | undefined {
+  return dynamicMeta.get(sectionId);
+}
+
+/**
+ * 全動的メタデータを取得する
+ */
+export function getAllDynamicMeta(): SectionMeta[] {
+  return Array.from(dynamicMeta.values());
+}
+
+/**
+ * 静的メタ + 動的メタの統合検索
+ * DDP Compose フェーズで使用
+ */
+export function getUnifiedSectionMeta(sectionId: string): SectionMeta | undefined {
+  return META_MAP.get(sectionId) || dynamicMeta.get(sectionId);
+}
+
+/**
+ * 静的 + 動的メタの統合一覧
+ */
+export function getAllUnifiedMeta(): SectionMeta[] {
+  return [...SECTION_META_LIST, ...Array.from(dynamicMeta.values())];
+}
+
+/**
+ * カテゴリ別に統合メタを取得（ハーベストブロック含む）
+ */
+export function getUnifiedMetaByCategory(category: string): SectionMeta[] {
+  const staticMeta = getSectionMetaByCategory(category as SectionCategory);
+
+  // ハーベストブロックの sectionId にはカテゴリ情報がないため、
+  // メタデータの dna や hqs からフィルタする方法が必要
+  // → 暫定実装: dynamicMeta の sectionId にカテゴリ文字列を含むものを取得
+  const cat = category as string;
+  const harvestMeta = Array.from(dynamicMeta.values()).filter(
+    (m) =>
+      m.sectionId.includes(cat) ||
+      (m.flowsWellBefore && (m.flowsWellBefore as string[]).includes(cat)) ||
+      (m.flowsWellAfter && (m.flowsWellAfter as string[]).includes(cat)),
+  );
+
+  return [...staticMeta, ...harvestMeta].sort(
+    (a, b) => computeHQSComposite(b.hqs) - computeHQSComposite(a.hqs),
+  );
+}
+
+// loadHarvestBlockMeta は サーバー専用ファイル
+// section-meta.server.ts に分離（クライアントバンドルに prisma/pg が入るのを防ぐ）
+

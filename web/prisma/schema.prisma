@@ -434,3 +434,116 @@ model BuildSection {
   @@index([buildId, sortOrder])
   @@index([status])
 }
+
+// ============================================================
+// Design Harvester — 外部サイトからデザインブロックを収穫
+// Pixel-perfect抽出 → AI分類 → ブロックストックへ蓄積
+// ============================================================
+
+/// ハーベスト元サイト: クロール対象URLを管理
+model HarvestSource {
+  id              String         @id @default(cuid())
+  url             String         @unique // 対象サイトURL
+  domain          String         // ドメイン名
+  label           String         @default("") // ユーザー付けラベル
+  status          String         @default("pending")
+    // pending | crawling | analyzing | complete | failed
+  pageCount       Int            @default(0) // 発見ページ数
+  blockCount      Int            @default(0) // 抽出ブロック数
+  lastCrawledAt   DateTime?
+  errorMessage    String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  jobs            HarvestJob[]
+
+  @@index([status])
+  @@index([domain])
+}
+
+/// ハーベストジョブ: 1ページ分の抽出処理
+model HarvestJob {
+  id              String           @id @default(cuid())
+  sourceId        String
+  source          HarvestSource    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  pageUrl         String           // 個別ページURL
+  status          String           @default("pending")
+    // pending | extracting | classifying | complete | failed
+  extractedCount  Int              @default(0)
+  approvedCount   Int              @default(0)
+  errorMessage    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  candidates      HarvestCandidate[]
+
+  @@index([sourceId])
+  @@index([status])
+}
+
+/// ハーベスト候補: 抽出されたブロック（レビュー前）
+model HarvestCandidate {
+  id              String       @id @default(cuid())
+  jobId           String
+  job             HarvestJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sectionCategory String      // hero, features, testimonials, cta, etc.
+  sectionVariant  String      @default("") // e.g., "split-image", "centered-text"
+  html            String      // 抽出HTML
+  css             String      // 抽出CSS
+  js              String      @default("") // 抽出JS（任意）
+  screenshot      String?     // スクリーンショットパス
+  // AI分類メタデータ
+  designDna       String      @default("{}") // JSON: 10D DNA coordinates
+  hqs             String      @default("{}") // JSON: HumanQualityScore 5D
+  tones           String      @default("[]") // JSON: string[] — design tones
+  flowsWellAfter  String      @default("[]") // JSON: string[] — 前に来ると良いセクション
+  flowsWellBefore String      @default("[]") // JSON: string[] — 後に来ると良いセクション
+  pageTypes       String      @default("[]") // JSON: string[] — 適合ページタイプ
+  rqs             Float?      // Responsive Quality Score (0-100)
+  // レビュー状態
+  status          String      @default("pending")
+    // pending | approved | rejected
+  reviewNotes     String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([jobId])
+  @@index([status])
+  @@index([sectionCategory])
+}
+
+/// ハーベスト済みブロック: 承認後のブロックストック
+model HarvestedBlock {
+  id              String   @id @default(cuid())
+  sectionCategory String   // hero, features, testimonials, cta, pricing, etc.
+  sectionVariant  String   @default("") // サブバリアント
+  // デザインコンテンツ
+  html            String
+  css             String
+  js              String   @default("")
+  // Shopify Liquid テンプレート（変換済み）
+  liquidHtml      String?
+  liquidSchema    String?  // JSON: Shopify section schema
+  // AI分類メタデータ
+  designDna       String   @default("{}") // JSON: 10D DNA座標
+  hqs             String   @default("{}") // JSON: HumanQualityScore 5D
+  tones           String   @default("[]") // JSON: string[]
+  flowsWellAfter  String   @default("[]") // JSON: string[]
+  flowsWellBefore String   @default("[]") // JSON: string[]
+  pageTypes       String   @default("[]") // JSON: string[]
+  placeholders    String   @default("[]") // JSON: Placeholder[]
+  animations      String   @default("[]") // JSON: AnimationDef[]
+  // レスポンシブ品質
+  rqs             Float    @default(0) // Responsive Quality Score (0-100)
+  rqsBreakdown    String   @default("{}") // JSON: { mobile, tablet, desktop, wide }
+  // メタ
+  sourceUrl       String   @default("") // 元サイトURL
+  sourceDomain    String   @default("") // 元ドメイン
+  status          String   @default("active") // active, deprecated, archived
+  usageCount      Int      @default(0) // ビルドで使用された回数
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sectionCategory])
+  @@index([status])
+  @@index([sourceDomain])
+  @@index([usageCount])
+}

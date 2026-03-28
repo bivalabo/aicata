@@ -1,7 +1,23 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, User, Copy, Check, ChevronRight, Code2 } from "lucide-react";
+import {
+  Sparkles,
+  User,
+  Copy,
+  Check,
+  ChevronRight,
+  Code2,
+  Palette,
+  Puzzle,
+  Pen,
+  CheckCircle2,
+  Loader2,
+  AlertTriangle,
+  Search,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import { useState, memo, useMemo } from "react";
 import { COPY_FEEDBACK_DURATION_MS } from "@/lib/constants";
 import clsx from "clsx";
@@ -13,6 +29,107 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   attachments?: Attachment[];
 }
+
+// ── Progress Step Detection ──
+const PROGRESS_EMOJI_MAP: Record<string, { icon: typeof Palette; color: string; bgColor: string; label: string }> = {
+  "🎨": { icon: Palette, color: "text-purple-500", bgColor: "bg-purple-50", label: "デザイン" },
+  "🧩": { icon: Puzzle, color: "text-blue-500", bgColor: "bg-blue-50", label: "組み立て" },
+  "✍️": { icon: Pen, color: "text-amber-500", bgColor: "bg-amber-50", label: "パーソナライズ" },
+  "✅": { icon: CheckCircle2, color: "text-emerald-500", bgColor: "bg-emerald-50", label: "完了" },
+  "🔨": { icon: Wrench, color: "text-orange-500", bgColor: "bg-orange-50", label: "生成" },
+  "⚙️": { icon: Loader2, color: "text-slate-500", bgColor: "bg-slate-50", label: "処理" },
+  "⚠️": { icon: AlertTriangle, color: "text-amber-500", bgColor: "bg-amber-50", label: "注意" },
+  "🔍": { icon: Search, color: "text-indigo-500", bgColor: "bg-indigo-50", label: "検証" },
+};
+
+function isProgressLine(line: string): boolean {
+  const trimmed = line.trim();
+  return Object.keys(PROGRESS_EMOJI_MAP).some((emoji) => trimmed.startsWith(emoji));
+}
+
+function getProgressInfo(line: string) {
+  const trimmed = line.trim();
+  for (const [emoji, info] of Object.entries(PROGRESS_EMOJI_MAP)) {
+    if (trimmed.startsWith(emoji)) {
+      const text = trimmed.replace(emoji, "").trim();
+      const isComplete = emoji === "✅";
+      return { ...info, text, isComplete, emoji };
+    }
+  }
+  return null;
+}
+
+/** 複数の連続するプログレスラインを検出 */
+function isProgressBlock(lines: string[], startIndex: number): number {
+  let count = 0;
+  for (let i = startIndex; i < lines.length; i++) {
+    if (isProgressLine(lines[i])) count++;
+    else break;
+  }
+  return count;
+}
+
+function ProgressStep({ line, index }: { line: string; index: number }) {
+  const info = getProgressInfo(line);
+  if (!info) return null;
+
+  const Icon = info.icon;
+  const isComplete = info.isComplete;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.25, delay: index * 0.06 }}
+      className={clsx(
+        "flex items-center gap-2.5 py-2 px-3 rounded-xl text-[13px]",
+        isComplete
+          ? "bg-emerald-50/80 text-emerald-700 border border-emerald-100/60"
+          : `${info.bgColor}/60 text-foreground/80 border border-transparent`,
+      )}
+    >
+      <div
+        className={clsx(
+          "w-6 h-6 rounded-lg flex items-center justify-center shrink-0",
+          isComplete ? "bg-emerald-100" : `${info.bgColor}`,
+        )}
+      >
+        {isComplete ? (
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+        ) : (
+          <Icon className={clsx("w-3.5 h-3.5", info.color, !isComplete && "animate-pulse")} />
+        )}
+      </div>
+      <span className={isComplete ? "font-medium" : "font-normal"}>{info.text}</span>
+    </motion.div>
+  );
+}
+
+/** プログレスブロックをカード風にラップ */
+function ProgressBlock({ lines, startIndex }: { lines: string[]; startIndex: number }) {
+  const progressLines: string[] = [];
+  for (let i = startIndex; i < lines.length && isProgressLine(lines[i]); i++) {
+    progressLines.push(lines[i]);
+  }
+
+  return (
+    <div className="my-2 rounded-2xl border border-accent/[0.08] bg-gradient-to-br from-white/60 to-accent/[0.02] p-2.5 space-y-1.5">
+      <div className="flex items-center gap-1.5 px-2 pb-1">
+        <Zap className="w-3 h-3 text-accent/40" />
+        <span className="text-[11px] text-muted-foreground font-medium tracking-wide uppercase">
+          Build Progress
+        </span>
+      </div>
+      {progressLines.map((line, i) => (
+        <ProgressStep key={i} line={line} index={i} />
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// Content Formatting
+// ============================================================
 
 function formatContent(content: string) {
   return formatTextContent(content, 0);
@@ -29,61 +146,93 @@ function formatTextContent(content: string, baseKey: number) {
       return <CodeBlock key={`${baseKey}-${i}`} language={lang} code={code} />;
     }
 
+    const lines = part.split("\n");
+    const elements: React.ReactNode[] = [];
+    let j = 0;
+
+    while (j < lines.length) {
+      const line = lines[j];
+
+      // プログレスブロック検出: 連続するプログレス行をまとめてカード化
+      const progressCount = isProgressBlock(lines, j);
+      if (progressCount >= 2) {
+        elements.push(
+          <ProgressBlock key={`${baseKey}-${i}-pb-${j}`} lines={lines} startIndex={j} />,
+        );
+        j += progressCount;
+        continue;
+      }
+
+      // 単一プログレス行
+      if (isProgressLine(line)) {
+        elements.push(<ProgressStep key={`${baseKey}-${i}-${j}`} line={line} index={0} />);
+        j++;
+        continue;
+      }
+
+      if (line.startsWith("### ")) {
+        elements.push(
+          <h4
+            key={`${baseKey}-${i}-${j}`}
+            className="text-[14px] font-semibold text-foreground mt-3 mb-1 tracking-[-0.01em]"
+          >
+            {formatInline(line.replace("### ", ""))}
+          </h4>,
+        );
+        j++;
+        continue;
+      }
+      if (line.startsWith("## ")) {
+        elements.push(
+          <h3
+            key={`${baseKey}-${i}-${j}`}
+            className="text-[15px] font-semibold text-foreground mt-4 mb-1 tracking-[-0.01em]"
+          >
+            {formatInline(line.replace("## ", ""))}
+          </h3>,
+        );
+        j++;
+        continue;
+      }
+      if (line.startsWith("- ")) {
+        elements.push(
+          <div key={`${baseKey}-${i}-${j}`} className="flex gap-2 text-[14px] leading-relaxed">
+            <span className="text-accent/60 mt-0.5 shrink-0 text-[10px]">●</span>
+            <span>{formatInline(line.replace("- ", ""))}</span>
+          </div>,
+        );
+        j++;
+        continue;
+      }
+      if (/^\d+\.\s/.test(line)) {
+        const num = line.match(/^(\d+)\./)?.[1];
+        elements.push(
+          <div key={`${baseKey}-${i}-${j}`} className="flex gap-2 text-[14px] leading-relaxed">
+            <span className="text-accent/70 font-semibold min-w-[1.2em] shrink-0 tabular-nums">
+              {num}.
+            </span>
+            <span>{formatInline(line.replace(/^\d+\.\s/, ""))}</span>
+          </div>,
+        );
+        j++;
+        continue;
+      }
+      if (line.trim() === "") {
+        elements.push(<div key={`${baseKey}-${i}-${j}`} className="h-2" />);
+        j++;
+        continue;
+      }
+      elements.push(
+        <p key={`${baseKey}-${i}-${j}`} className="text-[14px] leading-[1.7]">
+          {formatInline(line)}
+        </p>,
+      );
+      j++;
+    }
+
     return (
       <div key={`${baseKey}-${i}`} className="space-y-1.5">
-        {part.split("\n").map((line, j) => {
-          if (line.startsWith("### ")) {
-            return (
-              <h4
-                key={j}
-                className="text-[14px] font-semibold text-foreground mt-3 mb-1 tracking-[-0.01em]"
-              >
-                {formatInline(line.replace("### ", ""))}
-              </h4>
-            );
-          }
-          if (line.startsWith("## ")) {
-            return (
-              <h3
-                key={j}
-                className="text-[15px] font-semibold text-foreground mt-4 mb-1 tracking-[-0.01em]"
-              >
-                {formatInline(line.replace("## ", ""))}
-              </h3>
-            );
-          }
-          if (line.startsWith("- ")) {
-            return (
-              <div
-                key={j}
-                className="flex gap-2 text-[14px] leading-relaxed"
-              >
-                <span className="text-accent/60 mt-0.5 shrink-0 text-[10px]">●</span>
-                <span>{formatInline(line.replace("- ", ""))}</span>
-              </div>
-            );
-          }
-          if (/^\d+\.\s/.test(line)) {
-            const num = line.match(/^(\d+)\./)?.[1];
-            return (
-              <div
-                key={j}
-                className="flex gap-2 text-[14px] leading-relaxed"
-              >
-                <span className="text-accent/70 font-semibold min-w-[1.2em] shrink-0 tabular-nums">
-                  {num}.
-                </span>
-                <span>{formatInline(line.replace(/^\d+\.\s/, ""))}</span>
-              </div>
-            );
-          }
-          if (line.trim() === "") return <div key={j} className="h-2" />;
-          return (
-            <p key={j} className="text-[14px] leading-[1.7]">
-              {formatInline(line)}
-            </p>
-          );
-        })}
+        {elements}
       </div>
     );
   });
@@ -187,6 +336,10 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   );
 }
 
+// ============================================================
+// Main ChatMessage Component
+// ============================================================
+
 export default memo(function ChatMessage({
   role,
   content,
@@ -235,13 +388,18 @@ export default memo(function ChatMessage({
       </div>
 
       {/* Bubble */}
-      <div className="max-w-[78%] relative">
+      <div className={clsx("relative", isUser ? "max-w-[78%]" : "max-w-[85%]")}>
         <div
           className={clsx(
             "rounded-2xl px-4 py-3",
             isUser
               ? "bg-gradient-to-r from-[#7c5cfc] to-[#5b8def] text-white rounded-tr-lg shadow-sm"
-              : "rounded-tl-lg bg-white/55 backdrop-blur-[16px] border border-white/35 shadow-[0_1px_2px_rgba(0,0,0,0.03),inset_0_1px_0_rgba(255,255,255,0.5)]",
+              : [
+                  "rounded-tl-lg",
+                  "bg-white/70 backdrop-blur-[16px]",
+                  "border border-white/40",
+                  "shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.02),inset_0_1px_0_rgba(255,255,255,0.6)]",
+                ],
           )}
         >
           {/* Attached images */}
@@ -261,21 +419,34 @@ export default memo(function ChatMessage({
               ))}
             </div>
           )}
+
+          {/* AI label for assistant messages */}
+          {!isUser && content && (
+            <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-border/30">
+              <Sparkles className="w-3 h-3 text-accent/40" />
+              <span className="text-[10px] text-muted-foreground/50 font-medium tracking-wider uppercase">
+                Aicata
+              </span>
+            </div>
+          )}
+
           {formattedContent}
+
           {/* Streaming cursor */}
           {isStreaming && content && (
             <span className="inline-block w-[2px] h-[16px] bg-accent/50 animate-pulse ml-0.5 align-text-bottom rounded-full" />
           )}
           {/* Waiting indicator */}
           {isStreaming && !content && (
-            <div className="flex items-center gap-3 py-1">
-              <div className="flex gap-1 items-center">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce [animation-delay:0ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce [animation-delay:150ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce [animation-delay:300ms]" />
+            <div className="flex items-center gap-3 py-1.5">
+              <div className="relative w-5 h-5 shrink-0">
+                <div
+                  className="absolute inset-0 rounded-full border-2 border-transparent border-t-accent border-r-accent/40 animate-spin"
+                  style={{ animationDuration: "0.8s" }}
+                />
               </div>
-              <span className="text-[13px] text-muted animate-pulse">
-                考えています...
+              <span className="text-[13px] text-muted">
+                デザインを準備しています...
               </span>
             </div>
           )}

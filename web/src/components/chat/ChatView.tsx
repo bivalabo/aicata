@@ -209,6 +209,7 @@ export default function ChatView({
 
   // ── Rebuild Flow Modal ──
   const [showRebuildFlow, setShowRebuildFlow] = useState(false);
+  const [rebuildInitialUrl, setRebuildInitialUrl] = useState<string | undefined>(undefined);
 
   // ── Onboarding state ──
   const [onboardingType, setOnboardingType] = useState<string | null>(null);
@@ -387,19 +388,25 @@ export default function ChatView({
     [handleSend],
   );
 
-  // WelcomeScreen: "新しいサイトを作成" or "リビルド"
+  // WelcomeScreen: "新しいサイトを作成" / "リビルド" / "ページリビルド"
   const handleStartSiteBuild = useCallback(
-    (mode: "new" | "rebuild", url?: string) => {
+    (mode: "new" | "rebuild" | "page-rebuild", url?: string) => {
       if (mode === "new") {
         // 新しいサイト構築 → オンボーディング
         setCurrentPageType("landing");
         setOnboardingType("site-build");
       } else if (mode === "rebuild") {
-        // リビルド → ビジュアルサイトマップフローを開く
+        // サイト全体リビルド → ビジュアルサイトマップフローを開く
+        setRebuildInitialUrl(url);
         setShowRebuildFlow(true);
+      } else if (mode === "page-rebuild" && url) {
+        // 既存ページをリビルド → URL解析してプロンプト送信
+        setCurrentPageType("landing");
+        const prompt = `以下のページを分析して、Shopifyテーマのページとしてリビルドしてください。\n\nURL: ${url}\n\nこのページのデザイントーン、配色、レイアウト構造を解析し、同等以上のクオリティでShopifyテーマのセクションとして再構築してください。`;
+        handleSend(prompt);
       }
     },
-    [],
+    [handleSend],
   );
 
   // SiteRebuildFlow完了
@@ -609,21 +616,19 @@ export default function ChatView({
         </div>
       )}
 
-      {/* Input — hide during onboarding */}
-      {!showOnboarding && (
+      {/* Input — hide during onboarding and welcome screen */}
+      {!showOnboarding && !showWelcome && (
         <div className="max-w-2xl mx-auto w-full">
           <ChatInput
             onSend={handleSend}
             onStop={isStreaming ? stopStreaming : undefined}
             disabled={(showStreamingIndicator ?? false) || isAnalyzingUrl}
             placeholder={
-              messages.length === 0
-                ? "Shopifyストアについて何でも相談してください..."
-                : isAnalyzingUrl
-                  ? "サイトを分析中..."
-                  : isStreaming
-                    ? "Aicataが応答中..."
-                    : "メッセージを入力..."
+              isAnalyzingUrl
+                ? "サイトを分析中..."
+                : isStreaming
+                  ? "Aicataが応答中..."
+                  : "メッセージを入力..."
             }
             prefillMessage={pendingMessage}
             onPrefillConsumed={onPendingMessageConsumed}
@@ -635,8 +640,12 @@ export default function ChatView({
       {/* ── SiteRebuildFlow モーダル ── */}
       {showRebuildFlow && (
         <SiteRebuildFlow
-          onClose={() => setShowRebuildFlow(false)}
+          onClose={() => {
+            setShowRebuildFlow(false);
+            setRebuildInitialUrl(undefined);
+          }}
           onComplete={handleRebuildComplete}
+          initialUrl={rebuildInitialUrl}
         />
       )}
     </div>
