@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // Server-only packages that should not be bundled
+  serverExternalPackages: ["puppeteer"],
+
   // Experimental performance features
   experimental: {
     // Optimize package imports to reduce bundle size
